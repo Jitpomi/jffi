@@ -44,6 +44,10 @@ enum Commands {
         /// Release build
         #[arg(short, long)]
         release: bool,
+        
+        /// Build for physical device (iOS only)
+        #[arg(short, long)]
+        device: bool,
     },
     
     /// Run the app on specific platform
@@ -51,6 +55,10 @@ enum Commands {
         /// Platform to run on
         #[arg(short, long, default_value = "ios")]
         platform: String,
+        
+        /// Run on physical device (iOS only)
+        #[arg(short, long)]
+        device: bool,
     },
     
     /// Watch mode - auto-rebuild on changes
@@ -77,11 +85,11 @@ fn main() -> anyhow::Result<()> {
         Commands::New { name, platforms, path } => {
             commands::new::create_project(&name, &platforms, path)?;
         }
-        Commands::Build { platform, all, release } => {
-            commands::build::build_project(platform, all, release)?;
+        Commands::Build { platform, all, release, device } => {
+            commands::build::build_project(platform, all, release, device)?;
         }
-        Commands::Run { platform } => {
-            commands::run::run_project(&platform)?;
+        Commands::Run { platform, device } => {
+            commands::run::run_project(&platform, device)?;
         }
         Commands::Dev { platform } => {
             commands::dev::watch_project(&platform)?;

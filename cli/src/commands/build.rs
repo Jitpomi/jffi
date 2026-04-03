@@ -2,16 +2,35 @@ use anyhow::{Context, Result};
 use colored::*;
 use std::process::Command;
 
-pub fn build_project(platform: Option<String>, all: bool, release: bool) -> Result<()> {
+pub fn build_project(platform: Option<String>, all: bool, release: bool, device: bool) -> Result<()> {
     if all {
         build_all_platforms(release)?;
     } else if let Some(platform) = platform {
-        build_platform(&platform, release)?;
+        build_platform_with_options(&platform, release, device)?;
     } else {
         anyhow::bail!("Specify --platform <platform> or --all");
     }
     
     Ok(())
+}
+
+pub fn build_platform_with_options(platform: &str, release: bool, device: bool) -> Result<()> {
+    println!("{}", format!("🔨 Building for {}...", platform).bright_green().bold());
+    
+    match platform {
+        "ios" => {
+            let target_type = if device { "device" } else { "simulator" };
+            build_ios_target(release, target_type)
+        },
+        "android" => build_android(release),
+        "macos" | "macos-arm64" => build_macos("aarch64", release),
+        "macos-x64" => build_macos("x86_64", release),
+        "windows" | "windows-x64" => build_windows("x86_64", release),
+        "windows-x86" => build_windows("i686", release),
+        "linux" => build_linux(release),
+        "web" => build_web(release),
+        _ => anyhow::bail!("Unknown platform: {}", platform),
+    }
 }
 
 fn build_all_platforms(release: bool) -> Result<()> {
@@ -51,14 +70,24 @@ pub fn build_platform(platform: &str, release: bool) -> Result<()> {
 }
 
 fn build_ios(release: bool) -> Result<()> {
+    build_ios_target(release, "simulator")
+}
+
+fn build_ios_target(release: bool, target_type: &str) -> Result<()> {
     let profile = if release { "release" } else { "debug" };
     
-    println!("  {} Building Rust library for iOS Simulator...", "→".bright_blue());
+    // Choose target based on device vs simulator
+    let (target, target_name) = match target_type {
+        "device" => ("aarch64-apple-ios", "iOS Device"),
+        "simulator" | _ => ("aarch64-apple-ios-sim", "iOS Simulator"),
+    };
+    
+    println!("  {} Building Rust library for {}...", "→".bright_blue(), target_name);
     let mut args = vec!["build"];
     if release {
         args.push("--release");
     }
-    args.extend(&["--manifest-path", "ffi/Cargo.toml", "--target", "aarch64-apple-ios-sim"]);
+    args.extend(&["--manifest-path", "ffi/Cargo.toml", "--target", target]);
     
     let status = Command::new("cargo")
         .args(&args)
@@ -72,7 +101,7 @@ fn build_ios(release: bool) -> Result<()> {
     println!("  {} Generating Swift bindings...", "→".bright_blue());
     
     // Find the actual library file (it will have underscores instead of hyphens)
-    let lib_dir = format!("target/aarch64-apple-ios-sim/{}", profile);
+    let lib_dir = format!("target/{}/{}", target, profile);
     let _lib_pattern = format!("{}/lib*ffi.dylib", lib_dir);
     
     let lib_path = std::fs::read_dir(&lib_dir)

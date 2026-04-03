@@ -2,17 +2,36 @@ use anyhow::{Context, Result};
 use colored::*;
 use std::process::Command;
 
-pub fn run_project(platform: &str) -> Result<()> {
-    println!("{}", format!("🚀 Running on {}...", platform).bright_green().bold());
+pub fn run_project(platform: &str, device: bool) -> Result<()> {
+    let target_desc = if device && platform == "ios" { "iOS Device" } else { platform };
+    println!("{}", format!("🚀 Running on {}...", target_desc).bright_green().bold());
     println!();
     
     // Build first
-    crate::commands::build::build_project(Some(platform.to_string()), false, false)?;
+    crate::commands::build::build_project(Some(platform.to_string()), false, false, device)?;
     
     println!();
-    println!("{}", format!("▶️  Launching {}...", platform).bright_cyan().bold());
+    println!("{}", format!("▶️  Launching {}...", target_desc).bright_cyan().bold());
     
-    run_platform(platform)
+    run_platform_with_options(platform, device)
+}
+
+pub fn run_platform_with_options(platform: &str, device: bool) -> Result<()> {
+    match platform {
+        "ios" => {
+            if device {
+                run_ios_device()
+            } else {
+                run_ios()
+            }
+        },
+        "android" => run_android(),
+        "macos" | "macos-arm64" | "macos-x64" => run_macos(),
+        "windows" | "windows-x64" | "windows-x86" => run_windows(),
+        "linux" => run_linux(),
+        "web" => run_web(),
+        _ => anyhow::bail!("Unknown platform: {}", platform),
+    }
 }
 
 pub fn run_platform(platform: &str) -> Result<()> {
@@ -25,6 +44,61 @@ pub fn run_platform(platform: &str) -> Result<()> {
         "web" => run_web(),
         _ => anyhow::bail!("Unknown platform: {}", platform),
     }
+}
+
+fn run_ios_device() -> Result<()> {
+    println!("  {} Finding Xcode project...", "→".bright_blue());
+    
+    // Find the xcodeproj
+    let ios_dir = std::path::Path::new("platforms/ios");
+    let xcodeproj = std::fs::read_dir(ios_dir)?
+        .filter_map(|e| e.ok())
+        .find(|e| {
+            e.path()
+                .extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s == "xcodeproj")
+                .unwrap_or(false)
+        })
+        .map(|e| e.path())
+        .context("Could not find .xcodeproj file")?;
+    
+    println!("  {} Building and deploying to device...", "→".bright_blue());
+    println!();
+    println!("{}", "  Note: Make sure your device is connected and trusted.".yellow());
+    println!("{}", "  You may need to configure code signing in Xcode first.".yellow());
+    println!();
+    
+    // Build and run on device using xcodebuild
+    // This will use the first connected device
+    let status = Command::new("xcodebuild")
+        .args(&[
+            "-project",
+            xcodeproj.to_str().unwrap(),
+            "-scheme",
+            xcodeproj.file_stem().unwrap().to_str().unwrap(),
+            "-destination",
+            "generic/platform=iOS",
+            "build",
+        ])
+        .status()
+        .context("Failed to build with xcodebuild")?;
+    
+    if !status.success() {
+        anyhow::bail!("Build failed. Make sure code signing is configured in Xcode.");
+    }
+    
+    println!();
+    println!("{}", "  ✅ Build complete!".green());
+    println!();
+    println!("{}", "  To deploy to your device:".bright_cyan());
+    println!("  1. Open Xcode");
+    println!("  2. Select your connected device");
+    println!("  3. Press Cmd+R to run");
+    println!();
+    println!("{}", "  Or use Xcode directly for automatic deployment.".bright_cyan());
+    
+    Ok(())
 }
 
 fn run_ios() -> Result<()> {

@@ -106,16 +106,22 @@ impl FfiApp {
 
 ### 3. Build & Run
 
+**For iOS Simulator:**
 ```bash
 jffi run --platform ios
 ```
 
+**For Physical Device:**
+```bash
+jffi run --platform ios --device
+```
+
 This automatically:
-- Compiles Rust for iOS Simulator
+- Compiles Rust for iOS (Simulator or Device)
 - Generates Swift bindings via UniFFI
 - Creates Xcode project
 - Builds with xcodebuild
-- Launches in iOS Simulator
+- Launches in iOS Simulator (or builds for device)
 
 ### 4. Use in Native UI
 
@@ -176,9 +182,11 @@ jffi new <name> --platforms <platforms>
 
 # Build for platform
 jffi build --platform <platform>
+jffi build --platform ios --device          # Build for physical device
 
 # Run on platform (builds automatically)
 jffi run --platform <platform>
+jffi run --platform ios --device            # Run on physical device
 
 # Development mode (auto-rebuild on changes)
 jffi dev --platform <platform>
