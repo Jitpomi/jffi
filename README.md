@@ -131,33 +131,42 @@ The generated bindings make Rust functions available in Swift!
 
 ## ⚡ Hot Reload
 
-JFFI includes **true hot reload** - your Rust changes appear instantly without restarting the app or losing state.
+JFFI works seamlessly with Xcode's native hot reload for Swift, plus automatic Rust rebuilding.
+
+### Workflow
 
 ```bash
-# Start hot reload mode
+# Start Rust file watcher
 jffi dev --platform ios
-```
 
-**Edit any Rust file** → Changes appear in < 2 seconds! ⚡
+# In another terminal or Xcode:
+# 1. Open platforms/ios/*.xcodeproj in Xcode
+# 2. Run the app (Cmd+R)
+# 3. Edit Swift files → Xcode hot reloads automatically ⚡
+# 4. Edit Rust files → Watcher rebuilds dylib → Press Cmd+B in Xcode
+```
 
 ### How It Works
 
-- **Dynamic dylib reloading** - iOS app reloads the Rust library without restarting
-- **File watching** - Automatically detects changes in `core/` and `ffi/`
-- **State preservation** - App state is maintained across reloads
-- **Instant UI refresh** - SwiftUI views update automatically
+**Swift Changes (Native Xcode):**
+- Edit any `.swift` file
+- Xcode hot reloads instantly
+- Use SwiftUI previews
+- Full Xcode debugging support
 
-### What Gets Hot Reloaded
+**Rust Changes:**
+- Edit any `.rs` file in `core/` or `ffi/`
+- File watcher rebuilds Rust dylib automatically
+- Press Cmd+B in Xcode to rebuild with new dylib
+- App updates with new Rust code
 
-✅ **Instantly reloaded:**
-- Rust business logic changes
-- Function implementations
-- Data structure modifications
+### Best of Both Worlds
 
-❌ **Requires restart:**
-- New FFI functions
-- FFI signature changes
-- SwiftUI changes
+✅ **Native Xcode experience** - Use all Xcode features
+✅ **SwiftUI previews** - Work as expected
+✅ **Swift hot reload** - Instant updates
+✅ **Rust auto-rebuild** - No manual cargo commands
+✅ **Full debugging** - Xcode debugger works normally
 
 ## 🔧 CLI Commands
 

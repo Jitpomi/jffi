@@ -51,7 +51,6 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 		A1000003000000000000001 /* AppState.swift in Sources */ = {{isa = PBXBuildFile; fileRef = A2000003000000000000001 /* AppState.swift */; }};
 		A1000004000000000000001 /* Assets.xcassets in Resources */ = {{isa = PBXBuildFile; fileRef = A2000004000000000000001 /* Assets.xcassets */; }};
 		A1000007000000000000001 /* {module_name}_ffi.swift in Sources */ = {{isa = PBXBuildFile; fileRef = A2000007000000000000001 /* {module_name}_ffi.swift */; }};
-		A1000008000000000000001 /* HotReloadManager.swift in Sources */ = {{isa = PBXBuildFile; fileRef = A2000008000000000000001 /* HotReloadManager.swift */; }};
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -63,7 +62,6 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 		A2000005000000000000001 /* Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; }};
 		A2000006000000000000001 /* BridgingHeader.h */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BridgingHeader.h; sourceTree = "<group>"; }};
 		A2000007000000000000001 /* {module_name}_ffi.swift */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {module_name}_ffi.swift; sourceTree = "<group>"; }};
-		A2000008000000000000001 /* HotReloadManager.swift */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotReloadManager.swift; sourceTree = "<group>"; }};
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -92,7 +90,6 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 				A2000002000000000000001 /* ContentView.swift */,
 				A2000003000000000000001 /* AppState.swift */,
 				A2000007000000000000001 /* {module_name}_ffi.swift */,
-				A2000008000000000000001 /* HotReloadManager.swift */,
 				A2000004000000000000001 /* Assets.xcassets */,
 				A2000005000000000000001 /* Info.plist */,
 				A2000006000000000000001 /* BridgingHeader.h */,
@@ -180,7 +177,6 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 				A1000001000000000000001 /* {app_name_pascal}App.swift in Sources */,
 				A1000003000000000000001 /* AppState.swift in Sources */,
 				A1000007000000000000001 /* {module_name}_ffi.swift in Sources */,
-				A1000008000000000000001 /* HotReloadManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		}};

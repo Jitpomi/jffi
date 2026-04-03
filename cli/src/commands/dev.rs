@@ -6,14 +6,26 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 
 pub fn watch_project(platform: &str) -> Result<()> {
-    println!("{}", format!("👀 Watch mode for {}...", platform).bright_green().bold());
-    println!("   Watching for changes in core/ and ffi/");
-    println!("   Press Ctrl+C to stop");
+    println!("{}", format!("👀 Rust watch mode for {}...", platform).bright_green().bold());
+    println!();
+    println!("   This watches your Rust code (core/ and ffi/) and rebuilds on changes.");
+    println!("   For Swift changes, use Xcode directly - it has native hot reload.");
+    println!();
+    println!("   To use:");
+    println!("   1. Open platforms/ios/*.xcodeproj in Xcode");
+    println!("   2. Run the app from Xcode (Cmd+R)");
+    println!("   3. Edit Swift files - Xcode hot reloads automatically");
+    println!("   4. Edit Rust files - this watcher rebuilds the dylib");
+    println!("   5. In Xcode, press Cmd+B to rebuild with new Rust code");
+    println!();
+    println!("   Press Ctrl+C to stop watching");
     println!();
     
-    // Initial build and run
-    println!("{}", "  → Initial build and launch...".bright_blue());
-    initial_build_and_run(platform)?;
+    // Initial build
+    println!("{}", "  → Initial Rust build...".bright_blue());
+    crate::commands::build::build_platform(platform, false)?;
+    println!("{}", "  ✓ Ready! Open Xcode and run your app.".green());
+    println!();
     
     // Set up file watcher
     let (tx, rx) = channel();
@@ -31,7 +43,7 @@ pub fn watch_project(platform: &str) -> Result<()> {
     watcher.watch(Path::new("core/src"), RecursiveMode::Recursive)?;
     watcher.watch(Path::new("ffi/src"), RecursiveMode::Recursive)?;
     
-    println!("{}", "  ✓ Watching for changes...".green());
+    println!("{}", "  👀 Watching Rust files...".bright_cyan());
     println!();
     
     let mut last_rebuild = std::time::Instant::now();
@@ -49,18 +61,18 @@ pub fn watch_project(platform: &str) -> Result<()> {
                     let now = std::time::Instant::now();
                     if now.duration_since(last_rebuild) > debounce_duration {
                         println!();
-                        println!("{}", "  🔄 Changes detected, rebuilding...".yellow());
+                        println!("{}", "  🔄 Rust changes detected, rebuilding...".yellow());
                         
-                        match rebuild_and_run(platform) {
+                        match crate::commands::build::build_platform(platform, false) {
                             Ok(_) => {
                                 println!();
-                                println!("{}", "  ✓ Rebuild complete!".green());
+                                println!("{}", "  ✓ Rust rebuild complete! Press Cmd+B in Xcode to use new code.".green());
                                 println!();
                             }
                             Err(e) => {
                                 println!();
                                 println!("{}", format!("  ✗ Build failed: {}", e).red());
-                                println!("{}", "  → Waiting for fixes...".yellow());
+                                println!("{}", "  → Fix the error and save again...".yellow());
                                 println!();
                             }
                         }
@@ -78,30 +90,4 @@ pub fn watch_project(platform: &str) -> Result<()> {
             }
         }
     }
-}
-
-fn initial_build_and_run(platform: &str) -> Result<()> {
-    // Build and launch the app for the first time
-    crate::commands::build::build_platform(platform, false)?;
-    
-    // Launch the app in the simulator
-    println!();
-    println!("{}", "  → Launching app in simulator...".bright_blue());
-    crate::commands::run::run_platform(platform)?;
-    
-    println!();
-    println!("{}", "  ✓ App running with hot reload enabled".green());
-    
-    Ok(())
-}
-
-fn rebuild_and_run(platform: &str) -> Result<()> {
-    // Build the project (this updates the dylib)
-    crate::commands::build::build_platform(platform, false)?;
-    
-    // For iOS with hot reload, the HotReloadManager will automatically
-    // detect the dylib change and reload it. No need to restart the app!
-    println!("{}", "  → Dylib updated, hot reload will trigger automatically".bright_green());
-    
-    Ok(())
 }
