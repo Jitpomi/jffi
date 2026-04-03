@@ -34,18 +34,6 @@ pub fn run_platform_with_options(platform: &str, device: bool) -> Result<()> {
     }
 }
 
-pub fn run_platform(platform: &str) -> Result<()> {
-    match platform {
-        "ios" => run_ios(),
-        "android" => run_android(),
-        "macos" | "macos-arm64" | "macos-x64" => run_macos(),
-        "windows" | "windows-x64" | "windows-x86" => run_windows(),
-        "linux" => run_linux(),
-        "web" => run_web(),
-        _ => anyhow::bail!("Unknown platform: {}", platform),
-    }
-}
-
 fn run_ios_device() -> Result<()> {
     println!("  {} Finding Xcode project...", "→".bright_blue());
     
