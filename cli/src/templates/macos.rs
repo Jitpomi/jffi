@@ -102,20 +102,20 @@ struct ContentView: View {
                 // Header
                 HStack {
                     Text("Today")
-                        .font(.system(size: 32, weight: .bold))
+                        .font(.system(size: 28, weight: .bold))
                     Spacer()
                     Button(action: { showingAddItem = true }) {
                         Image(systemName: "plus.circle.fill")
-                            .font(.title)
+                            .font(.title2)
                             .foregroundColor(.blue)
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 24)
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
                 
                 // Stats Cards
-                HStack(spacing: 16) {
+                HStack(spacing: 12) {
                     StatCard(
                         title: "Total",
                         count: appState.items.count,
@@ -132,14 +132,14 @@ struct ContentView: View {
                         color: .green
                     )
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
                 
-                // Tasks List
+                // Tasks
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Tasks")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .padding(.horizontal, 24)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 20)
                     
                     if appState.items.isEmpty {
                         EmptyStateView()
@@ -153,14 +153,14 @@ struct ContentView: View {
                                 }
                             }
                         }
-                        .padding(.horizontal, 24)
+                        .padding(.horizontal, 20)
                     }
                 }
             }
-            .padding(.vertical, 24)
+            .padding(.bottom, 20)
         }
         .background(Color(NSColor.windowBackgroundColor))
-        .frame(minWidth: 700, minHeight: 500)
+        .frame(minWidth: 600, minHeight: 450)
         .sheet(isPresented: $showingAddItem) {
             AddItemView(isPresented: $showingAddItem)
                 .environmentObject(appState)
