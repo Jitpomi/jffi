@@ -1,105 +1,92 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use colored::*;
-use std::process::Command;
+use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use std::path::Path;
+use std::sync::mpsc::channel;
+use std::time::Duration;
 
 pub fn watch_project(platform: &str) -> Result<()> {
     println!("{}", format!("👀 Watch mode for {}...", platform).bright_green().bold());
-    println!("   Watching for Rust changes...");
+    println!("   Watching for changes in core/ and ffi/");
     println!("   Press Ctrl+C to stop");
     println!();
     
-    // Check if cargo-watch is installed
-    if !Command::new("which")
-        .arg("cargo-watch")
-        .output()?
-        .status
-        .success()
-    {
-        println!("{}", "  ⚠️  cargo-watch not installed".yellow());
-        println!("     Install: cargo install cargo-watch");
-        println!();
-        anyhow::bail!("cargo-watch required for watch mode");
+    // Initial build and run
+    println!("{}", "  → Initial build and launch...".bright_blue());
+    rebuild_and_run(platform)?;
+    
+    // Set up file watcher
+    let (tx, rx) = channel();
+    
+    let mut watcher = RecommendedWatcher::new(
+        move |res: Result<Event, notify::Error>| {
+            if let Ok(event) = res {
+                let _ = tx.send(event);
+            }
+        },
+        Config::default(),
+    )?;
+    
+    // Watch core and ffi directories
+    watcher.watch(Path::new("core/src"), RecursiveMode::Recursive)?;
+    watcher.watch(Path::new("ffi/src"), RecursiveMode::Recursive)?;
+    
+    println!("{}", "  ✓ Watching for changes...".green());
+    println!();
+    
+    let mut last_rebuild = std::time::Instant::now();
+    let debounce_duration = Duration::from_millis(500);
+    
+    loop {
+        match rx.recv_timeout(Duration::from_millis(100)) {
+            Ok(event) => {
+                // Check if this is a modify or create event
+                if matches!(
+                    event.kind,
+                    notify::EventKind::Modify(_) | notify::EventKind::Create(_)
+                ) {
+                    // Debounce: only rebuild if enough time has passed
+                    let now = std::time::Instant::now();
+                    if now.duration_since(last_rebuild) > debounce_duration {
+                        println!();
+                        println!("{}", "  🔄 Changes detected, rebuilding...".yellow());
+                        
+                        match rebuild_and_run(platform) {
+                            Ok(_) => {
+                                println!();
+                                println!("{}", "  ✓ Rebuild complete!".green());
+                                println!();
+                            }
+                            Err(e) => {
+                                println!();
+                                println!("{}", format!("  ✗ Build failed: {}", e).red());
+                                println!("{}", "  → Waiting for fixes...".yellow());
+                                println!();
+                            }
+                        }
+                        
+                        last_rebuild = now;
+                    }
+                }
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                // Normal timeout, continue watching
+                continue;
+            }
+            Err(e) => {
+                anyhow::bail!("Watch error: {}", e);
+            }
+        }
     }
+}
+
+fn rebuild_and_run(platform: &str) -> Result<()> {
+    // Build the project (this updates the dylib)
+    crate::commands::build::build_platform(platform, false)?;
     
-    let build_cmd = get_build_command(platform)?;
-    let bindings_cmd = get_bindings_command(platform)?;
-    
-    let status = Command::new("cargo-watch")
-        .args(&[
-            "-w", "core",
-            "-w", "ffi",
-            "-x", &build_cmd,
-            "-s", &bindings_cmd,
-            "-s", &format!("echo '✅ {} updated! Reload your IDE'", platform),
-        ])
-        .status()
-        .context("Failed to start watch mode")?;
-    
-    if !status.success() {
-        anyhow::bail!("Watch mode failed");
-    }
+    // For iOS with hot reload, the HotReloadManager will automatically
+    // detect the dylib change and reload it. No need to restart the app!
+    println!("{}", "  → Dylib updated, hot reload will trigger automatically".bright_green());
     
     Ok(())
-}
-
-fn get_build_command(platform: &str) -> Result<String> {
-    let target = match platform {
-        "ios" => "aarch64-apple-ios-sim",
-        "android" => "aarch64-linux-android",
-        "macos" | "macos-arm64" => "aarch64-apple-darwin",
-        "macos-x64" => "x86_64-apple-darwin",
-        "windows" | "windows-x64" => "x86_64-pc-windows-msvc",
-        "windows-x86" => "i686-pc-windows-msvc",
-        "linux" => "x86_64-unknown-linux-gnu",
-        "web" => "wasm32-unknown-unknown",
-        _ => anyhow::bail!("Unknown platform: {}", platform),
-    };
-    
-    Ok(format!("build --release --package ffi --target {}", target))
-}
-
-fn get_bindings_command(platform: &str) -> Result<String> {
-    let (target, profile, ext, lang, out_dir) = match platform {
-        "ios" => (
-            "aarch64-apple-ios-sim",
-            "release",
-            "dylib",
-            "swift",
-            "platforms/ios",
-        ),
-        "android" => (
-            "aarch64-linux-android",
-            "release",
-            "so",
-            "kotlin",
-            "platforms/android/app/src/main/java",
-        ),
-        "macos" | "macos-arm64" => (
-            "aarch64-apple-darwin",
-            "release",
-            "dylib",
-            "swift",
-            "platforms/macos",
-        ),
-        "macos-x64" => (
-            "x86_64-apple-darwin",
-            "release",
-            "dylib",
-            "swift",
-            "platforms/macos",
-        ),
-        "linux" => (
-            "x86_64-unknown-linux-gnu",
-            "release",
-            "so",
-            "python",
-            "platforms/linux",
-        ),
-        _ => anyhow::bail!("Watch mode not supported for platform: {}", platform),
-    };
-    
-    Ok(format!(
-        "uniffi-bindgen-cli generate --library target/{}/{}/libffi.{} --language {} --out-dir {}",
-        target, profile, ext, lang, out_dir
-    ))
 }

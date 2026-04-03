@@ -11,7 +11,18 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="" />
+    <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/cli/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/commands/build.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/commands/build.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/commands/dev.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/commands/dev.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/commands/run.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/commands/run.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/templates/ios.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/templates/ios.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/xcode.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/xcode.rs" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -31,6 +42,18 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;jermsam&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/Jitpomi/jffi.git&quot;,
+    &quot;accountId&quot;: &quot;dff1e579-f1ac-4187-a33e-1d70ef7a7cc5&quot;
+  }
+}</component>
   <component name="MacroExpansionManager">
     <option name="directoryName" value="XdLqV3Ye" />
   </component>
@@ -85,7 +108,7 @@
       <updated>1769681102112</updated>
       <workItem from="1769681103963" duration="34000" />
       <workItem from="1775103743219" duration="31630000" />
-      <workItem from="1775230133234" duration="3981000" />
+      <workItem from="1775230133234" duration="5264000" />
     </task>
     <servers />
   </component>

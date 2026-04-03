@@ -21,6 +21,9 @@ pub fn create_ios_project(platforms_dir: &PathBuf, name: &str) -> Result<()> {
     // Create BridgingHeader
     create_bridging_header(&ios_dir, name)?;
     
+    // Create hot reload support
+    crate::hotreload::generate_hotreload_support("ios", name, &ios_dir)?;
+    
     // Create Xcode project
     let project_root = platforms_dir.parent().unwrap();
     crate::xcode::create_xcode_project(project_root, name)?;
@@ -36,11 +39,13 @@ fn create_app_swift(dir: &PathBuf, name: &str) -> Result<()> {
 @main
 struct {}App: App {{
     @StateObject private var appState = AppState()
+    @StateObject private var hotReload = HotReloadManager.shared
     
     var body: some Scene {{
         WindowGroup {{
             ContentView()
                 .environmentObject(appState)
+                .hotReloadable()
         }}
     }}
 }}

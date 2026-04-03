@@ -5,6 +5,7 @@ mod commands;
 mod templates;
 mod platforms;
 mod xcode;
+mod hotreload;
 
 #[derive(Parser)]
 #[command(name = "jffi")]

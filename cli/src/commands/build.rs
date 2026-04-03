@@ -34,7 +34,7 @@ fn build_all_platforms(release: bool) -> Result<()> {
     Ok(())
 }
 
-fn build_platform(platform: &str, release: bool) -> Result<()> {
+pub fn build_platform(platform: &str, release: bool) -> Result<()> {
     println!("{}", format!("🔨 Building for {}...", platform).bright_green().bold());
     
     match platform {

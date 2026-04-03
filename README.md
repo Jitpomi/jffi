@@ -129,6 +129,36 @@ Button("Add Item") {
 
 The generated bindings make Rust functions available in Swift!
 
+## ⚡ Hot Reload
+
+JFFI includes **true hot reload** - your Rust changes appear instantly without restarting the app or losing state.
+
+```bash
+# Start hot reload mode
+jffi dev --platform ios
+```
+
+**Edit any Rust file** → Changes appear in < 2 seconds! ⚡
+
+### How It Works
+
+- **Dynamic dylib reloading** - iOS app reloads the Rust library without restarting
+- **File watching** - Automatically detects changes in `core/` and `ffi/`
+- **State preservation** - App state is maintained across reloads
+- **Instant UI refresh** - SwiftUI views update automatically
+
+### What Gets Hot Reloaded
+
+✅ **Instantly reloaded:**
+- Rust business logic changes
+- Function implementations
+- Data structure modifications
+
+❌ **Requires restart:**
+- New FFI functions
+- FFI signature changes
+- SwiftUI changes
+
 ## 🔧 CLI Commands
 
 ```bash
@@ -233,12 +263,13 @@ cargo run --package jffi -- --help
 - [x] iOS support with SwiftUI (fully working!)
 - [x] Automatic Xcode project generation
 - [x] One-command build and run
+- [x] Hot reload for iOS (true hot reload with state preservation!)
 - [ ] Android support with Kotlin
 - [ ] macOS support
 - [ ] Windows support with C#
 - [ ] Linux support with GTK
 - [ ] Web support with WASM
-- [ ] Hot reload for all platforms
+- [ ] Hot reload for other platforms
 
 ## 🤝 Contributing
 

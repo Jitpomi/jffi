@@ -12,6 +12,10 @@ pub fn run_project(platform: &str) -> Result<()> {
     println!();
     println!("{}", format!("▶️  Launching {}...", platform).bright_cyan().bold());
     
+    run_platform(platform)
+}
+
+pub fn run_platform(platform: &str) -> Result<()> {
     match platform {
         "ios" => run_ios(),
         "android" => run_android(),
