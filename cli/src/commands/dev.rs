@@ -1,7 +1,8 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use colored::*;
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
+use std::process::Command;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
@@ -11,21 +12,30 @@ pub fn watch_project(platform: &str) -> Result<()> {
     println!("   This watches your Rust code (core/ and ffi/) and rebuilds on changes.");
     println!("   For Swift changes, use Xcode directly - it has native hot reload.");
     println!();
-    println!("   To use:");
-    println!("   1. Open platforms/ios/*.xcodeproj in Xcode");
-    println!("   2. Run the app from Xcode (Cmd+R)");
-    println!("   3. Edit Swift files - Xcode hot reloads automatically");
-    println!("   4. Edit Rust files - this watcher rebuilds the dylib");
-    println!("   5. In Xcode, press Cmd+B to rebuild with new Rust code");
-    println!();
-    println!("   Press Ctrl+C to stop watching");
-    println!();
     
     // Initial build
     println!("{}", "  → Initial Rust build...".bright_blue());
     crate::commands::build::build_platform(platform, false)?;
-    println!("{}", "  ✓ Ready! Open Xcode and run your app.".green());
+    println!("{}", "  ✓ Build complete!".green());
     println!();
+    
+    // Auto-open Xcode
+    if platform == "ios" || platform == "macos" {
+        println!("{}", "  → Opening Xcode...".bright_blue());
+        open_xcode_project(platform)?;
+        println!();
+        println!("{}", "  ✓ Xcode opened!".green());
+        println!();
+        println!("{}", "   🚀 IMPORTANT: Press Cmd+R in Xcode to RUN the app!".bright_yellow().bold());
+        println!("   (Don't just look at the preview - actually run it)");
+        println!();
+        println!("   Development workflow:");
+        println!("   • Edit Swift files → Changes appear instantly (native hot reload)");
+        println!("   • Edit Rust files → This watcher rebuilds → Press Cmd+B in Xcode");
+        println!();
+        println!("   Press Ctrl+C to stop watching");
+        println!();
+    }
     
     // Set up file watcher
     let (tx, rx) = channel();
@@ -90,4 +100,42 @@ pub fn watch_project(platform: &str) -> Result<()> {
             }
         }
     }
+}
+
+fn open_xcode_project(platform: &str) -> Result<()> {
+    let platform_dir = match platform {
+        "ios" => "platforms/ios",
+        "macos" => "platforms/macos",
+        _ => return Ok(()),
+    };
+    
+    // Check if platform directory exists
+    if !std::path::Path::new(platform_dir).exists() {
+        anyhow::bail!(
+            "Platform directory '{}' not found. Make sure you're in the project root directory.",
+            platform_dir
+        );
+    }
+    
+    // Find the .xcodeproj file
+    let xcodeproj = std::fs::read_dir(platform_dir)
+        .context(format!("Failed to read directory '{}'", platform_dir))?
+        .filter_map(|e| e.ok())
+        .find(|e| {
+            e.path()
+                .extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s == "xcodeproj")
+                .unwrap_or(false)
+        })
+        .map(|e| e.path())
+        .context(format!("Could not find .xcodeproj file in '{}'", platform_dir))?;
+    
+    // Open in Xcode
+    Command::new("open")
+        .arg(xcodeproj)
+        .status()
+        .context("Failed to open Xcode")?;
+    
+    Ok(())
 }

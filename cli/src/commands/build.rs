@@ -196,15 +196,14 @@ fn build_macos(arch: &str, release: bool) -> Result<()> {
     let target = format!("{}-apple-darwin", arch);
     
     println!("  {} Building Rust library for macOS ({})...", "→".bright_blue(), arch);
+    let mut args = vec!["build"];
+    if release {
+        args.push("--release");
+    }
+    args.extend(&["--manifest-path", "ffi/Cargo.toml", "--target", &target]);
+    
     let status = Command::new("cargo")
-        .args(&[
-            "build",
-            if release { "--release" } else { "" },
-            "--package",
-            "ffi",
-            "--target",
-            &target,
-        ])
+        .args(&args)
         .status()
         .context("Failed to build Rust library")?;
     
@@ -213,13 +212,26 @@ fn build_macos(arch: &str, release: bool) -> Result<()> {
     }
     
     println!("  {} Generating Swift bindings...", "→".bright_blue());
-    let lib_path = format!("target/{}/{}/libffi.dylib", target, profile);
+    
+    // Find the actual library file (it will have underscores instead of hyphens)
+    let lib_dir = format!("target/{}/{}", target, profile);
+    
+    let lib_path = std::fs::read_dir(&lib_dir)
+        .context("Failed to read target directory")?
+        .filter_map(|e| e.ok())
+        .find(|e| {
+            let name = e.file_name();
+            let name_str = name.to_string_lossy();
+            name_str.starts_with("lib") && name_str.ends_with("ffi.dylib")
+        })
+        .map(|e| e.path())
+        .context("Could not find FFI library")?;
     
     let status = Command::new("uniffi-bindgen-cli")
         .args(&[
             "generate",
             "--library",
-            &lib_path,
+            lib_path.to_str().unwrap(),
             "--language",
             "swift",
             "--out-dir",

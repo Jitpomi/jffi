@@ -16,19 +16,20 @@ A cross-platform framework for building native applications with Rust business l
 ### Installation
 
 ```bash
-# Install the CLI tool
+# Install JFFI CLI
 cargo install --path cli
 ```
 
 ### Create Your First App
 
 ```bash
-# Create a new app with iOS support
-jffi new my-app --platforms ios
+# Create a new app with iOS and macOS support
+jffi new my-app --platforms ios,macos
 
 # Navigate and run
 cd my-app
-jffi run --platform ios
+jffi run --platform ios      # iOS Simulator
+jffi run --platform macos    # macOS app
 ```
 
 That's it! The app builds, compiles Rust, generates Swift bindings, and launches in the iOS Simulator automatically.
@@ -38,8 +39,8 @@ That's it! The app builds, compiles Rust, generates Swift bindings, and launches
 | Platform | Status | UI Framework | Language |
 |----------|--------|--------------|----------|
 | iOS | ✅ Ready | SwiftUI | Swift |
+| macOS | ✅ Ready | SwiftUI | Swift |
 | Android | 🚧 Coming Soon | Jetpack Compose | Kotlin |
-| macOS | 🚧 Coming Soon | SwiftUI | Swift |
 | Windows | 🚧 Coming Soon | WinUI 3 | C# |
 | Linux | 🚧 Coming Soon | GTK 4 | C/Python |
 | Web | 🚧 Coming Soon | HTML/JS | JavaScript |
@@ -278,11 +279,11 @@ cargo run --package jffi -- --help
 
 - [x] CLI tool foundation
 - [x] iOS support with SwiftUI (fully working!)
+- [x] macOS support with SwiftUI (fully working!)
 - [x] Automatic Xcode project generation
 - [x] One-command build and run
-- [x] Hot reload for iOS (true hot reload with state preservation!)
+- [x] Hot reload for iOS (Xcode-native workflow!)
 - [ ] Android support with Kotlin
-- [ ] macOS support
 - [ ] Windows support with C#
 - [ ] Linux support with GTK
 - [ ] Web support with WASM

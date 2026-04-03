@@ -3,20 +3,16 @@ use std::fs;
 use std::path::Path;
 
 pub fn create_macos_xcode_project(project_dir: &Path, app_name: &str) -> Result<()> {
-    crate::xcode_macos::create_macos_xcode_project(project_dir, app_name)
-}
-
-pub fn create_xcode_project(project_dir: &Path, app_name: &str) -> Result<()> {
-    let ios_dir = project_dir.join("platforms/ios");
+    let macos_dir = project_dir.join("platforms/macos");
     let project_name = format!("{}.xcodeproj", app_name);
-    let project_path = ios_dir.join(&project_name);
+    let project_path = macos_dir.join(&project_name);
     
     // Create project directory structure
     fs::create_dir_all(&project_path)?;
     fs::create_dir_all(project_path.join("project.xcworkspace"))?;
     
-    // Generate project.pbxproj
-    let pbxproj = generate_pbxproj(app_name)?;
+    // Generate project.pbxproj for macOS
+    let pbxproj = generate_macos_pbxproj(app_name)?;
     fs::write(project_path.join("project.pbxproj"), pbxproj)?;
     
     // Generate workspace contents
@@ -36,11 +32,13 @@ pub fn create_xcode_project(project_dir: &Path, app_name: &str) -> Result<()> {
     Ok(())
 }
 
-fn generate_pbxproj(app_name: &str) -> Result<String> {
+fn generate_macos_pbxproj(app_name: &str) -> Result<String> {
     let bundle_id = format!("com.example.{}", app_name.replace("-", ""));
     let app_name_pascal = to_pascal_case(app_name);
     let module_name = app_name.replace("-", "_");
     
+    // This is a simplified macOS Xcode project
+    // For now, users should open in Xcode and it will configure itself
     let pbxproj = format!(r#"// !$*UTF8*$!
 {{
 	archiveVersion = 1;
@@ -137,11 +135,6 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
 				LastUpgradeCheck = 1500;
-				TargetAttributes = {{
-					A6000001000000000000001 = {{
-						CreatedOnToolsVersion = 15.0;
-					}};
-				}};
 			}};
 			buildConfigurationList = A7000002000000000000001 /* Build configuration list for PBXProject "{app_name}" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -239,12 +232,11 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			}};
@@ -296,13 +288,11 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
-				VALIDATE_PRODUCT = YES;
 			}};
 			name = Release;
 		}};
@@ -311,24 +301,22 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 			buildSettings = {{
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
-					"@executable_path/Frameworks",
+					"@executable_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/../../target/aarch64-apple-ios-sim/debug",
+					"$(PROJECT_DIR)/../../target/aarch64-apple-darwin/debug",
 				);
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = "-l{module_name}_ffi";
@@ -337,7 +325,6 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = BridgingHeader.h;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
 			}};
 			name = Debug;
 		}};
@@ -346,24 +333,22 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 			buildSettings = {{
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
-					"@executable_path/Frameworks",
+					"@executable_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/../../target/aarch64-apple-ios-sim/release",
+					"$(PROJECT_DIR)/../../target/aarch64-apple-darwin/release",
 				);
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = "-l{module_name}_ffi";
@@ -372,7 +357,6 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = BridgingHeader.h;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
 			}};
 			name = Release;
 		}};
@@ -402,7 +386,7 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 	rootObject = A0000001000000000000001 /* Project object */;
 }}
 "#, app_name = app_name, app_name_pascal = app_name_pascal, bundle_id = bundle_id, module_name = module_name);
-
+    
     Ok(pbxproj)
 }
 

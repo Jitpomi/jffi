@@ -144,28 +144,25 @@ fn run_ios() -> Result<()> {
     
     // Check if app bundle exists by searching DerivedData
     let app_path = std::fs::read_dir(&derived_data)
-        .ok()
-        .and_then(|entries| {
-            entries
-                .filter_map(|e| e.ok())
-                .find(|e| {
-                    e.file_name()
-                        .to_string_lossy()
-                        .starts_with(app_name)
-                })
-                .and_then(|project_dir| {
-                    let app_path = project_dir
-                        .path()
-                        .join("Build/Products/Debug-iphonesimulator")
-                        .join(format!("{}.app", app_name));
-                    if app_path.exists() {
-                        Some(app_path)
-                    } else {
-                        None
-                    }
-                })
+        .context("Could not read DerivedData directory")?
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .starts_with(app_name)
         })
-        .context("Could not find built .app bundle")?;
+        .find_map(|project_dir| {
+            let app_path = project_dir
+                .path()
+                .join("Build/Products/Debug-iphonesimulator")
+                .join(format!("{}.app", app_name));
+            if app_path.exists() {
+                Some(app_path)
+            } else {
+                None
+            }
+        })
+        .context("Could not find built .app bundle. Try running 'jffi build --platform ios' first.")?;
     
     // Boot simulator if needed
     println!("  {} Booting simulator...", "→".bright_blue());
@@ -198,6 +195,12 @@ fn run_ios() -> Result<()> {
     if !install_status.success() {
         anyhow::bail!("Failed to install app in simulator");
     }
+    
+    // Bring Simulator to foreground
+    Command::new("open")
+        .args(&["-a", "Simulator"])
+        .status()
+        .ok();
     
     // Get the bundle identifier from Info.plist
     let bundle_id = format!("com.example.{}", app_name.replace("-", ""));
@@ -237,16 +240,78 @@ fn run_android() -> Result<()> {
 }
 
 fn run_macos() -> Result<()> {
-    println!("  {} Opening Xcode...", "→".bright_blue());
+    println!("  {} Finding Xcode project...", "→".bright_blue());
     
-    Command::new("open")
-        .arg("platforms/macos/*.xcodeproj")
+    // Find the xcodeproj
+    let macos_dir = std::path::Path::new("platforms/macos");
+    let xcodeproj = std::fs::read_dir(macos_dir)?
+        .filter_map(|e| e.ok())
+        .find(|e| {
+            e.path()
+                .extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s == "xcodeproj")
+                .unwrap_or(false)
+        })
+        .map(|e| e.path())
+        .context("Could not find .xcodeproj file")?;
+    
+    println!("  {} Building and launching macOS app...", "→".bright_blue());
+    
+    // Build and run using xcodebuild
+    let status = Command::new("xcodebuild")
+        .args(&[
+            "-project",
+            xcodeproj.to_str().unwrap(),
+            "-scheme",
+            xcodeproj.file_stem().unwrap().to_str().unwrap(),
+            "build",
+        ])
         .status()
-        .context("Failed to open Xcode")?;
+        .context("Failed to build with xcodebuild")?;
+    
+    if !status.success() {
+        anyhow::bail!("Build failed");
+    }
+    
+    println!("  {} Launching app...", "→".bright_blue());
+    
+    // Get the app name
+    let app_name = xcodeproj.file_stem().unwrap().to_str().unwrap();
+    
+    // Find the built app in DerivedData
+    let home = std::env::var("HOME").unwrap();
+    let derived_data = format!("{}/Library/Developer/Xcode/DerivedData", home);
+    
+    let app_path = std::fs::read_dir(&derived_data)
+        .context("Could not read DerivedData directory")?
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .starts_with(app_name)
+        })
+        .find_map(|project_dir| {
+            let app_path = project_dir
+                .path()
+                .join("Build/Products/Debug")
+                .join(format!("{}.app", app_name));
+            if app_path.exists() {
+                Some(app_path)
+            } else {
+                None
+            }
+        })
+        .context("Could not find built .app bundle. Try running 'jffi build --platform macos' first.")?;
+    
+    // Launch the app
+    Command::new("open")
+        .arg(app_path)
+        .status()
+        .context("Failed to launch app")?;
     
     println!();
-    println!("{}", "  ✅ Xcode opened".green());
-    println!("     Press ⌘R to run");
+    println!("{}", "  ✅ macOS app launched!".green());
     
     Ok(())
 }
