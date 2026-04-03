@@ -22,6 +22,7 @@ fn generate_ios_hotreload(project_name: &str, ios_dir: &Path) -> Result<()> {
 
 import Foundation
 import Combine
+import SwiftUI
 
 class HotReloadManager: ObservableObject {{
     static let shared = HotReloadManager()
