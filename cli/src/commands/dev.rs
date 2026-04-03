@@ -13,7 +13,7 @@ pub fn watch_project(platform: &str) -> Result<()> {
     
     // Initial build and run
     println!("{}", "  → Initial build and launch...".bright_blue());
-    rebuild_and_run(platform)?;
+    initial_build_and_run(platform)?;
     
     // Set up file watcher
     let (tx, rx) = channel();
@@ -78,6 +78,21 @@ pub fn watch_project(platform: &str) -> Result<()> {
             }
         }
     }
+}
+
+fn initial_build_and_run(platform: &str) -> Result<()> {
+    // Build and launch the app for the first time
+    crate::commands::build::build_platform(platform, false)?;
+    
+    // Launch the app in the simulator
+    println!();
+    println!("{}", "  → Launching app in simulator...".bright_blue());
+    crate::commands::run::run_platform(platform)?;
+    
+    println!();
+    println!("{}", "  ✓ App running with hot reload enabled".green());
+    
+    Ok(())
 }
 
 fn rebuild_and_run(platform: &str) -> Result<()> {
