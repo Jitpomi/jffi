@@ -1,0 +1,11 @@
+/target
+
+# Generated Swift bindings (auto-generated, don't commit)
+ios-app/ffi.swift
+ios-app/ffiFFI.h
+ios-app/ffiFFI.modulemap
+
+# Xcode build artifacts
+ios-app/DerivedData/
+*.xcuserstate
+*.xcuserdatad/
