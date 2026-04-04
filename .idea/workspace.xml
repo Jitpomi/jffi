@@ -13,7 +13,10 @@
   <component name="ChangeListManager">
     <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/src/templates/macos.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/templates/macos.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/commands/build.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/commands/build.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/commands/dev.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/commands/dev.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/commands/run.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/commands/run.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/templates/android.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/templates/android.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -100,7 +103,7 @@
       <updated>1769681102112</updated>
       <workItem from="1769681103963" duration="34000" />
       <workItem from="1775103743219" duration="31630000" />
-      <workItem from="1775230133234" duration="22935000" />
+      <workItem from="1775230133234" duration="29195000" />
     </task>
     <servers />
   </component>

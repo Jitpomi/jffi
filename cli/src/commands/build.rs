@@ -1,8 +1,43 @@
 use anyhow::{Context, Result};
 use colored::*;
 use std::process::Command;
+use std::path::Path;
+
+fn validate_project_structure() -> Result<()> {
+    if !Path::new("jffi.toml").exists() {
+        anyhow::bail!(
+            "{}\n\n{}",
+            "Error: Not in a JFFI project directory.".red().bold(),
+            format!(
+                "This command must be run from a project created with:\n  {} {}\n\nOr navigate to an existing JFFI project directory.",
+                "jffi new".bright_cyan(),
+                "<project-name>".bright_yellow()
+            )
+        );
+    }
+    
+    if !Path::new("ffi").exists() {
+        anyhow::bail!(
+            "{}\n\n{}",
+            "Error: Missing 'ffi' directory.".red().bold(),
+            "Your project structure appears incomplete. Expected directories: core/, ffi/, platforms/"
+        );
+    }
+    
+    if !Path::new("core").exists() {
+        anyhow::bail!(
+            "{}\n\n{}",
+            "Error: Missing 'core' directory.".red().bold(),
+            "Your project structure appears incomplete. Expected directories: core/, ffi/, platforms/"
+        );
+    }
+    
+    Ok(())
+}
 
 pub fn build_project(platform: Option<String>, all: bool, release: bool, device: bool) -> Result<()> {
+    validate_project_structure()?;
+    
     if all {
         build_all_platforms(release)?;
     } else if let Some(platform) = platform {
@@ -15,6 +50,8 @@ pub fn build_project(platform: Option<String>, all: bool, release: bool, device:
 }
 
 pub fn build_platform_with_options(platform: &str, release: bool, device: bool) -> Result<()> {
+    validate_project_structure()?;
+    
     println!("{}", format!("🔨 Building for {}...", platform).bright_green().bold());
     
     match platform {
@@ -54,6 +91,8 @@ fn build_all_platforms(release: bool) -> Result<()> {
 }
 
 pub fn build_platform(platform: &str, release: bool) -> Result<()> {
+    validate_project_structure()?;
+    
     println!("{}", format!("🔨 Building for {}...", platform).bright_green().bold());
     
     match platform {
@@ -148,17 +187,23 @@ fn build_android(release: bool) -> Result<()> {
         "x86_64-linux-android",
     ];
     
+    // Ensure Android targets are installed
+    ensure_android_targets(&targets)?;
+    
+    // Ensure cargo-ndk is installed for proper linking
+    ensure_cargo_ndk()?;
+    
     for target in targets {
         println!("    Building for {}...", target);
+        
+        let mut args = vec!["ndk", "build"];
+        if release {
+            args.push("--release");
+        }
+        args.extend(&["--manifest-path", "ffi/Cargo.toml", "--target", target]);
+        
         let status = Command::new("cargo")
-            .args(&[
-                "build",
-                if release { "--release" } else { "" },
-                "--package",
-                "ffi",
-                "--target",
-                target,
-            ])
+            .args(&args)
             .status()
             .context(format!("Failed to build for {}", target))?;
         
@@ -168,13 +213,26 @@ fn build_android(release: bool) -> Result<()> {
     }
     
     println!("  {} Generating Kotlin bindings...", "→".bright_blue());
-    let lib_path = format!("target/aarch64-linux-android/{}/libffi.so", profile);
+    
+    // Find the actual library file (it will have underscores instead of hyphens)
+    let lib_dir = format!("target/aarch64-linux-android/{}", profile);
+    
+    let lib_path = std::fs::read_dir(&lib_dir)
+        .context("Failed to read target directory")?
+        .filter_map(|e| e.ok())
+        .find(|e| {
+            let name = e.file_name();
+            let name_str = name.to_string_lossy();
+            name_str.starts_with("lib") && name_str.ends_with("ffi.so")
+        })
+        .map(|e| e.path())
+        .context("Could not find FFI library")?;
     
     let status = Command::new("uniffi-bindgen-cli")
         .args(&[
             "generate",
             "--library",
-            &lib_path,
+            lib_path.to_str().unwrap(),
             "--language",
             "kotlin",
             "--out-dir",
@@ -347,5 +405,58 @@ fn build_web(release: bool) -> Result<()> {
     println!("  {} WASM bindings (coming soon - needs wasm-bindgen integration)", "○".yellow());
     
     println!("{}", "  ✅ Web build complete".green());
+    Ok(())
+}
+
+fn ensure_android_targets(targets: &[&str]) -> Result<()> {
+    println!("  {} Checking Android targets...", "→".bright_blue());
+    
+    // Check which targets are installed
+    let output = Command::new("rustup")
+        .args(&["target", "list", "--installed"])
+        .output()
+        .context("Failed to check installed targets")?;
+    
+    let installed = String::from_utf8_lossy(&output.stdout);
+    
+    for target in targets {
+        if !installed.contains(target) {
+            println!("    Installing {}...", target.bright_yellow());
+            let status = Command::new("rustup")
+                .args(&["target", "add", target])
+                .status()
+                .context(format!("Failed to install target {}", target))?;
+            
+            if !status.success() {
+                anyhow::bail!("Failed to install Android target: {}", target);
+            }
+        }
+    }
+    
+    println!("  {} Android targets ready", "✓".green());
+    Ok(())
+}
+
+fn ensure_cargo_ndk() -> Result<()> {
+    println!("  {} Checking cargo-ndk...", "→".bright_blue());
+    
+    // Check if cargo-ndk is installed
+    let check = Command::new("cargo")
+        .args(&["ndk", "--version"])
+        .output();
+    
+    if check.is_err() || !check.unwrap().status.success() {
+        println!("    Installing cargo-ndk...");
+        let status = Command::new("cargo")
+            .args(&["install", "cargo-ndk"])
+            .status()
+            .context("Failed to install cargo-ndk")?;
+        
+        if !status.success() {
+            anyhow::bail!("Failed to install cargo-ndk");
+        }
+        println!("  {} cargo-ndk installed", "✓".green());
+    }
+    
     Ok(())
 }

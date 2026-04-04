@@ -23,16 +23,17 @@ cargo install --path cli
 ### Create Your First App
 
 ```bash
-# Create a new app with iOS and macOS support
-jffi new my-app --platforms ios,macos
+# Create a new app with iOS, macOS, and Android support
+jffi new my-app --platforms ios,macos,android
 
 # Navigate and run
 cd my-app
 jffi run --platform ios      # iOS Simulator
 jffi run --platform macos    # macOS app
+jffi run --platform android  # Android Emulator
 ```
 
-That's it! The app builds, compiles Rust, generates Swift bindings, and launches in the iOS Simulator automatically.
+That's it! The app builds, compiles Rust, generates platform bindings, and launches automatically.
 
 ## 📱 Supported Platforms
 
@@ -40,7 +41,7 @@ That's it! The app builds, compiles Rust, generates Swift bindings, and launches
 |----------|--------|--------------|----------|
 | iOS | ✅ Ready | SwiftUI | Swift |
 | macOS | ✅ Ready | SwiftUI | Swift |
-| Android | 🚧 Coming Soon | Jetpack Compose | Kotlin |
+| Android | ✅ Ready | Jetpack Compose | Kotlin |
 | Windows | 🚧 Coming Soon | WinUI 3 | C# |
 | Linux | 🚧 Coming Soon | GTK 4 | C/Python |
 | Web | 🚧 Coming Soon | HTML/JS | JavaScript |
@@ -107,22 +108,25 @@ impl FfiApp {
 
 ### 3. Build & Run
 
-**For iOS Simulator:**
+**For iOS:**
 ```bash
-jffi run --platform ios
+jffi run --platform ios              # Simulator
+jffi run --platform ios --device     # Physical device
 ```
 
-**For Physical Device:**
+**For Android:**
 ```bash
-jffi run --platform ios --device
+jffi run --platform android          # Emulator (auto-starts)
+```
+
+**For macOS:**
+```bash
+jffi run --platform macos
 ```
 
 This automatically:
-- Compiles Rust for iOS (Simulator or Device)
-- Generates Swift bindings via UniFFI
-- Creates Xcode project
-- Builds with xcodebuild
-- Launches in iOS Simulator (or builds for device)
+- **iOS/macOS**: Compiles Rust, generates Swift bindings, creates Xcode project, builds and launches
+- **Android**: Compiles Rust for 3 architectures, generates Kotlin bindings, starts emulator, builds APK, installs and launches app
 
 ### 4. Use in Native UI
 
@@ -138,42 +142,54 @@ The generated bindings make Rust functions available in Swift!
 
 ## ⚡ Hot Reload
 
-JFFI works seamlessly with Xcode's native hot reload for Swift, plus automatic Rust rebuilding.
+JFFI works seamlessly with native IDE hot reload plus automatic Rust rebuilding.
 
-### Workflow
+### iOS/macOS Workflow
 
 ```bash
 # Start Rust file watcher
 jffi dev --platform ios
 
-# In another terminal or Xcode:
+# In Xcode:
 # 1. Open platforms/ios/*.xcodeproj in Xcode
 # 2. Run the app (Cmd+R)
 # 3. Edit Swift files → Xcode hot reloads automatically ⚡
 # 4. Edit Rust files → Watcher rebuilds dylib → Press Cmd+B in Xcode
 ```
 
+### Android Workflow
+
+```bash
+# Start Rust file watcher + Android Studio
+jffi dev --platform android
+
+# In Android Studio:
+# 1. Press ▶️ to run the app
+# 2. Edit Kotlin files → Compose hot reloads automatically ⚡
+# 3. Edit Rust files → Watcher rebuilds .so → Rebuild in Android Studio
+```
+
 ### How It Works
 
-**Swift Changes (Native Xcode):**
-- Edit any `.swift` file
-- Xcode hot reloads instantly
-- Use SwiftUI previews
-- Full Xcode debugging support
+**Native UI Changes:**
+- **iOS/macOS**: Edit `.swift` files → Xcode hot reloads instantly
+- **Android**: Edit `.kt` files → Compose hot reloads automatically
+- Use native IDE features (SwiftUI previews, Compose previews, etc.)
+- Full debugging support
 
 **Rust Changes:**
 - Edit any `.rs` file in `core/` or `ffi/`
-- File watcher rebuilds Rust dylib automatically
-- Press Cmd+B in Xcode to rebuild with new dylib
-- App updates with new Rust code
+- File watcher rebuilds Rust library automatically
+- Rebuild in native IDE to use new Rust code
+- App updates with new business logic
 
 ### Best of Both Worlds
 
-✅ **Native Xcode experience** - Use all Xcode features
-✅ **SwiftUI previews** - Work as expected
-✅ **Swift hot reload** - Instant updates
+✅ **Native IDE experience** - Use all platform IDE features
+✅ **Native UI previews** - SwiftUI/Compose previews work
+✅ **Native hot reload** - Instant UI updates
 ✅ **Rust auto-rebuild** - No manual cargo commands
-✅ **Full debugging** - Xcode debugger works normally
+✅ **Full debugging** - Native debuggers work normally
 
 ## 🔧 CLI Commands
 
@@ -262,8 +278,8 @@ bundle_id = "com.example.myapp"
 
 - Rust toolchain
 - **iOS**: Xcode, iOS Simulator
-- **Android**: Android Studio, NDK (coming soon)
-- **macOS**: Xcode (coming soon)
+- **Android**: Android Studio, Android SDK, Android Emulator (auto-configured)
+- **macOS**: Xcode
 - **Windows**: Visual Studio (coming soon)
 - **Linux**: GTK libraries (coming soon)
 - **Web**: wasm-pack (coming soon)
@@ -278,27 +294,29 @@ cargo run --package jffi -- --help
 ## 🗺️ Roadmap
 
 - [x] CLI tool foundation
-- [x] iOS support with SwiftUI (fully working!)
-- [x] macOS support with SwiftUI (fully working!)
+- [x] iOS support with SwiftUI
+- [x] macOS support with SwiftUI
+- [x] Android support with Jetpack Compose
 - [x] Automatic Xcode project generation
-- [x] One-command build and run
-- [x] Hot reload for iOS (Xcode-native workflow!)
-- [ ] Android support with Kotlin
+- [x] Automatic Android project generation
+- [x] One-command build and run (iOS, macOS, Android)
+- [x] Hot reload for iOS (Xcode-native workflow)
+- [x] Hot reload for Android (Android Studio-native workflow)
+- [x] Automatic emulator/simulator management
+- [x] Auto-install build dependencies (targets, NDK, etc.)
 - [ ] Windows support with C#
 - [ ] Linux support with GTK
 - [ ] Web support with WASM
-- [ ] Hot reload for other platforms
 
 ## 🤝 Contributing
 
 Early-stage framework. Contributions welcome!
 
 **High priority:**
-- Android template with Kotlin bindings
-- macOS template
 - Windows template with C# bindings
 - Linux GTK template
 - Web WASM integration
+- Additional platform features and improvements
 
 ## 📄 License
 

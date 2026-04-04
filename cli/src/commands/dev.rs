@@ -19,7 +19,7 @@ pub fn watch_project(platform: &str) -> Result<()> {
     println!("{}", "  ✓ Build complete!".green());
     println!();
     
-    // Auto-open Xcode
+    // Auto-open IDE
     if platform == "ios" || platform == "macos" {
         println!("{}", "  → Opening Xcode...".bright_blue());
         open_xcode_project(platform)?;
@@ -32,6 +32,20 @@ pub fn watch_project(platform: &str) -> Result<()> {
         println!("   Development workflow:");
         println!("   • Edit Swift files → Changes appear instantly (native hot reload)");
         println!("   • Edit Rust files → This watcher rebuilds → Press Cmd+B in Xcode");
+        println!();
+        println!("   Press Ctrl+C to stop watching");
+        println!();
+    } else if platform == "android" {
+        println!("{}", "  → Opening Android Studio...".bright_blue());
+        open_android_studio()?;
+        println!();
+        println!("{}", "  ✓ Android Studio opened!".green());
+        println!();
+        println!("{}", "   🚀 IMPORTANT: Press ▶️ in Android Studio to RUN the app!".bright_yellow().bold());
+        println!();
+        println!("   Development workflow:");
+        println!("   • Edit Kotlin files → Changes appear on rebuild (Compose hot reload)");
+        println!("   • Edit Rust files → This watcher rebuilds → Rebuild in Android Studio");
         println!();
         println!("   Press Ctrl+C to stop watching");
         println!();
@@ -136,6 +150,28 @@ fn open_xcode_project(platform: &str) -> Result<()> {
         .arg(xcodeproj)
         .status()
         .context("Failed to open Xcode")?;
+    
+    Ok(())
+}
+
+fn open_android_studio() -> Result<()> {
+    let android_dir = "platforms/android";
+    
+    // Check if Android directory exists
+    if !std::path::Path::new(android_dir).exists() {
+        anyhow::bail!(
+            "Android directory '{}' not found. Make sure you're in the project root directory.",
+            android_dir
+        );
+    }
+    
+    // Open Android Studio with the android directory
+    Command::new("open")
+        .arg("-a")
+        .arg("Android Studio")
+        .arg(android_dir)
+        .status()
+        .context("Failed to open Android Studio")?;
     
     Ok(())
 }
