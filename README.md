@@ -23,8 +23,8 @@ cargo install --path cli
 ### Create Your First App
 
 ```bash
-# Create a new app with iOS, macOS, Android, Linux, and Web support
-jffi new my-app --platforms ios,macos,android,linux,web
+# Create a new app with all platform support
+jffi new my-app --platforms ios,macos,android,linux,web,windows
 
 # Navigate and run
 cd my-app
@@ -33,6 +33,7 @@ jffi run --platform macos    # macOS app
 jffi run --platform android  # Android Emulator
 jffi run --platform linux    # Linux GTK app
 jffi run --platform web      # Web browser
+jffi run --platform windows  # Windows app
 ```
 
 That's it! The app builds, compiles Rust, generates platform bindings, and launches automatically.
@@ -46,7 +47,7 @@ That's it! The app builds, compiles Rust, generates platform bindings, and launc
 | Android | ✅ Ready | Jetpack Compose | Kotlin |
 | Linux | ✅ Ready | GTK 4 + Libadwaita | Python |
 | Web | ✅ Ready | Vanilla JS + WASM | JavaScript |
-| Windows | 🚧 Not Implemented | WinUI 3 | C# |
+| Windows | ✅ Ready | WinUI 3 | C# |
 
 ## 🏗️ Project Structure
 
@@ -136,11 +137,17 @@ jffi run --platform linux
 jffi run --platform web
 ```
 
+**For Windows:**
+```bash
+jffi run --platform windows
+```
+
 This automatically:
 - **iOS/macOS**: Compiles Rust, generates Swift bindings, creates Xcode project, builds and launches
 - **Android**: Compiles Rust for 3 architectures, generates Kotlin bindings, starts emulator, builds APK, installs and launches app
 - **Linux**: Compiles Rust, generates Python bindings, installs dependencies (GTK 4, build tools), builds and launches GTK app
 - **Web**: Compiles Rust to WASM, generates JavaScript bindings, installs npm dependencies, starts Vite dev server
+- **Windows**: Compiles Rust, generates C# bindings with uniffi-bindgen-cs, builds with MSBuild/dotnet, launches WinUI 3 app
 
 ### 4. Use in Native UI
 
@@ -319,7 +326,7 @@ bundle_id = "com.example.myapp"
 - **macOS**: Xcode
 - **Linux**: GTK 4, Libadwaita, Python 3 (auto-installed by setup script)
 - **Web**: Node.js, npm (for Vite dev server)
-- **Windows**: Not yet implemented
+- **Windows**: .NET SDK 8.0+, Visual Studio Build Tools or MSBuild
 
 ### Building the CLI
 
@@ -336,26 +343,26 @@ cargo run --package jffi -- --help
 - [x] Android support with Jetpack Compose
 - [x] Linux support with GTK 4 + Python
 - [x] Web support with Vanilla JS + WASM
+- [x] Windows support with WinUI 3 + C#
 - [x] Automatic Xcode project generation
 - [x] Automatic Android project generation
-- [x] One-command build and run (iOS, macOS, Android, Linux, Web)
+- [x] One-command build and run (iOS, macOS, Android, Linux, Web, Windows)
 - [x] Hot reload for iOS (Xcode-native workflow)
 - [x] Hot reload for Android (Android Studio-native workflow)
 - [x] Hot reload for Linux (auto-restart workflow)
 - [x] Hot reload for Web (Vite hot reload)
 - [x] Automatic emulator/simulator management
-- [x] Auto-install build dependencies (targets, NDK, GTK, WASM, wasm-bindgen, etc.)
-- [ ] Windows support with C#
+- [x] Auto-install build dependencies (targets, NDK, GTK, WASM, wasm-bindgen, uniffi-bindgen-cs, etc.)
 
 ## 🤝 Contributing
 
 Early-stage framework. Contributions welcome!
 
 **High priority:**
-- Windows template with C# bindings
 - Additional platform features and improvements
 - State persistence (SQLite/local storage)
 - Advanced UI components and patterns
+- Hot reload for Windows (file watcher workflow)
 
 ## 📄 License
 
