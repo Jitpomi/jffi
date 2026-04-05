@@ -494,21 +494,48 @@ fn ensure_wasm_target() -> Result<()> {
 fn ensure_wasm_bindgen_cli() -> Result<()> {
     println!("  {} Checking wasm-bindgen-cli...", "→".bright_blue());
     
+    // Get the wasm-bindgen version from ffi-web/Cargo.toml
+    let cargo_toml = std::fs::read_to_string("ffi-web/Cargo.toml")
+        .context("Failed to read ffi-web/Cargo.toml")?;
+    
+    let required_version = cargo_toml
+        .lines()
+        .find(|line| line.contains("wasm-bindgen ="))
+        .and_then(|line| {
+            line.split('"').nth(1)
+        })
+        .unwrap_or("0.2");
+    
+    // Check installed version
     let check = Command::new("wasm-bindgen")
         .arg("--version")
         .output();
     
-    if check.is_err() || !check.unwrap().status.success() {
-        println!("    Installing wasm-bindgen-cli (this may take a few minutes)...");
+    let needs_install = if let Ok(output) = check {
+        if output.status.success() {
+            let installed_version = String::from_utf8_lossy(&output.stdout);
+            let installed_version = installed_version.trim().split_whitespace().last().unwrap_or("");
+            
+            // Check if versions match
+            !installed_version.starts_with(required_version)
+        } else {
+            true
+        }
+    } else {
+        true
+    };
+    
+    if needs_install {
+        println!("    Installing wasm-bindgen-cli {} (this may take a few minutes)...", required_version);
         let status = Command::new("cargo")
-            .args(&["install", "wasm-bindgen-cli"])
+            .args(&["install", "-f", "wasm-bindgen-cli", "--version", required_version])
             .status()
             .context("Failed to install wasm-bindgen-cli")?;
         
         if !status.success() {
             anyhow::bail!("Failed to install wasm-bindgen-cli");
         }
-        println!("  {} wasm-bindgen-cli installed", "✓".green());
+        println!("  {} wasm-bindgen-cli {} installed", "✓".green(), required_version);
     }
     
     Ok(())
