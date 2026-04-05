@@ -10,7 +10,7 @@ pub fn create_linux_project(platforms_dir: &PathBuf, name: &str) -> Result<()> {
     // Create Python application files
     create_main_py(&linux_dir, name)?;
     create_app_py(&linux_dir, name)?;
-    create_window_py(&linux_dir)?;
+    create_window_py(&linux_dir, name)?;
     create_ffi_wrapper_py(&linux_dir, name)?;
     
     // Create requirements.txt
@@ -73,8 +73,9 @@ class {}Application(Adw.Application):
     Ok(())
 }
 
-fn create_window_py(dir: &PathBuf) -> Result<()> {
-    let content = r#"import gi
+fn create_window_py(dir: &PathBuf, name: &str) -> Result<()> {
+    let window_class = to_pascal_case(name) + "Window";
+    let content = format!(r#"import gi
 
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
@@ -82,8 +83,9 @@ from gi.repository import Gtk, Adw, GLib
 
 from ffi_wrapper import FfiWrapper
 
-class MainWindow(Adw.ApplicationWindow):
-    def __init__(self, **kwargs):
+class {}(Adw.ApplicationWindow):
+    def __init__(self, **kwargs):"#, window_class);
+    let content = content + r#"
         super().__init__(**kwargs)
         
         self.ffi = FfiWrapper()
