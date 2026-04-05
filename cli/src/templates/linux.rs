@@ -315,11 +315,8 @@ if ! pkg-config --exists gtk4; then
     sudo apt install -y libgtk-4-dev libadwaita-1-dev python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1
 fi
 
-# Install uniffi-bindgen-cli if not present
-if ! command -v uniffi-bindgen-cli &> /dev/null; then
-    echo "Installing uniffi-bindgen-cli (this may take a few minutes)..."
-    cargo install uniffi-bindgen-cli --version 0.31.0
-fi
+# Note: uniffi-bindgen-cli will be run via cargo from the ffi crate
+# No separate installation needed - it's built into the uniffi dependency
 
 # Install Python dependencies
 echo "Installing Python dependencies..."
