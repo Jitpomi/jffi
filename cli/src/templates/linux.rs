@@ -296,11 +296,17 @@ set -e
 
 echo "Setting up Linux development environment..."
 
+# Install build essentials (required for Rust compilation)
+if ! command -v gcc &> /dev/null; then
+    echo "Installing build essentials..."
+    sudo apt update
+    sudo apt install -y build-essential pkg-config
+fi
+
 # Check for Python 3
 if ! command -v python3 &> /dev/null; then
-    echo "Python 3 is required but not installed."
-    echo "Install with: sudo apt install python3 python3-pip"
-    exit 1
+    echo "Installing Python 3..."
+    sudo apt install -y python3 python3-pip
 fi
 
 # Install GTK 4 and dependencies
