@@ -251,34 +251,26 @@ class {}(Adw.ApplicationWindow):
 
 fn create_ffi_wrapper_py(dir: &PathBuf, name: &str) -> Result<()> {
     let module_name = name.replace("-", "_");
-    let content = format!(r#"class FfiWrapper:
+    let content = format!(r#"from {}_ffi import FfiApp
+
+class FfiWrapper:
     """Wrapper for Rust FFI bindings"""
     
     def __init__(self):
-        # TODO: Import UniFFI-generated bindings
-        # from {}_ffi import FfiApp
-        # self.ffi_app = FfiApp()
-        pass
+        self.ffi_app = FfiApp()
     
     def get_items(self):
-        # TODO: Call Rust FFI function
-        # return self.ffi_app.get_items()
-        return []
+        items = self.ffi_app.get_items()
+        return [{{'id': item.id, 'title': item.title, 'completed': item.completed}} for item in items]
     
     def add_item(self, id, title):
-        # TODO: Call Rust FFI function
-        # return self.ffi_app.add_item(id, title)
-        return []
+        self.ffi_app.add_item(id, title)
     
     def toggle_item(self, id):
-        # TODO: Call Rust FFI function
-        # return self.ffi_app.toggle_item(id)
-        return []
+        self.ffi_app.toggle_item(id)
     
     def delete_item(self, id):
-        # TODO: Call Rust FFI function
-        # return self.ffi_app.delete_item(id)
-        return []
+        self.ffi_app.delete_item(id)
 "#, module_name);
     
     fs::write(dir.join("ffi_wrapper.py"), content)?;
