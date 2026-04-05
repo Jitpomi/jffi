@@ -23,14 +23,15 @@ cargo install --path cli
 ### Create Your First App
 
 ```bash
-# Create a new app with iOS, macOS, and Android support
-jffi new my-app --platforms ios,macos,android
+# Create a new app with iOS, macOS, Android, and Linux support
+jffi new my-app --platforms ios,macos,android,linux
 
 # Navigate and run
 cd my-app
 jffi run --platform ios      # iOS Simulator
 jffi run --platform macos    # macOS app
 jffi run --platform android  # Android Emulator
+jffi run --platform linux    # Linux GTK app
 ```
 
 That's it! The app builds, compiles Rust, generates platform bindings, and launches automatically.
@@ -42,9 +43,9 @@ That's it! The app builds, compiles Rust, generates platform bindings, and launc
 | iOS | ✅ Ready | SwiftUI | Swift |
 | macOS | ✅ Ready | SwiftUI | Swift |
 | Android | ✅ Ready | Jetpack Compose | Kotlin |
-| Windows | 🚧 Coming Soon | WinUI 3 | C# |
-| Linux | 🚧 Coming Soon | GTK 4 | C/Python |
-| Web | 🚧 Coming Soon | HTML/JS | JavaScript |
+| Linux | ✅ Ready | GTK 4 + Libadwaita | Python |
+| Windows | 🚧 Not Implemented | WinUI 3 | C# |
+| Web | 🚧 Not Implemented | HTML/JS | JavaScript |
 
 ## 🏗️ Project Structure
 
@@ -124,9 +125,15 @@ jffi run --platform android          # Emulator (auto-starts)
 jffi run --platform macos
 ```
 
+**For Linux:**
+```bash
+jffi run --platform linux
+```
+
 This automatically:
 - **iOS/macOS**: Compiles Rust, generates Swift bindings, creates Xcode project, builds and launches
 - **Android**: Compiles Rust for 3 architectures, generates Kotlin bindings, starts emulator, builds APK, installs and launches app
+- **Linux**: Compiles Rust, generates Python bindings, installs dependencies (GTK 4, build tools), builds and launches GTK app
 
 ### 4. Use in Native UI
 
@@ -167,6 +174,17 @@ jffi dev --platform android
 # 1. Press ▶️ to run the app
 # 2. Edit Kotlin files → Compose hot reloads automatically ⚡
 # 3. Edit Rust files → Watcher rebuilds .so → Rebuild in Android Studio
+```
+
+### Linux Workflow
+
+```bash
+# Start Rust file watcher
+jffi dev --platform linux
+
+# The app will auto-restart when Rust code changes
+# 1. Edit Python/GTK files → Save and re-run
+# 2. Edit Rust files → Watcher rebuilds .so → App auto-restarts ⚡
 ```
 
 ### How It Works
@@ -280,9 +298,9 @@ bundle_id = "com.example.myapp"
 - **iOS**: Xcode, iOS Simulator
 - **Android**: Android Studio, Android SDK, Android Emulator (auto-configured)
 - **macOS**: Xcode
-- **Windows**: Visual Studio (coming soon)
-- **Linux**: GTK libraries (coming soon)
-- **Web**: wasm-pack (coming soon)
+- **Linux**: GTK 4, Libadwaita, Python 3 (auto-installed by setup script)
+- **Windows**: Not yet implemented
+- **Web**: Not yet implemented
 
 ### Building the CLI
 
@@ -297,15 +315,16 @@ cargo run --package jffi -- --help
 - [x] iOS support with SwiftUI
 - [x] macOS support with SwiftUI
 - [x] Android support with Jetpack Compose
+- [x] Linux support with GTK 4 + Python
 - [x] Automatic Xcode project generation
 - [x] Automatic Android project generation
-- [x] One-command build and run (iOS, macOS, Android)
+- [x] One-command build and run (iOS, macOS, Android, Linux)
 - [x] Hot reload for iOS (Xcode-native workflow)
 - [x] Hot reload for Android (Android Studio-native workflow)
+- [x] Hot reload for Linux (auto-restart workflow)
 - [x] Automatic emulator/simulator management
-- [x] Auto-install build dependencies (targets, NDK, etc.)
+- [x] Auto-install build dependencies (targets, NDK, GTK, etc.)
 - [ ] Windows support with C#
-- [ ] Linux support with GTK
 - [ ] Web support with WASM
 
 ## 🤝 Contributing
@@ -314,7 +333,6 @@ Early-stage framework. Contributions welcome!
 
 **High priority:**
 - Windows template with C# bindings
-- Linux GTK template
 - Web WASM integration
 - Additional platform features and improvements
 
