@@ -21,26 +21,16 @@ pub fn add_platform(platform: &str) -> Result<()> {
     }
     
     // Create platform directory
+    let name = config.package.name.clone();
+    let platforms_dir = std::path::PathBuf::from("platforms");
+    
     match platform {
-        "ios" => {
-            let name = config.package.name.clone();
-            crate::templates::ios::create_ios_project(&std::path::PathBuf::from("platforms"), &name)?;
-        }
-        "android" => {
-            println!("  {} Android template (coming soon)", "○".yellow());
-        }
-        "macos" => {
-            println!("  {} macOS template (coming soon)", "○".yellow());
-        }
-        "windows" => {
-            println!("  {} Windows template (coming soon)", "○".yellow());
-        }
-        "linux" => {
-            println!("  {} Linux template (coming soon)", "○".yellow());
-        }
-        "web" => {
-            println!("  {} Web template (coming soon)", "○".yellow());
-        }
+        "ios" => crate::templates::ios::create_ios_project(&platforms_dir, &name)?,
+        "android" => crate::templates::android::create_android_project(&platforms_dir, &name)?,
+        "macos" => crate::templates::macos::create_macos_project(&platforms_dir, &name)?,
+        "linux" => crate::templates::linux::create_linux_project(&platforms_dir, &name)?,
+        "windows" => crate::templates::windows::create_windows_project(&platforms_dir, &name)?,
+        "web" => crate::templates::web::create_web_project(&platforms_dir, &name)?,
         _ => anyhow::bail!("Unknown platform: {}", platform),
     }
     
