@@ -359,6 +359,19 @@ fn build_linux(release: bool) -> Result<()> {
     
     println!("  {} Generating Python bindings...", "→".bright_blue());
     
+    // Check if uniffi-bindgen-cli is installed, run setup if not
+    if Command::new("uniffi-bindgen-cli").arg("--version").output().is_err() {
+        println!("  {} uniffi-bindgen-cli not found. Running setup script...", "→".bright_blue());
+        let status = Command::new("bash")
+            .arg("platforms/linux/setup.sh")
+            .status()
+            .context("Failed to run setup script")?;
+        
+        if !status.success() {
+            anyhow::bail!("Setup failed. Please run: bash platforms/linux/setup.sh");
+        }
+    }
+    
     // Find the library file
     let lib_dir = format!("target/{}", profile);
     let lib_path = std::fs::read_dir(&lib_dir)
