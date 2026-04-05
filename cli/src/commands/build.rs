@@ -359,6 +359,19 @@ fn build_linux(release: bool) -> Result<()> {
     
     println!("  {} Generating Python bindings...", "→".bright_blue());
     
+    // Check if uniffi-bindgen-cli is installed, install if not
+    if Command::new("uniffi-bindgen-cli").arg("--version").output().is_err() {
+        println!("  {} Installing uniffi-bindgen-cli...", "→".bright_blue());
+        let install_status = Command::new("cargo")
+            .args(&["install", "uniffi-bindgen-cli", "--version", "0.31.0"])
+            .status()
+            .context("Failed to install uniffi-bindgen-cli")?;
+        
+        if !install_status.success() {
+            anyhow::bail!("Failed to install uniffi-bindgen-cli");
+        }
+    }
+    
     // Find the library file
     let lib_dir = format!("target/{}", profile);
     let lib_path = std::fs::read_dir(&lib_dir)
