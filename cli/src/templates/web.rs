@@ -7,12 +7,18 @@ pub fn create_web_project(platforms_dir: &PathBuf, name: &str) -> Result<()> {
     let web_dir = platforms_dir.join("web");
     fs::create_dir_all(&web_dir)?;
     
+    // Create pkg directory with .gitkeep
+    let pkg_dir = web_dir.join("pkg");
+    fs::create_dir_all(&pkg_dir)?;
+    fs::write(pkg_dir.join(".gitkeep"), "")?;
+    
     // Create web application files
     create_index_html(&web_dir, name)?;
     create_main_js(&web_dir)?;
     create_styles_css(&web_dir)?;
     create_package_json(&web_dir, name)?;
     create_vite_config(&web_dir)?;
+    create_gitignore(&web_dir)?;
     
     println!("  {} platforms/web/", "✓".green());
     Ok(())
@@ -389,5 +395,18 @@ export default defineConfig({
 "#;
     
     fs::write(dir.join("vite.config.js"), content)?;
+    Ok(())
+}
+
+fn create_gitignore(dir: &PathBuf) -> Result<()> {
+    let content = r#"node_modules
+dist
+pkg/*.js
+pkg/*.wasm
+pkg/*.ts
+!pkg/.gitkeep
+"#;
+    
+    fs::write(dir.join(".gitignore"), content)?;
     Ok(())
 }
