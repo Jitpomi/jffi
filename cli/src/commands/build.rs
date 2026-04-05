@@ -359,16 +359,16 @@ fn build_linux(release: bool) -> Result<()> {
     
     println!("  {} Generating Python bindings...", "→".bright_blue());
     
-    // Check if uniffi-bindgen-cli is installed, install if not
-    if Command::new("uniffi-bindgen-cli").arg("--version").output().is_err() {
-        println!("  {} Installing uniffi-bindgen-cli...", "→".bright_blue());
+    // Check if uniffi-bindgen is installed, install if not
+    if Command::new("uniffi-bindgen").arg("--version").output().is_err() {
+        println!("  {} Installing uniffi-bindgen...", "→".bright_blue());
         let install_status = Command::new("cargo")
-            .args(&["install", "uniffi-bindgen-cli", "--version", "0.31.0"])
+            .args(&["install", "uniffi_bindgen", "--version", "0.31.0"])
             .status()
-            .context("Failed to install uniffi-bindgen-cli")?;
+            .context("Failed to install uniffi_bindgen")?;
         
         if !install_status.success() {
-            anyhow::bail!("Failed to install uniffi-bindgen-cli");
+            anyhow::bail!("Failed to install uniffi_bindgen");
         }
     }
     
@@ -385,7 +385,7 @@ fn build_linux(release: bool) -> Result<()> {
         .map(|e| e.path())
         .context("Could not find FFI library")?;
     
-    let status = Command::new("uniffi-bindgen-cli")
+    let status = Command::new("uniffi-bindgen")
         .args(&[
             "generate",
             "--library",
