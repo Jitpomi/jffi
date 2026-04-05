@@ -307,19 +307,22 @@ fn build_macos(arch: &str, release: bool) -> Result<()> {
 }
 
 fn build_windows(arch: &str, release: bool) -> Result<()> {
+    // Ensure uniffi-bindgen-cs is installed
+    ensure_uniffi_bindgen_cs()?;
+    
     let profile = if release { "release" } else { "debug" };
     let target = format!("{}-pc-windows-msvc", arch);
     
     println!("  {} Building Rust library for Windows ({})...", "→".bright_blue(), arch);
+    
+    let mut args = vec!["build"];
+    if release {
+        args.push("--release");
+    }
+    args.extend(&["--target", &target, "--manifest-path", "ffi/Cargo.toml"]);
+    
     let status = Command::new("cargo")
-        .args(&[
-            "build",
-            if release { "--release" } else { "" },
-            "--package",
-            "ffi",
-            "--target",
-            &target,
-        ])
+        .args(&args)
         .status()
         .context("Failed to build Rust library")?;
     
@@ -327,13 +330,113 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
         anyhow::bail!("Rust build failed");
     }
     
-    println!("  {} Generating C# bindings...", "→".bright_blue());
-    let _lib_path = format!("target/{}/{}/ffi.dll", target, profile);
+    println!("  {} Generating C# bindings with uniffi-bindgen-cs...", "→".bright_blue());
     
-    // Note: UniFFI doesn't natively support C#, we'll need a custom generator
-    println!("  {} C# bindings generation (coming soon)", "○".yellow());
+    // Find the .udl file
+    let udl_file = std::fs::read_dir("ffi/src")
+        .context("Failed to read ffi/src directory")?
+        .filter_map(|e| e.ok())
+        .find(|e| {
+            let name = e.file_name();
+            let name_str = name.to_string_lossy();
+            name_str.ends_with(".udl")
+        })
+        .map(|e| e.path())
+        .context("Could not find .udl file in ffi/src")?;
+    
+    // Generate C# bindings
+    let status = Command::new("uniffi-bindgen-cs")
+        .arg(udl_file.to_str().unwrap())
+        .arg("--out-dir")
+        .arg("platforms/windows")
+        .status()
+        .context("Failed to run uniffi-bindgen-cs")?;
+    
+    if !status.success() {
+        anyhow::bail!("C# bindings generation failed");
+    }
+    
+    // Copy the .dll to platforms/windows
+    let lib_path = format!("target/{}/{}/ffi.dll", target, profile);
+    if std::path::Path::new(&lib_path).exists() {
+        std::fs::copy(&lib_path, "platforms/windows/ffi.dll")
+            .context("Failed to copy DLL to platforms/windows")?;
+    }
+    
+    println!("  {} Building C# project with MSBuild...", "→".bright_blue());
+    
+    // Find the .csproj file
+    let csproj_file = std::fs::read_dir("platforms/windows")
+        .context("Failed to read platforms/windows directory")?
+        .filter_map(|e| e.ok())
+        .find(|e| {
+            let name = e.file_name();
+            let name_str = name.to_string_lossy();
+            name_str.ends_with(".csproj")
+        })
+        .map(|e| e.path())
+        .context("Could not find .csproj file")?;
+    
+    // Build with MSBuild (or dotnet build)
+    let build_cmd = if Command::new("dotnet").arg("--version").output().is_ok() {
+        "dotnet"
+    } else {
+        "msbuild"
+    };
+    
+    let mut build_args = vec!["build"];
+    if build_cmd == "dotnet" {
+        build_args.push(csproj_file.to_str().unwrap());
+        if release {
+            build_args.extend(&["-c", "Release"]);
+        }
+    } else {
+        build_args.push(csproj_file.to_str().unwrap());
+        if release {
+            build_args.extend(&["/p:Configuration=Release"]);
+        }
+    }
+    
+    let status = Command::new(build_cmd)
+        .args(&build_args)
+        .status()
+        .context(format!("Failed to build with {}", build_cmd))?;
+    
+    if !status.success() {
+        anyhow::bail!("C# build failed");
+    }
     
     println!("{}", "  ✅ Windows build complete".green());
+    Ok(())
+}
+
+fn ensure_uniffi_bindgen_cs() -> Result<()> {
+    println!("  {} Checking uniffi-bindgen-cs...", "→".bright_blue());
+    
+    let check = Command::new("uniffi-bindgen-cs")
+        .arg("--version")
+        .output();
+    
+    if check.is_err() || !check.unwrap().status.success() {
+        println!("    Installing uniffi-bindgen-cs (this may take a few minutes)...");
+        let status = Command::new("cargo")
+            .args(&[
+                "install",
+                "uniffi-bindgen-cs",
+                "--git",
+                "https://github.com/NordSecurity/uniffi-bindgen-cs",
+                "--tag",
+                "v0.10.0+v0.29.4"
+            ])
+            .status()
+            .context("Failed to install uniffi-bindgen-cs")?;
+        
+        if !status.success() {
+            anyhow::bail!("Failed to install uniffi-bindgen-cs");
+        }
+        println!("  {} uniffi-bindgen-cs installed", "✓".green());
+    }
+    
     Ok(())
 }
 

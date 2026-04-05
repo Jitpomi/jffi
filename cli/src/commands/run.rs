@@ -450,12 +450,35 @@ fn run_macos() -> Result<()> {
 }
 
 fn run_windows() -> Result<()> {
-    println!("  {} Opening Visual Studio...", "→".bright_blue());
+    // Build first
+    println!("  {} Building Windows app...", "→".bright_blue());
+    crate::commands::build::build_project(Some("windows".to_string()), false, false, false)?;
     
-    println!();
-    println!("{}", "  ℹ️  Open platforms/windows/*.sln in Visual Studio".bright_cyan());
-    println!("     Press F5 to run");
+    println!("  {} Launching Windows app...", "→".bright_blue());
     
+    // Find the built executable
+    let exe_path = std::fs::read_dir("platforms/windows/bin/Debug")
+        .or_else(|_| std::fs::read_dir("platforms/windows/bin/x64/Debug"))
+        .context("Failed to find build output directory")?
+        .filter_map(|e| e.ok())
+        .find(|e| {
+            let name = e.file_name();
+            let name_str = name.to_string_lossy();
+            name_str.ends_with(".exe")
+        })
+        .map(|e| e.path())
+        .context("Could not find built executable")?;
+    
+    // Launch the app
+    let status = Command::new(exe_path)
+        .status()
+        .context("Failed to launch Windows app")?;
+    
+    if !status.success() {
+        anyhow::bail!("App failed to run");
+    }
+    
+    println!("{}", "  ✅ App launched!".green());
     Ok(())
 }
 
