@@ -38,13 +38,18 @@ fn create_project_structure(dir: &PathBuf, name: &str, platforms: &[&str]) -> Re
     fs::create_dir_all(dir).context("Failed to create project directory")?;
     
     // Create workspace Cargo.toml
-    create_workspace_cargo_toml(dir)?;
+    create_workspace_cargo_toml(dir, platforms)?;
     
     // Create core business logic crate
     create_core_crate(dir, name)?;
     
     // Create FFI crate
     create_ffi_crate(dir, name)?;
+    
+    // Create FFI-Web crate if web platform is selected
+    if platforms.contains(&"web") {
+        create_ffi_web_crate(dir, name)?;
+    }
     
     // Create platform directories
     for platform in platforms {
@@ -63,11 +68,17 @@ fn create_project_structure(dir: &PathBuf, name: &str, platforms: &[&str]) -> Re
     Ok(())
 }
 
-fn create_workspace_cargo_toml(dir: &PathBuf) -> Result<()> {
-    let cargo_toml = r#"[workspace]
-members = ["core", "ffi"]
+fn create_workspace_cargo_toml(dir: &PathBuf, platforms: &[&str]) -> Result<()> {
+    let members = if platforms.contains(&"web") {
+        r#"["core", "ffi", "ffi-web"]"#
+    } else {
+        r#"["core", "ffi"]"#
+    };
+    
+    let cargo_toml = format!(r#"[workspace]
+members = {}
 resolver = "2"
-"#;
+"#, members);
     fs::write(dir.join("Cargo.toml"), cargo_toml)?;
     Ok(())
 }
@@ -239,6 +250,98 @@ uniffi::setup_scaffolding!();
     fs::write(ffi_dir.join("src/lib.rs"), lib_rs)?;
     
     println!("  {} ffi/", "✓".green());
+    Ok(())
+}
+
+fn create_ffi_web_crate(dir: &PathBuf, name: &str) -> Result<()> {
+    let ffi_web_dir = dir.join("ffi-web");
+    fs::create_dir_all(ffi_web_dir.join("src"))?;
+    
+    // Cargo.toml for WASM
+    let cargo_toml = format!(r#"[package]
+name = "{}-ffi-web"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+{}-core = {{ path = "../core" }}
+wasm-bindgen = "0.2"
+serde = {{ version = "1.0", features = ["derive"] }}
+serde-wasm-bindgen = "0.6"
+
+[profile.release]
+opt-level = "z"
+lto = true
+"#, name, name);
+    fs::write(ffi_web_dir.join("Cargo.toml"), cargo_toml)?;
+    
+    // lib.rs with wasm-bindgen exports
+    let module_name = name.replace("-", "_");
+    let lib_rs = format!(r#"use {}_core::{{App, Item}};
+use wasm_bindgen::prelude::*;
+use serde::{{Serialize, Deserialize}};
+
+#[derive(Serialize, Deserialize)]
+pub struct ItemViewModel {{
+    pub id: String,
+    pub title: String,
+    pub completed: bool,
+}}
+
+impl From<&Item> for ItemViewModel {{
+    fn from(item: &Item) -> Self {{
+        Self {{
+            id: item.id.clone(),
+            title: item.title.clone(),
+            completed: item.completed,
+        }}
+    }}
+}}
+
+#[wasm_bindgen]
+pub struct FfiApp {{
+    app: App,
+}}
+
+#[wasm_bindgen]
+impl FfiApp {{
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {{
+        Self {{
+            app: App::new(),
+        }}
+    }}
+    
+    pub fn add_item(&mut self, id: String, title: String) -> JsValue {{
+        self.app.add_item(id, title);
+        let items: Vec<ItemViewModel> = self.app.get_items().iter().map(ItemViewModel::from).collect();
+        serde_wasm_bindgen::to_value(&items).unwrap()
+    }}
+    
+    pub fn toggle_item(&mut self, id: String) -> JsValue {{
+        self.app.toggle_item(&id);
+        let items: Vec<ItemViewModel> = self.app.get_items().iter().map(ItemViewModel::from).collect();
+        serde_wasm_bindgen::to_value(&items).unwrap()
+    }}
+    
+    pub fn delete_item(&mut self, id: String) -> JsValue {{
+        self.app.delete_item(&id);
+        let items: Vec<ItemViewModel> = self.app.get_items().iter().map(ItemViewModel::from).collect();
+        serde_wasm_bindgen::to_value(&items).unwrap()
+    }}
+    
+    pub fn get_items(&self) -> JsValue {{
+        let items: Vec<ItemViewModel> = self.app.get_items().iter().map(ItemViewModel::from).collect();
+        serde_wasm_bindgen::to_value(&items).unwrap()
+    }}
+}}
+"#, module_name);
+    fs::write(ffi_web_dir.join("src/lib.rs"), lib_rs)?;
+    
+    println!("  {} ffi-web/", "✓".green());
     Ok(())
 }
 
