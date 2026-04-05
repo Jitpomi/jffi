@@ -13,6 +13,8 @@
   <component name="ChangeListManager">
     <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="commit">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/commands/run.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/commands/run.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/templates/linux.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/templates/linux.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -107,7 +109,7 @@
       <workItem from="1769681103963" duration="34000" />
       <workItem from="1775103743219" duration="31630000" />
       <workItem from="1775230133234" duration="29195000" />
-      <workItem from="1775399602549" duration="7083000" />
+      <workItem from="1775399602549" duration="7445000" />
     </task>
     <servers />
   </component>
