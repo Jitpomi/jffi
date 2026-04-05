@@ -160,7 +160,7 @@ path = "uniffi-bindgen.rs"
 
 [dependencies]
 {}-core = {{ path = "../core" }}
-uniffi = "0.31.0"
+uniffi = {{ version = "0.31.0", features = ["cli"] }}
 
 [build-dependencies]
 uniffi = {{ version = "0.31.0", features = ["build"] }}
