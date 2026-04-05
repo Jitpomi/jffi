@@ -341,15 +341,15 @@ fn build_linux(release: bool) -> Result<()> {
     let profile = if release { "release" } else { "debug" };
     
     println!("  {} Building Rust library for Linux...", "→".bright_blue());
+    
+    let mut args = vec!["build"];
+    if release {
+        args.push("--release");
+    }
+    args.extend(&["--manifest-path", "ffi/Cargo.toml"]);
+    
     let status = Command::new("cargo")
-        .args(&[
-            "build",
-            if release { "--release" } else { "" },
-            "--package",
-            "ffi",
-            "--target",
-            "x86_64-unknown-linux-gnu",
-        ])
+        .args(&args)
         .status()
         .context("Failed to build Rust library")?;
     
@@ -357,22 +357,33 @@ fn build_linux(release: bool) -> Result<()> {
         anyhow::bail!("Rust build failed");
     }
     
-    println!("  {} Generating C bindings...", "→".bright_blue());
-    let lib_path = format!("target/x86_64-unknown-linux-gnu/{}/libffi.so", profile);
+    println!("  {} Generating Python bindings...", "→".bright_blue());
     
-    // UniFFI can generate C bindings
+    // Find the library file
+    let lib_dir = format!("target/{}", profile);
+    let lib_path = std::fs::read_dir(&lib_dir)
+        .context("Failed to read target directory")?
+        .filter_map(|e| e.ok())
+        .find(|e| {
+            let name = e.file_name();
+            let name_str = name.to_string_lossy();
+            name_str.starts_with("lib") && name_str.ends_with("ffi.so")
+        })
+        .map(|e| e.path())
+        .context("Could not find FFI library")?;
+    
     let status = Command::new("uniffi-bindgen-cli")
         .args(&[
             "generate",
             "--library",
-            &lib_path,
+            lib_path.to_str().unwrap(),
             "--language",
-            "python", // or C when available
+            "python",
             "--out-dir",
             "platforms/linux",
         ])
         .status()
-        .context("Failed to generate bindings")?;
+        .context("Failed to generate Python bindings")?;
     
     if !status.success() {
         anyhow::bail!("Binding generation failed");
