@@ -36,6 +36,9 @@ from gi.repository import Gtk, Adw
 from app import {}Application
 
 def main():
+    # Initialize GTK
+    Gtk.init()
+    
     app = {}Application()
     return app.run(sys.argv)
 
