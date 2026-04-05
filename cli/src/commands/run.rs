@@ -484,7 +484,7 @@ fn run_linux() -> Result<()> {
     println!("  {} Building Rust FFI library...", "→".bright_blue());
     crate::commands::build::build_project(Some("linux".to_string()), false, false, false)?;
     
-    // Copy the .so file to platforms/linux
+    // Copy the .so file to platforms/linux with the correct name
     let lib_path = std::fs::read_dir("target/debug")
         .context("Failed to read target directory")?
         .filter_map(|e| e.ok())
@@ -496,7 +496,11 @@ fn run_linux() -> Result<()> {
         .map(|e| e.path())
         .context("Could not find FFI library")?;
     
-    std::fs::copy(&lib_path, "platforms/linux/libffi.so")
+    let lib_filename = lib_path.file_name()
+        .context("Could not get library filename")?;
+    let dest_path = format!("platforms/linux/{}", lib_filename.to_string_lossy());
+    
+    std::fs::copy(&lib_path, &dest_path)
         .context("Failed to copy library to platforms/linux")?;
     
     // Launch the Python app
