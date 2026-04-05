@@ -1,1 +1,0 @@
-/Users/samsonssali/newway/note-app/testapp/target/aarch64-apple-darwin/debug/libtestapp_ffi.dylib: /Users/samsonssali/newway/note-app/testapp/core/src/lib.rs /Users/samsonssali/newway/note-app/testapp/ffi/src/lib.rs
