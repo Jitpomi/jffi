@@ -11,7 +11,11 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="commit" />
+    <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="commit">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/commands/new.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/commands/new.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/templates/web.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/templates/web.rs" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -87,10 +91,10 @@
 }</component>
   <component name="RecapSpentCounter">
     <option name="endsOfQuotaMs" value="1776114027164" />
-    <option name="spentUsd" value="0.0173265" />
+    <option name="spentUsd" value="0.0689985" />
   </component>
   <component name="RecapUselessUpdatesCounter">
-    <option name="suspendCountdown" value="4" />
+    <option name="suspendCountdown" value="0" />
   </component>
   <component name="RustProjectSettings">
     <option name="toolchainHomeDirectory" value="$USER_HOME$/.cargo/bin" />
@@ -105,7 +109,7 @@
       <workItem from="1769681103963" duration="34000" />
       <workItem from="1775103743219" duration="31630000" />
       <workItem from="1775230133234" duration="29195000" />
-      <workItem from="1775399602549" duration="10283000" />
+      <workItem from="1775399602549" duration="16207000" />
     </task>
     <servers />
   </component>
