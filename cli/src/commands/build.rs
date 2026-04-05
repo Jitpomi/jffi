@@ -405,28 +405,112 @@ fn build_linux(release: bool) -> Result<()> {
 }
 
 fn build_web(release: bool) -> Result<()> {
+    // Ensure wasm32-unknown-unknown target is installed
+    ensure_wasm_target()?;
+    
+    // Ensure wasm-bindgen-cli is installed
+    ensure_wasm_bindgen_cli()?;
+    
     println!("  {} Building Rust library for Web (WASM)...", "→".bright_blue());
+    
+    let profile = if release { "release" } else { "debug" };
+    
+    // Build the ffi-web crate for wasm32
+    let mut args = vec!["build", "--target", "wasm32-unknown-unknown"];
+    if release {
+        args.push("--release");
+    }
+    args.extend(&["--manifest-path", "ffi-web/Cargo.toml"]);
+    
     let status = Command::new("cargo")
-        .args(&[
-            "build",
-            if release { "--release" } else { "" },
-            "--package",
-            "ffi",
-            "--target",
-            "wasm32-unknown-unknown",
-        ])
+        .args(&args)
         .status()
-        .context("Failed to build Rust library")?;
+        .context("Failed to build Rust library for WASM")?;
     
     if !status.success() {
-        anyhow::bail!("Rust build failed");
+        anyhow::bail!("Rust WASM build failed");
     }
     
     println!("  {} Generating JavaScript bindings with wasm-bindgen...", "→".bright_blue());
-    // Note: This requires wasm-bindgen, not UniFFI
-    println!("  {} WASM bindings (coming soon - needs wasm-bindgen integration)", "○".yellow());
+    
+    // Find the .wasm file - need to get the actual project name
+    let wasm_dir = format!("target/wasm32-unknown-unknown/{}", profile);
+    let wasm_file = std::fs::read_dir(&wasm_dir)
+        .context("Failed to read wasm target directory")?
+        .filter_map(|e| e.ok())
+        .find(|e| {
+            let name = e.file_name();
+            let name_str = name.to_string_lossy();
+            name_str.ends_with("_ffi_web.wasm")
+        })
+        .map(|e| e.path())
+        .context("Could not find WASM file")?;
+    
+    // Run wasm-bindgen to generate JS bindings
+    let status = Command::new("wasm-bindgen")
+        .arg(wasm_file.to_str().unwrap())
+        .arg("--out-dir")
+        .arg("platforms/web/pkg")
+        .arg("--target")
+        .arg("web")
+        .arg("--out-name")
+        .arg("wasm")
+        .status()
+        .context("Failed to run wasm-bindgen")?;
+    
+    if !status.success() {
+        anyhow::bail!("wasm-bindgen failed");
+    }
     
     println!("{}", "  ✅ Web build complete".green());
+    Ok(())
+}
+
+fn ensure_wasm_target() -> Result<()> {
+    println!("  {} Checking wasm32-unknown-unknown target...", "→".bright_blue());
+    
+    let output = Command::new("rustup")
+        .args(&["target", "list", "--installed"])
+        .output()
+        .context("Failed to check installed targets")?;
+    
+    let installed = String::from_utf8_lossy(&output.stdout);
+    
+    if !installed.contains("wasm32-unknown-unknown") {
+        println!("    Installing wasm32-unknown-unknown...");
+        let status = Command::new("rustup")
+            .args(&["target", "add", "wasm32-unknown-unknown"])
+            .status()
+            .context("Failed to install wasm32-unknown-unknown target")?;
+        
+        if !status.success() {
+            anyhow::bail!("Failed to install wasm32-unknown-unknown target");
+        }
+    }
+    
+    Ok(())
+}
+
+fn ensure_wasm_bindgen_cli() -> Result<()> {
+    println!("  {} Checking wasm-bindgen-cli...", "→".bright_blue());
+    
+    let check = Command::new("wasm-bindgen")
+        .arg("--version")
+        .output();
+    
+    if check.is_err() || !check.unwrap().status.success() {
+        println!("    Installing wasm-bindgen-cli (this may take a few minutes)...");
+        let status = Command::new("cargo")
+            .args(&["install", "wasm-bindgen-cli"])
+            .status()
+            .context("Failed to install wasm-bindgen-cli")?;
+        
+        if !status.success() {
+            anyhow::bail!("Failed to install wasm-bindgen-cli");
+        }
+        println!("  {} wasm-bindgen-cli installed", "✓".green());
+    }
+    
     Ok(())
 }
 
