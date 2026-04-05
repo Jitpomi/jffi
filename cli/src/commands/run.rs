@@ -521,23 +521,49 @@ fn run_linux() -> Result<()> {
 }
 
 fn run_web() -> Result<()> {
-    println!("  {} Starting web server...", "→".bright_blue());
+    // Build the WASM first
+    println!("  {} Building Rust FFI library...", "→".bright_blue());
+    crate::commands::build::build_project(Some("web".to_string()), false, false, false)?;
     
-    // Check if http-server is installed
-    if Command::new("which").arg("http-server").output()?.status.success() {
-        println!("  {} Serving on http://localhost:8080", "→".bright_blue());
-        
-        Command::new("http-server")
-            .arg("platforms/web")
-            .arg("-p")
-            .arg("8080")
-            .status()
-            .context("Failed to start web server")?;
-    } else {
-        println!();
-        println!("{}", "  ℹ️  Install http-server: npm install -g http-server".bright_cyan());
-        println!("     Then run: cd platforms/web && http-server");
+    // Check if npm is installed
+    let npm_check = Command::new("npm")
+        .arg("--version")
+        .output();
+    
+    if npm_check.is_err() || !npm_check.unwrap().status.success() {
+        anyhow::bail!("npm is not installed. Please install Node.js and npm first.");
     }
     
+    // Install npm dependencies if needed
+    let node_modules = std::path::Path::new("platforms/web/node_modules");
+    if !node_modules.exists() {
+        println!("  {} Installing npm dependencies...", "→".bright_blue());
+        let status = Command::new("npm")
+            .arg("install")
+            .current_dir("platforms/web")
+            .status()
+            .context("Failed to install npm dependencies")?;
+        
+        if !status.success() {
+            anyhow::bail!("npm install failed");
+        }
+    }
+    
+    // Start Vite dev server
+    println!("  {} Starting Vite dev server...", "→".bright_blue());
+    println!("  {} Server will open at http://localhost:3000", "→".bright_blue());
+    
+    let status = Command::new("npm")
+        .arg("run")
+        .arg("dev")
+        .current_dir("platforms/web")
+        .status()
+        .context("Failed to start Vite dev server")?;
+    
+    if !status.success() {
+        anyhow::bail!("Vite dev server failed");
+    }
+    
+    println!("{}", "  ✅ Web server stopped".green());
     Ok(())
 }
