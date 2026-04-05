@@ -377,7 +377,13 @@ fn create_vite_config(dir: &PathBuf) -> Result<()> {
 export default defineConfig({
   server: {
     port: 3000,
-    open: true
+    open: true,
+    fs: {
+      strict: false
+    }
+  },
+  optimizeDeps: {
+    exclude: ['./pkg/wasm.js']
   }
 });
 "#;
