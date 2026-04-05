@@ -185,7 +185,7 @@ fn create_styles_css(dir: &PathBuf) -> Result<()> {
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
     min-height: 100vh;
     padding: 20px;
 }
@@ -200,7 +200,7 @@ body {
 }
 
 header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
     color: white;
     padding: 24px;
     display: flex;
@@ -215,7 +215,7 @@ h1 {
 
 .btn-primary {
     background: white;
-    color: #667eea;
+    color: #374151;
     border: none;
     padding: 10px 20px;
     border-radius: 8px;
@@ -257,7 +257,7 @@ h1 {
 .stat-value {
     font-size: 32px;
     font-weight: 700;
-    color: #667eea;
+    color: #4b5563;
 }
 
 .stat-label {
@@ -336,7 +336,7 @@ h1 {
 
 .modal-content input:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #6b7280;
 }
 
 .modal-actions {
