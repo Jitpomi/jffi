@@ -154,6 +154,10 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "lib"]
 
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+
 [dependencies]
 {}-core = {{ path = "../core" }}
 uniffi = "0.31.0"
@@ -162,6 +166,13 @@ uniffi = "0.31.0"
 uniffi = {{ version = "0.31.0", features = ["build"] }}
 "#, name, name);
     fs::write(ffi_dir.join("Cargo.toml"), cargo_toml)?;
+    
+    // Create uniffi-bindgen.rs binary
+    let uniffi_bindgen_rs = r#"fn main() {
+    uniffi::uniffi_bindgen_main()
+}
+"#;
+    fs::write(ffi_dir.join("uniffi-bindgen.rs"), uniffi_bindgen_rs)?;
     
     // lib.rs with FFI exports
     let module_name = name.replace("-", "_");
