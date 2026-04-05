@@ -185,7 +185,7 @@ fn create_styles_css(dir: &PathBuf) -> Result<()> {
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+    background: #f5f5f7;
     min-height: 100vh;
     padding: 20px;
 }
@@ -195,17 +195,18 @@ body {
     margin: 0 auto;
     background: white;
     border-radius: 16px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     overflow: hidden;
 }
 
 header {
-    background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
-    color: white;
+    background: white;
+    color: #1d1d1f;
     padding: 24px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    border-bottom: 1px solid #e5e5e7;
 }
 
 h1 {
@@ -214,18 +215,18 @@ h1 {
 }
 
 .btn-primary {
-    background: white;
-    color: #374151;
+    background: #007aff;
+    color: white;
     border: none;
     padding: 10px 20px;
     border-radius: 8px;
     font-weight: 600;
     cursor: pointer;
-    transition: transform 0.2s;
+    transition: background 0.2s;
 }
 
 .btn-primary:hover {
-    transform: scale(1.05);
+    background: #0051d5;
 }
 
 .btn-secondary {
@@ -243,7 +244,7 @@ h1 {
     grid-template-columns: repeat(3, 1fr);
     gap: 16px;
     padding: 24px;
-    background: #f9fafb;
+    background: #fafafa;
 }
 
 .stat-card {
@@ -257,12 +258,12 @@ h1 {
 .stat-value {
     font-size: 32px;
     font-weight: 700;
-    color: #4b5563;
+    color: #1d1d1f;
 }
 
 .stat-label {
     font-size: 14px;
-    color: #6b7280;
+    color: #86868b;
     margin-top: 4px;
 }
 
@@ -275,7 +276,7 @@ h1 {
     align-items: center;
     gap: 12px;
     padding: 16px;
-    background: #f9fafb;
+    background: #fafafa;
     border-radius: 8px;
     margin-bottom: 8px;
 }
@@ -336,7 +337,7 @@ h1 {
 
 .modal-content input:focus {
     outline: none;
-    border-color: #6b7280;
+    border-color: #007aff;
 }
 
 .modal-actions {
