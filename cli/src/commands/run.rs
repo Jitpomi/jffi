@@ -462,14 +462,13 @@ fn run_windows() -> Result<()> {
 fn run_linux() -> Result<()> {
     println!("  {} Checking Linux dependencies...", "→".bright_blue());
     
-    // Check for Python 3
-    if !Command::new("python3").arg("--version").output()?.status.success() {
-        anyhow::bail!("Python 3 is required. Install with: sudo apt install python3");
-    }
+    // Check for build tools (gcc)
+    let needs_setup = !Command::new("gcc").arg("--version").output()?.status.success()
+        || !Command::new("python3").arg("--version").output()?.status.success()
+        || !Command::new("pkg-config").args(&["--exists", "gtk4"]).output()?.status.success();
     
-    // Check for GTK 4
-    if !Command::new("pkg-config").args(&["--exists", "gtk4"]).output()?.status.success() {
-        println!("  {} GTK 4 not found. Installing dependencies...", "→".bright_blue());
+    if needs_setup {
+        println!("  {} Missing dependencies. Running setup script...", "→".bright_blue());
         
         let status = Command::new("bash")
             .arg("platforms/linux/setup.sh")
