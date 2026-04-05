@@ -315,6 +315,19 @@ if ! pkg-config --exists gtk4; then
     sudo apt install -y libgtk-4-dev libadwaita-1-dev python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1
 fi
 
+# Install uniffi-bindgen-cli if not present
+if ! command -v uniffi-bindgen-cli &> /dev/null; then
+    echo "Installing uniffi-bindgen-cli..."
+    # Try cargo-binstall first (faster), fall back to cargo install
+    if command -v cargo-binstall &> /dev/null; then
+        cargo-binstall -y uniffi-bindgen-cli@0.31.0
+    else
+        # Install cargo-binstall for faster future installations
+        curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+        cargo-binstall -y uniffi-bindgen-cli@0.31.0
+    fi
+fi
+
 # Install Python dependencies
 echo "Installing Python dependencies..."
 pip3 install --user -r requirements.txt
