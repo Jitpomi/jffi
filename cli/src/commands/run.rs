@@ -460,17 +460,60 @@ fn run_windows() -> Result<()> {
 }
 
 fn run_linux() -> Result<()> {
-    println!("  {} Building and running GTK app...", "→".bright_blue());
+    println!("  {} Checking Linux dependencies...", "→".bright_blue());
     
-    let status = Command::new("cargo")
-        .args(&["run", "--manifest-path", "platforms/linux/Cargo.toml"])
-        .status()
-        .context("Failed to run Linux app")?;
-    
-    if !status.success() {
-        anyhow::bail!("Failed to run app");
+    // Check for Python 3
+    if !Command::new("python3").arg("--version").output()?.status.success() {
+        anyhow::bail!("Python 3 is required. Install with: sudo apt install python3");
     }
     
+    // Check for GTK 4
+    if !Command::new("pkg-config").args(&["--exists", "gtk4"]).output()?.status.success() {
+        println!("  {} GTK 4 not found. Installing dependencies...", "→".bright_blue());
+        
+        let status = Command::new("bash")
+            .arg("platforms/linux/setup.sh")
+            .status()
+            .context("Failed to run setup script")?;
+        
+        if !status.success() {
+            anyhow::bail!("Dependency installation failed. Run: cd platforms/linux && ./setup.sh");
+        }
+    }
+    
+    // Build the Rust FFI library
+    println!("  {} Building Rust FFI library...", "→".bright_blue());
+    crate::commands::build::build_project(Some("linux".to_string()), false, false, false)?;
+    
+    // Copy the .so file to platforms/linux
+    let lib_path = std::fs::read_dir("target/debug")
+        .context("Failed to read target directory")?
+        .filter_map(|e| e.ok())
+        .find(|e| {
+            let name = e.file_name();
+            let name_str = name.to_string_lossy();
+            name_str.starts_with("lib") && name_str.ends_with("ffi.so")
+        })
+        .map(|e| e.path())
+        .context("Could not find FFI library")?;
+    
+    std::fs::copy(&lib_path, "platforms/linux/libffi.so")
+        .context("Failed to copy library to platforms/linux")?;
+    
+    // Launch the Python app
+    println!("  {} Launching app...", "→".bright_blue());
+    
+    let status = Command::new("python3")
+        .arg("main.py")
+        .current_dir("platforms/linux")
+        .status()
+        .context("Failed to launch app")?;
+    
+    if !status.success() {
+        anyhow::bail!("App failed to run");
+    }
+    
+    println!("{}", "  ✅ App launched!".green());
     Ok(())
 }
 

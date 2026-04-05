@@ -19,7 +19,7 @@ pub fn watch_project(platform: &str) -> Result<()> {
     println!("{}", "  ✓ Build complete!".green());
     println!();
     
-    // Auto-open IDE
+    // Auto-open IDE or launch app
     if platform == "ios" || platform == "macos" {
         println!("{}", "  → Opening Xcode...".bright_blue());
         open_xcode_project(platform)?;
@@ -46,6 +46,20 @@ pub fn watch_project(platform: &str) -> Result<()> {
         println!("   Development workflow:");
         println!("   • Edit Kotlin files → Changes appear on rebuild (Compose hot reload)");
         println!("   • Edit Rust files → This watcher rebuilds → Rebuild in Android Studio");
+        println!();
+        println!("   Press Ctrl+C to stop watching");
+        println!();
+    } else if platform == "linux" {
+        println!("{}", "  → Launching Linux app...".bright_blue());
+        launch_linux_app_background()?;
+        println!();
+        println!("{}", "  ✓ App launched!".green());
+        println!();
+        println!("{}", "   🚀 Development mode active!".bright_yellow().bold());
+        println!();
+        println!("   Development workflow:");
+        println!("   • Edit Python files → App auto-restarts");
+        println!("   • Edit Rust files → This watcher rebuilds → App auto-restarts");
         println!();
         println!("   Press Ctrl+C to stop watching");
         println!();
@@ -90,7 +104,19 @@ pub fn watch_project(platform: &str) -> Result<()> {
                         match crate::commands::build::build_platform(platform, false) {
                             Ok(_) => {
                                 println!();
-                                println!("{}", "  ✓ Rust rebuild complete! Press Cmd+B in Xcode to use new code.".green());
+                                if platform == "linux" {
+                                    println!("{}", "  ✓ Rust rebuild complete! Restarting app...".green());
+                                    match restart_linux_app() {
+                                        Ok(_) => {
+                                            println!("{}", "  ✓ App restarted!".green());
+                                        }
+                                        Err(e) => {
+                                            println!("{}", format!("  ✗ Failed to restart app: {}", e).red());
+                                        }
+                                    }
+                                } else {
+                                    println!("{}", "  ✓ Rust rebuild complete! Press Cmd+B in Xcode to use new code.".green());
+                                }
                                 println!();
                             }
                             Err(e) => {
@@ -174,4 +200,50 @@ fn open_android_studio() -> Result<()> {
         .context("Failed to open Android Studio")?;
     
     Ok(())
+}
+
+fn launch_linux_app_background() -> Result<()> {
+    use std::process::Stdio;
+    
+    // Copy the .so file to platforms/linux
+    let lib_path = std::fs::read_dir("target/debug")
+        .context("Failed to read target directory")?
+        .filter_map(|e| e.ok())
+        .find(|e| {
+            let name = e.file_name();
+            let name_str = name.to_string_lossy();
+            name_str.starts_with("lib") && name_str.ends_with("ffi.so")
+        })
+        .map(|e| e.path())
+        .context("Could not find FFI library")?;
+    
+    std::fs::copy(&lib_path, "platforms/linux/libffi.so")
+        .context("Failed to copy library to platforms/linux")?;
+    
+    // Launch Python app in background
+    Command::new("python3")
+        .arg("main.py")
+        .current_dir("platforms/linux")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .context("Failed to launch app")?;
+    
+    // Give it a moment to start
+    std::thread::sleep(Duration::from_millis(500));
+    
+    Ok(())
+}
+
+fn restart_linux_app() -> Result<()> {
+    // Kill existing Python processes running main.py
+    let _ = Command::new("pkill")
+        .args(&["-f", "python3.*main.py"])
+        .status();
+    
+    // Wait a moment for cleanup
+    std::thread::sleep(Duration::from_millis(200));
+    
+    // Relaunch
+    launch_linux_app_background()
 }

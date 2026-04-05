@@ -1,0 +1,19 @@
+[package]
+name = "testapp_ffi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+testapp-core = { path = "../core" }
+
+# Windows-specific configuration for x64 compatibility
+[target.'cfg(windows)']
+rustflags = ["-C", "target-feature=+crt-static"]
+
+# Ensure proper linking for Windows
+[profile.release]
+panic = "abort"
+lto = true

@@ -1,0 +1,14 @@
+[package]
+name = "testlinux-ffi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+testlinux-core = { path = "../core" }
+uniffi = "0.31.0"
+
+[build-dependencies]
+uniffi = { version = "0.31.0", features = ["build"] }
