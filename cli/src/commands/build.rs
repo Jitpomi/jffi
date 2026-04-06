@@ -410,6 +410,19 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
         anyhow::bail!("C# build failed");
     }
     
+    // Copy the FFI DLL to the output directory after build
+    println!("  {} Copying FFI DLL to output directory...", "→".bright_blue());
+    let output_dir = "platforms/windows/bin/x64/Debug/net8.0-windows10.0.19041.0";
+    if std::path::Path::new(output_dir).exists() {
+        let dll_source = format!("platforms/windows/{}_ffi.dll", lib_name);
+        let dll_dest = format!("{}/{}_ffi.dll", output_dir, lib_name);
+        if std::path::Path::new(&dll_source).exists() {
+            std::fs::copy(&dll_source, &dll_dest)
+                .context("Failed to copy FFI DLL to output directory")?;
+            println!("  {} Copied {} to output directory", "✓".green(), format!("{}_ffi.dll", lib_name));
+        }
+    }
+    
     println!("{}", "  ✅ Windows build complete".green());
     Ok(())
 }
