@@ -241,7 +241,7 @@ namespace {}
         public MainWindow()
         {{
             this.InitializeComponent();
-            ffiApp = FfiApp.New();
+            ffiApp = new FfiApp();
             TasksList.ItemsSource = tasks;
             LoadTasks();
             UpdateStats();
