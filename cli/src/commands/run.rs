@@ -480,13 +480,17 @@ fn run_windows() -> Result<()> {
     let exe_path = find_exe_recursive(std::path::Path::new("platforms/windows/bin"))
         .context("Could not find built executable in platforms/windows/bin")?;
     
+    println!("  {} Found executable: {}", "→".bright_blue(), exe_path.display());
+    
     // Launch the app
-    let status = Command::new(exe_path)
-        .status()
+    let output = Command::new(&exe_path)
+        .output()
         .context("Failed to launch Windows app")?;
     
-    if !status.success() {
-        anyhow::bail!("App failed to run");
+    if !output.status.success() {
+        eprintln!("  {} stdout: {}", "→".bright_red(), String::from_utf8_lossy(&output.stdout));
+        eprintln!("  {} stderr: {}", "→".bright_red(), String::from_utf8_lossy(&output.stderr));
+        anyhow::bail!("App exited with code: {:?}", output.status.code());
     }
     
     println!("{}", "  ✅ App launched!".green());
