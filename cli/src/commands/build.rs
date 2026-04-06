@@ -418,15 +418,17 @@ fn ensure_uniffi_bindgen_cs() -> Result<()> {
         .output();
     
     if check.is_err() || !check.unwrap().status.success() {
-        println!("    Installing uniffi-bindgen-cs (this may take a few minutes)...");
+        println!("    Installing uniffi-bindgen-cs from main branch (this may take a few minutes)...");
+        println!("    {} Note: uniffi-bindgen-cs targets UniFFI v0.29.4, but JFFI uses v0.31.0", "⚠".yellow());
+        println!("    {} This may cause compatibility issues", "⚠".yellow());
         let status = Command::new("cargo")
             .args(&[
                 "install",
                 "uniffi-bindgen-cs",
                 "--git",
                 "https://github.com/NordSecurity/uniffi-bindgen-cs",
-                "--tag",
-                "v0.10.0+v0.29.4"
+                "--branch",
+                "main"
             ])
             .status()
             .context("Failed to install uniffi-bindgen-cs")?;
