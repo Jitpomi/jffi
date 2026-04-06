@@ -353,10 +353,11 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
         anyhow::bail!("C# bindings generation failed");
     }
     
-    // Copy the .dll to platforms/windows
+    // Copy the .dll to platforms/windows for the build
     let lib_path = format!("target/{}/{}/{}_ffi.dll", target, profile, lib_name);
+    let dll_name = format!("{}_ffi.dll", lib_name);
     if std::path::Path::new(&lib_path).exists() {
-        std::fs::copy(&lib_path, "platforms/windows/ffi.dll")
+        std::fs::copy(&lib_path, format!("platforms/windows/{}", dll_name))
             .context("Failed to copy DLL to platforms/windows")?;
     }
     
