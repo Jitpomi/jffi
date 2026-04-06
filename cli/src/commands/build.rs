@@ -333,7 +333,13 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
     println!("  {} Generating C# bindings with uniffi-bindgen-cs...", "→".bright_blue());
     
     // Use library mode to generate bindings directly from the compiled DLL
-    let lib_path = format!("target/{}/{}/ffi.dll", target, profile);
+    // On Windows, Rust builds cdylib as <name>.dll (not lib<name>.dll)
+    let lib_name = std::env::current_dir()?
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("ffi")
+        .replace("-", "_");
+    let lib_path = format!("target/{}/{}/{}_ffi.dll", target, profile, lib_name);
     
     let status = Command::new("uniffi-bindgen-cs")
         .arg("--library")
@@ -348,7 +354,7 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
     }
     
     // Copy the .dll to platforms/windows
-    let lib_path = format!("target/{}/{}/ffi.dll", target, profile);
+    let lib_path = format!("target/{}/{}/{}_ffi.dll", target, profile, lib_name);
     if std::path::Path::new(&lib_path).exists() {
         std::fs::copy(&lib_path, "platforms/windows/ffi.dll")
             .context("Failed to copy DLL to platforms/windows")?;
