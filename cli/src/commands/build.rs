@@ -386,12 +386,15 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
         build_args.push(csproj_file.to_str().unwrap());
         // WinUI 3 requires a specific platform, not AnyCPU
         build_args.extend(&["-p:Platform=x64"]);
+        // Make it self-contained to include WinUI 3 runtime
+        build_args.extend(&["-p:WindowsAppSDKSelfContained=true"]);
         if release {
             build_args.extend(&["-c", "Release"]);
         }
     } else {
         build_args.push(csproj_file.to_str().unwrap());
         build_args.extend(&["/p:Platform=x64"]);
+        build_args.extend(&["/p:WindowsAppSDKSelfContained=true"]);
         if release {
             build_args.extend(&["/p:Configuration=Release"]);
         }
