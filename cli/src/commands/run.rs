@@ -498,6 +498,18 @@ fn run_windows() -> Result<()> {
     
     println!("  {} Found executable: {}", "→".bright_blue(), exe_path.display());
     
+    // Check if FFI DLL exists in the same directory
+    let exe_dir = exe_path.parent().context("Could not get executable directory")?;
+    let dll_files: Vec<_> = std::fs::read_dir(exe_dir)?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("dll"))
+        .collect();
+    
+    println!("  {} DLLs in output directory:", "→".bright_blue());
+    for dll in &dll_files {
+        println!("    - {}", dll.file_name().to_string_lossy());
+    }
+    
     // Launch the app
     let output = Command::new(&exe_path)
         .output()
