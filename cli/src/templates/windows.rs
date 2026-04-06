@@ -222,8 +222,7 @@ using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
-// Generated FFI bindings will be imported here
-// using {}_ffi;
+using uniffi.{}_ffi;
 
 namespace {}
 {{
@@ -237,12 +236,12 @@ namespace {}
     public sealed partial class MainWindow : Window
     {{
         private ObservableCollection<TaskItem> tasks = new ObservableCollection<TaskItem>();
-        // private FfiApp ffiApp;
+        private FfiApp ffiApp;
 
         public MainWindow()
         {{
             this.InitializeComponent();
-            // ffiApp = new FfiApp();
+            ffiApp = FfiApp.New();
             TasksList.ItemsSource = tasks;
             LoadTasks();
             UpdateStats();
@@ -250,17 +249,17 @@ namespace {}
 
         private void LoadTasks()
         {{
-            // TODO: Load from FFI
-            // var items = ffiApp.GetItems();
-            // foreach (var item in items)
-            // {{
-            //     tasks.Add(new TaskItem
-            //     {{
-            //         Id = item.Id,
-            //         Title = item.Title,
-            //         Completed = item.Completed
-            //     }});
-            // }}
+            tasks.Clear();
+            var items = ffiApp.GetItems();
+            foreach (var item in items)
+            {{
+                tasks.Add(new TaskItem
+                {{
+                    Id = item.id,
+                    Title = item.title,
+                    Completed = item.completed
+                }});
+            }}
         }}
 
         private void AddButton_Click(object sender, RoutedEventArgs e)
@@ -289,14 +288,18 @@ namespace {}
             if (result == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(textBox.Text))
             {{
                 var id = Guid.NewGuid().ToString();
-                // ffiApp.AddItem(id, textBox.Text);
+                var items = ffiApp.AddItem(id, textBox.Text);
                 
-                tasks.Add(new TaskItem
+                tasks.Clear();
+                foreach (var item in items)
                 {{
-                    Id = id,
-                    Title = textBox.Text,
-                    Completed = false
-                }});
+                    tasks.Add(new TaskItem
+                    {{
+                        Id = item.id,
+                        Title = item.title,
+                        Completed = item.completed
+                    }});
+                }}
                 UpdateStats();
             }}
         }}
