@@ -456,19 +456,35 @@ fn run_windows() -> Result<()> {
     
     println!("  {} Launching Windows app...", "→".bright_blue());
     
-    // Recursively search for the .exe file in platforms/windows/bin
-    fn find_exe_recursive(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    // Get the project name from the .csproj file
+    let project_name = std::fs::read_dir("platforms/windows")
+        .ok()
+        .and_then(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .find(|e| {
+                    let name = e.file_name();
+                    name.to_string_lossy().ends_with(".csproj")
+                })
+                .and_then(|e| e.path().file_stem().map(|s| s.to_string_lossy().to_string()))
+        })
+        .context("Could not find .csproj file to determine project name")?;
+    
+    let exe_name = format!("{}.exe", project_name);
+    
+    // Recursively search for the project's .exe file in platforms/windows/bin
+    fn find_exe_recursive(dir: &std::path::Path, target_name: &str) -> Option<std::path::PathBuf> {
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.filter_map(|e| e.ok()) {
                 let path = entry.path();
                 if path.is_file() {
                     if let Some(name) = path.file_name() {
-                        if name.to_string_lossy().ends_with(".exe") {
+                        if name.to_string_lossy() == target_name {
                             return Some(path);
                         }
                     }
                 } else if path.is_dir() {
-                    if let Some(exe) = find_exe_recursive(&path) {
+                    if let Some(exe) = find_exe_recursive(&path, target_name) {
                         return Some(exe);
                     }
                 }
@@ -477,8 +493,8 @@ fn run_windows() -> Result<()> {
         None
     }
     
-    let exe_path = find_exe_recursive(std::path::Path::new("platforms/windows/bin"))
-        .context("Could not find built executable in platforms/windows/bin")?;
+    let exe_path = find_exe_recursive(std::path::Path::new("platforms/windows/bin"), &exe_name)
+        .context(format!("Could not find {} in platforms/windows/bin", exe_name))?;
     
     println!("  {} Found executable: {}", "→".bright_blue(), exe_path.display());
     
