@@ -14,6 +14,7 @@ pub fn create_windows_project(platforms_dir: &PathBuf, name: &str) -> Result<()>
     create_main_window_xaml(&windows_dir, name)?;
     create_main_window_xaml_cs(&windows_dir, name)?;
     create_package_appxmanifest(&windows_dir, name)?;
+    create_app_manifest(&windows_dir)?;
     
     println!("  {} platforms/windows/", "✓".green());
     Ok(())
@@ -376,5 +377,29 @@ fn create_package_appxmanifest(dir: &PathBuf, name: &str) -> Result<()> {
 "#, name, class_name, class_name, class_name);
     
     fs::write(dir.join("Package.appxmanifest"), content)?;
+    Ok(())
+}
+
+fn create_app_manifest(dir: &PathBuf) -> Result<()> {
+    let content = r#"<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="MyApplication.app"/>
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Windows 10 and Windows 11 -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
+    </application>
+  </compatibility>
+  
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+    </windowsSettings>
+  </application>
+</assembly>
+"#;
+    
+    fs::write(dir.join("app.manifest"), content)?;
     Ok(())
 }
