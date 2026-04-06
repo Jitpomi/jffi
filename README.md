@@ -2,7 +2,7 @@
 
 A cross-platform framework for building native applications with Rust business logic and platform-native UIs.
 
-## 🎯 Philosophy
+##  Philosophy
 
 **Write your business logic once in Rust. Build native UIs for each platform.**
 
@@ -11,7 +11,7 @@ A cross-platform framework for building native applications with Rust business l
 - Get truly native performance and platform feel
 - Maintain type safety end-to-end via UniFFI
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Installation
 
@@ -49,7 +49,7 @@ That's it! The app builds, compiles Rust, generates platform bindings, and launc
 | Web | ✅ Ready | Vanilla JS + WASM | JavaScript |
 | Windows | ✅ Ready | WinUI 3 | C# |
 
-## 🏗️ Project Structure
+##  Project Structure
 
 ```
 my-app/
@@ -71,7 +71,7 @@ my-app/
 └── jffi.toml               # Framework configuration
 ```
 
-## 💡 Development Workflow
+##  Development Workflow
 
 ### 1. Write Business Logic (Once)
 
@@ -235,7 +235,7 @@ jffi dev --platform web
 ✅ **Rust auto-rebuild** - No manual cargo commands
 ✅ **Full debugging** - Native debuggers work normally
 
-## 🔧 CLI Commands
+##  CLI Commands
 
 ```bash
 # Create new project
@@ -259,7 +259,7 @@ jffi add <platform>
 jffi platforms
 ```
 
-## 🔄 How It Works
+##  How It Works
 
 ```
 ┌─────────────────────────────────────────┐
@@ -283,7 +283,7 @@ jffi platforms
 └─────────────────────────────────────────┘
 ```
 
-## 📚 Configuration
+##  Configuration
 
 `jffi.toml`:
 
@@ -300,7 +300,7 @@ deployment_target = "16.0"
 bundle_id = "com.example.myapp"
 ```
 
-## 🆚 Why JFFI?
+##  Why JFFI?
 
 | Feature | JFFI | Flutter | React Native |
 |---------|------|---------|--------------|
@@ -335,7 +335,7 @@ cargo build --package jffi
 cargo run --package jffi -- --help
 ```
 
-## 🗺️ Roadmap
+## Roadmap
 
 - [x] CLI tool foundation
 - [x] iOS support with SwiftUI
@@ -354,25 +354,19 @@ cargo run --package jffi -- --help
 - [x] Automatic emulator/simulator management
 - [x] Auto-install build dependencies (targets, NDK, GTK, WASM, wasm-bindgen, uniffi-bindgen-cs, etc.)
 
-## 🤝 Contributing
+## Contributing
 
 Early-stage framework. Contributions welcome!
-
-**High priority:**
-- Additional platform features and improvements
-- State persistence (SQLite/local storage)
-- Advanced UI components and patterns
-- Hot reload for Windows (file watcher workflow)
 
 ## 📄 License
 
 MIT
 
-## 🙏 Acknowledgments
+##  Acknowledgments
 
 - [UniFFI](https://github.com/mozilla/uniffi-rs) - FFI bindings generator
 - The Rust community
 
 ---
 
-**Built with ❤️ and Rust**
+**Built with  and Rust**
