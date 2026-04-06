@@ -196,7 +196,7 @@ fn create_main_window_xaml(dir: &PathBuf, name: &str) -> Result<()> {
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <CheckBox Grid.Column="0" IsChecked="{{Binding Completed}}" Margin="0,0,12,0"/>
+                            <CheckBox Grid.Column="0" IsChecked="{{Binding Completed}}" Margin="0,0,12,0" Click="TaskCheckBox_Click" Tag="{{Binding Id}}"/>
                             <TextBlock Grid.Column="1" Text="{{Binding Title}}" VerticalAlignment="Center"/>
                         </Grid>
                     </DataTemplate>
@@ -293,6 +293,25 @@ namespace {}
                 var id = Guid.NewGuid().ToString();
                 var items = ffiApp.AddItem(id, textBox.Text);
                 
+                tasks.Clear();
+                foreach (var item in items)
+                {{
+                    tasks.Add(new TaskItem
+                    {{
+                        Id = item.id,
+                        Title = item.title,
+                        Completed = item.completed
+                    }});
+                }}
+                UpdateStats();
+            }}
+        }}
+
+        private void TaskCheckBox_Click(object sender, RoutedEventArgs e)
+        {{
+            if (sender is CheckBox checkBox && checkBox.Tag is string id)
+            {{
+                var items = ffiApp.ToggleItem(id);
                 tasks.Clear();
                 foreach (var item in items)
                 {{
