@@ -456,18 +456,29 @@ fn run_windows() -> Result<()> {
     
     println!("  {} Launching Windows app...", "→".bright_blue());
     
-    // Find the built executable
-    let exe_path = std::fs::read_dir("platforms/windows/bin/Debug")
-        .or_else(|_| std::fs::read_dir("platforms/windows/bin/x64/Debug"))
-        .context("Failed to find build output directory")?
-        .filter_map(|e| e.ok())
-        .find(|e| {
-            let name = e.file_name();
-            let name_str = name.to_string_lossy();
-            name_str.ends_with(".exe")
-        })
-        .map(|e| e.path())
-        .context("Could not find built executable")?;
+    // Recursively search for the .exe file in platforms/windows/bin
+    fn find_exe_recursive(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(name) = path.file_name() {
+                        if name.to_string_lossy().ends_with(".exe") {
+                            return Some(path);
+                        }
+                    }
+                } else if path.is_dir() {
+                    if let Some(exe) = find_exe_recursive(&path) {
+                        return Some(exe);
+                    }
+                }
+            }
+        }
+        None
+    }
+    
+    let exe_path = find_exe_recursive(std::path::Path::new("platforms/windows/bin"))
+        .context("Could not find built executable in platforms/windows/bin")?;
     
     // Launch the app
     let status = Command::new(exe_path)
