@@ -171,10 +171,10 @@ path = "uniffi-bindgen.rs"
 
 [dependencies]
 {}-core = {{ path = "../core" }}
-uniffi = {{ version = "0.31.0", features = ["cli"] }}
+uniffi = {{ version = "0.29.4", features = ["cli"] }}
 
 [build-dependencies]
-uniffi = {{ version = "0.31.0", features = ["build"] }}
+uniffi = {{ version = "0.29.4", features = ["build"] }}
 "#, name, name);
     fs::write(ffi_dir.join("Cargo.toml"), cargo_toml)?;
     
