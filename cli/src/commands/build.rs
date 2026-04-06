@@ -330,35 +330,14 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
         anyhow::bail!("Rust build failed");
     }
     
-    println!("  {} Generating UDL file from Rust...", "→".bright_blue());
-    
-    // Generate .udl file using uniffi-bindgen scaffolding
-    let status = Command::new("cargo")
-        .args(&["run", "--bin", "uniffi-bindgen", "generate", "--library", &format!("target/{}/{}/ffi.dll", target, profile), "--language", "udl", "--out-dir", "ffi/src"])
-        .status()
-        .context("Failed to generate UDL file")?;
-    
-    if !status.success() {
-        anyhow::bail!("UDL generation failed");
-    }
-    
     println!("  {} Generating C# bindings with uniffi-bindgen-cs...", "→".bright_blue());
     
-    // Find the generated .udl file
-    let udl_file = std::fs::read_dir("ffi/src")
-        .context("Failed to read ffi/src directory")?
-        .filter_map(|e| e.ok())
-        .find(|e| {
-            let name = e.file_name();
-            let name_str = name.to_string_lossy();
-            name_str.ends_with(".udl")
-        })
-        .map(|e| e.path())
-        .context("Could not find .udl file in ffi/src")?;
+    // Use library mode to generate bindings directly from the compiled DLL
+    let lib_path = format!("target/{}/{}/ffi.dll", target, profile);
     
-    // Generate C# bindings
     let status = Command::new("uniffi-bindgen-cs")
-        .arg(udl_file.to_str().unwrap())
+        .arg("--library")
+        .arg(&lib_path)
         .arg("--out-dir")
         .arg("platforms/windows")
         .status()
