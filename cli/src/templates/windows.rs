@@ -171,17 +171,17 @@ fn create_main_window_xaml(dir: &PathBuf, name: &str) -> Result<()> {
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0" Padding="12" Background="{{ThemeResource CardBackgroundFillColorDefaultBrush}}" CornerRadius="8" Margin="0,0,8,0">
-                <TextBlock x:Name="TotalCount" Text="0" FontSize="32" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TotalCount" FontSize="32" FontWeight="Bold" HorizontalAlignment="Center"/>
                 <TextBlock Text="Total" FontSize="14" Foreground="{{ThemeResource TextFillColorSecondaryBrush}}" HorizontalAlignment="Center"/>
             </StackPanel>
 
             <StackPanel Grid.Column="1" Padding="12" Background="{{ThemeResource CardBackgroundFillColorDefaultBrush}}" CornerRadius="8" Margin="0,0,8,0">
-                <TextBlock x:Name="ActiveCount" Text="0" FontSize="32" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="ActiveCount" FontSize="32" FontWeight="Bold" HorizontalAlignment="Center"/>
                 <TextBlock Text="Active" FontSize="14" Foreground="{{ThemeResource TextFillColorSecondaryBrush}}" HorizontalAlignment="Center"/>
             </StackPanel>
 
             <StackPanel Grid.Column="2" Padding="12" Background="{{ThemeResource CardBackgroundFillColorDefaultBrush}}" CornerRadius="8">
-                <TextBlock x:Name="DoneCount" Text="0" FontSize="32" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="DoneCount" FontSize="32" FontWeight="Bold" HorizontalAlignment="Center"/>
                 <TextBlock Text="Done" FontSize="14" Foreground="{{ThemeResource TextFillColorSecondaryBrush}}" HorizontalAlignment="Center"/>
             </StackPanel>
         </Grid>
