@@ -46,6 +46,9 @@ fn create_csproj(dir: &PathBuf, name: &str) -> Result<()> {
 
   <ItemGroup>
     <Content Include="Assets\**" />
+    <Content Include="*_ffi.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
