@@ -339,15 +339,15 @@ fn create_package_appxmanifest(dir: &PathBuf, name: &str) -> Result<()> {
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="com.example.{}"
-    Publisher="CN=Example"
+    Name="com.{}.{}"
+    Publisher="CN={}"
     Version="1.0.0.0" />
 
   <mp:PhoneIdentity PhoneProductId="00000000-0000-0000-0000-000000000000" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
     <DisplayName>{}</DisplayName>
-    <PublisherDisplayName>Example Publisher</PublisherDisplayName>
+    <PublisherDisplayName>{}</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
@@ -380,7 +380,7 @@ fn create_package_appxmanifest(dir: &PathBuf, name: &str) -> Result<()> {
     <rescap:Capability Name="runFullTrust" />
   </Capabilities>
 </Package>
-"#, name, class_name, class_name, class_name);
+"#, name, name, class_name, class_name, class_name, class_name, class_name);
     
     fs::write(dir.join("Package.appxmanifest"), content)?;
     Ok(())
