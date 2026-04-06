@@ -384,11 +384,14 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
     let mut build_args = vec!["build"];
     if build_cmd == "dotnet" {
         build_args.push(csproj_file.to_str().unwrap());
+        // WinUI 3 requires a specific platform, not AnyCPU
+        build_args.extend(&["-p:Platform=x64"]);
         if release {
             build_args.extend(&["-c", "Release"]);
         }
     } else {
         build_args.push(csproj_file.to_str().unwrap());
+        build_args.extend(&["/p:Platform=x64"]);
         if release {
             build_args.extend(&["/p:Configuration=Release"]);
         }
