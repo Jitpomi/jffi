@@ -9,3 +9,6 @@ ios-app/ffiFFI.modulemap
 ios-app/DerivedData/
 *.xcuserstate
 *.xcuserdatad/
+
+# Test directory with build artifacts
+test/
