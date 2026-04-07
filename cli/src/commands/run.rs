@@ -264,37 +264,53 @@ fn run_android() -> Result<()> {
     let adb_cmd = find_android_tool("adb")
         .context("adb not found. Please install Android SDK platform-tools.")?;
     
-    // Check if emulator is available
-    let emulator_output = Command::new(&emulator_cmd)
-        .arg("-list-avds")
+    // Check if an emulator is already running
+    let devices_output = Command::new(&adb_cmd)
+        .arg("devices")
         .output()
-        .context("Failed to list Android Virtual Devices")?;
+        .context("Failed to check for running devices")?;
     
-    let avds = String::from_utf8_lossy(&emulator_output.stdout);
-    let avd_list: Vec<&str> = avds.lines().filter(|l| !l.is_empty()).collect();
+    let devices_str = String::from_utf8_lossy(&devices_output.stdout);
+    let running_emulator = devices_str.lines()
+        .skip(1) // Skip "List of devices attached" header
+        .find(|line| line.contains("emulator") && line.contains("device"));
     
-    if avd_list.is_empty() {
-        anyhow::bail!(
-            "No Android Virtual Devices (AVDs) found.\n\
-            Create one using: Android Studio > Tools > Device Manager > Create Device"
-        );
+    if running_emulator.is_some() {
+        println!("  {} Using already-running emulator", "→".bright_blue());
+    } else {
+        // Check if emulator is available
+        let emulator_output = Command::new(&emulator_cmd)
+            .arg("-list-avds")
+            .output()
+            .context("Failed to list Android Virtual Devices")?;
+        
+        let avds = String::from_utf8_lossy(&emulator_output.stdout);
+        let avd_list: Vec<&str> = avds.lines().filter(|l| !l.is_empty()).collect();
+        
+        if avd_list.is_empty() {
+            anyhow::bail!(
+                "No Android Virtual Devices (AVDs) found.\n\
+                Create one using: Android Studio > Tools > Device Manager > Create Device"
+            );
+        }
+        
+        // Use the first available AVD
+        let avd_name = avd_list[0];
+        println!("  {} Available AVDs: {}", "→".bright_blue(), avd_list.join(", "));
+        println!("  {} Starting emulator: {}...", "→".bright_blue(), avd_name.bright_cyan());
+        
+        // Start emulator in background
+        Command::new(&emulator_cmd)
+            .arg("-avd")
+            .arg(avd_name)
+            .arg("-no-snapshot-load")
+            .spawn()
+            .context("Failed to start emulator")?;
+        
+        // Wait a bit for emulator to start
+        println!("  {} Waiting for emulator to boot...", "→".bright_blue());
+        std::thread::sleep(std::time::Duration::from_secs(5));
     }
-    
-    // Use the first available AVD
-    let avd_name = avd_list[0];
-    println!("  {} Starting emulator: {}...", "→".bright_blue(), avd_name.bright_cyan());
-    
-    // Start emulator in background
-    Command::new(&emulator_cmd)
-        .arg("-avd")
-        .arg(avd_name)
-        .arg("-no-snapshot-load")
-        .spawn()
-        .context("Failed to start emulator")?;
-    
-    // Wait a bit for emulator to start
-    println!("  {} Waiting for emulator to boot...", "→".bright_blue());
-    std::thread::sleep(std::time::Duration::from_secs(5));
     
     // Wait for device to be ready
     for i in 1..=30 {
