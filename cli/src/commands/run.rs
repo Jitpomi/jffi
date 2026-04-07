@@ -106,9 +106,16 @@ fn run_ios() -> Result<()> {
         .map(|e| e.path())
         .context("Could not find .xcodeproj file")?;
     
+    println!("  {} Finding available simulator...", "→".bright_blue());
+    
+    // Get list of available simulators and pick the first iPhone
+    let simulator_name = get_available_iphone_simulator()?;
+    println!("  {} Using simulator: {}", "→".bright_blue(), simulator_name);
+    
     println!("  {} Building and launching in simulator...", "→".bright_blue());
     
     // Build and run in simulator using xcodebuild
+    let destination = format!("platform=iOS Simulator,name={}", simulator_name);
     let status = Command::new("xcodebuild")
         .args(&[
             "-project",
@@ -116,7 +123,7 @@ fn run_ios() -> Result<()> {
             "-scheme",
             xcodeproj.file_stem().unwrap().to_str().unwrap(),
             "-destination",
-            "platform=iOS Simulator,name=iPhone 16 Pro",
+            &destination,
             "build",
         ])
         .status()
@@ -171,7 +178,7 @@ fn run_ios() -> Result<()> {
     // Boot simulator if needed
     println!("  {} Booting simulator...", "→".bright_blue());
     Command::new("xcrun")
-        .args(&["simctl", "boot", "iPhone 16 Pro"])
+        .args(&["simctl", "boot", &simulator_name])
         .output()
         .ok(); // Ignore error if already booted
     
@@ -636,4 +643,40 @@ fn run_web() -> Result<()> {
     
     println!("{}", "  ✅ Web server stopped".green());
     Ok(())
+}
+
+fn get_available_iphone_simulator() -> Result<String> {
+    // Get list of available simulators
+    let output = Command::new("xcrun")
+        .args(&["simctl", "list", "devices", "available", "iPhone"])
+        .output()
+        .context("Failed to list simulators")?;
+    
+    if !output.status.success() {
+        anyhow::bail!("Failed to get simulator list");
+    }
+    
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    
+    // Parse the output to find the first available iPhone
+    // Format is like: "    iPhone 16 Pro (1135816D-CD90-40BC-93F9-CAD0F1F077DC) (Shutdown)"
+    for line in output_str.lines() {
+        if line.contains("iPhone") && (line.contains("(Shutdown)") || line.contains("(Booted)")) {
+            // Extract the device name between leading whitespace and the UUID
+            if let Some(name_part) = line.trim().split(" (").next() {
+                return Ok(name_part.to_string());
+            }
+        }
+    }
+    
+    // Fallback: try to find any iPhone in the list
+    for line in output_str.lines() {
+        if line.contains("iPhone") {
+            if let Some(name_part) = line.trim().split(" (").next() {
+                return Ok(name_part.to_string());
+            }
+        }
+    }
+    
+    anyhow::bail!("No iPhone simulator found. Please create one in Xcode.")
 }
