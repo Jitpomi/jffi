@@ -109,13 +109,15 @@ fn run_ios() -> Result<()> {
     println!("  {} Finding available simulator...", "→".bright_blue());
     
     // Get list of available simulators and pick the first iPhone
-    let simulator_name = get_available_iphone_simulator()?;
+    let (simulator_name, simulator_id) = get_available_iphone_simulator()?;
     println!("  {} Using simulator: {}", "→".bright_blue(), simulator_name);
     
     println!("  {} Building and launching in simulator...", "→".bright_blue());
     
     // Build and run in simulator using xcodebuild
-    let destination = format!("platform=iOS Simulator,name={}", simulator_name);
+    // Use id= instead of name= to avoid OS version conflicts
+    let destination = format!("platform=iOS Simulator,id={}", simulator_id);
+    
     let status = Command::new("xcodebuild")
         .args(&[
             "-project",
@@ -178,7 +180,7 @@ fn run_ios() -> Result<()> {
     // Boot simulator if needed
     println!("  {} Booting simulator...", "→".bright_blue());
     Command::new("xcrun")
-        .args(&["simctl", "boot", &simulator_name])
+        .args(&["simctl", "boot", &simulator_id])
         .output()
         .ok(); // Ignore error if already booted
     
@@ -661,7 +663,7 @@ fn run_web() -> Result<()> {
     Ok(())
 }
 
-fn get_available_iphone_simulator() -> Result<String> {
+fn get_available_iphone_simulator() -> Result<(String, String)> {
     // Get list of available simulators
     let output = Command::new("xcrun")
         .args(&["simctl", "list", "devices", "available"])
@@ -682,39 +684,34 @@ fn get_available_iphone_simulator() -> Result<String> {
     
     for line in output_str.lines() {
         if line.contains("iPhone") {
-            if line.contains("(Booted)") {
-                if let Some(name_part) = line.trim().split(" (").next() {
-                    booted_iphones.push(name_part.to_string());
-                }
-            } else if line.contains("(Shutdown)") {
-                if let Some(name_part) = line.trim().split(" (").next() {
-                    shutdown_iphones.push(name_part.to_string());
+            // Extract name and UUID
+            let trimmed = line.trim();
+            if let Some(first_paren) = trimmed.find(" (") {
+                let name = &trimmed[..first_paren];
+                let rest = &trimmed[first_paren + 2..];
+                if let Some(second_paren) = rest.find(')') {
+                    let uuid = &rest[..second_paren];
+                    
+                    if line.contains("(Booted)") {
+                        booted_iphones.push((name.to_string(), uuid.to_string()));
+                    } else if line.contains("(Shutdown)") {
+                        shutdown_iphones.push((name.to_string(), uuid.to_string()));
+                    }
                 }
             }
         }
     }
     
     // Prefer already-booted simulators to save time
-    if let Some(name) = booted_iphones.first() {
+    if let Some((name, id)) = booted_iphones.first() {
         println!("  {} Using already-booted simulator: {}", "→".bright_blue(), name);
-        return Ok(name.clone());
+        return Ok((name.clone(), id.clone()));
     }
     
     // Otherwise use the first shutdown simulator
-    if let Some(name) = shutdown_iphones.first() {
+    if let Some((name, id)) = shutdown_iphones.first() {
         println!("  {} Found {} available iPhone simulators", "→".bright_blue(), shutdown_iphones.len());
-        return Ok(name.clone());
-    }
-    
-    // Fallback: try to find any iPhone in the list (even if not in expected format)
-    for line in output_str.lines() {
-        if line.contains("iPhone") && line.contains("(") {
-            if let Some(name_part) = line.trim().split(" (").next() {
-                let name = name_part.to_string();
-                println!("  {} Found iPhone simulator (fallback): {}", "→".bright_blue(), name);
-                return Ok(name);
-            }
-        }
+        return Ok((name.clone(), id.clone()));
     }
     
     anyhow::bail!(
