@@ -126,6 +126,10 @@ fn run_ios() -> Result<()> {
         anyhow::bail!("Build failed");
     }
     
+    // Get app and module names for later use
+    let app_name = xcodeproj.file_stem().unwrap().to_str().unwrap();
+    let module_name = app_name.replace("-", "_");
+    
     println!("  {} Launching app in simulator...", "→".bright_blue());
     
     // Get the app name and find the built .app bundle

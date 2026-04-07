@@ -41,6 +41,8 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
     let app_name_pascal = to_pascal_case(app_name);
     let module_name = app_name.replace("-", "_");
     
+    let shell_script = format!("# Copy the Rust FFI dylib into the app bundle\\nFFI_LIB=\\\"${{{{PROJECT_DIR}}}}/../../target/${{{{ARCHS}}}}-apple-ios-sim/${{{{CONFIGURATION}}}}/lib{}_ffi.dylib\\\"\\n\\nif [ -f \\\"$FFI_LIB\\\" ]; then\\n    echo \\\"Copying FFI library: $FFI_LIB\\\"\\n    cp \\\"$FFI_LIB\\\" \\\"${{{{BUILT_PRODUCTS_DIR}}}}/${{{{PRODUCT_NAME}}}}.app/\\\"\\n    echo \\\"FFI library copied successfully\\\"\\nelse\\n    echo \\\"Warning: FFI library not found at $FFI_LIB\\\"\\nfi\\n", module_name);
+    
     let pbxproj = format!(r#"// !$*UTF8*$!
 {{
 	archiveVersion = 1;
@@ -118,6 +120,7 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 				A8000001000000000000001 /* Sources */,
 				A4000001000000000000001 /* Frameworks */,
 				A9000001000000000000001 /* Resources */,
+				AB000001000000000000001 /* Copy FFI Library */,
 			);
 			buildRules = (
 			);
@@ -185,6 +188,27 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 			runOnlyForDeploymentPostprocessing = 0;
 		}};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		AB000001000000000000001 /* Copy FFI Library */ = {{
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy FFI Library";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "{shell_script}";
+		}};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
 		A7000003000000000000001 /* Debug */ = {{
@@ -325,6 +349,7 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
+					"@executable_path",
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
@@ -360,6 +385,7 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
+					"@executable_path",
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
@@ -401,7 +427,7 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 	}};
 	rootObject = A0000001000000000000001 /* Project object */;
 }}
-"#, app_name = app_name, app_name_pascal = app_name_pascal, bundle_id = bundle_id, module_name = module_name);
+"#, app_name = app_name, app_name_pascal = app_name_pascal, bundle_id = bundle_id, shell_script = shell_script);
 
     Ok(pbxproj)
 }

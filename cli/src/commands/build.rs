@@ -137,6 +137,9 @@ fn build_ios_target(release: bool, target_type: &str) -> Result<()> {
         anyhow::bail!("Rust build failed");
     }
     
+    // Ensure uniffi-bindgen-cli is installed
+    ensure_uniffi_bindgen_cli()?;
+    
     println!("  {} Generating Swift bindings...", "→".bright_blue());
     
     // Find the actual library file (it will have underscores instead of hyphens)
@@ -250,6 +253,9 @@ fn build_android(release: bool) -> Result<()> {
 }
 
 fn build_macos(arch: &str, release: bool) -> Result<()> {
+    // Ensure uniffi-bindgen-cli is installed
+    ensure_uniffi_bindgen_cli()?;
+    
     let profile = if release { "release" } else { "debug" };
     let target = format!("{}-apple-darwin", arch);
     
@@ -427,6 +433,31 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
     Ok(())
 }
 
+fn ensure_uniffi_bindgen_cli() -> Result<()> {
+    println!("  {} Checking uniffi-bindgen-cli...", "→".bright_blue());
+    
+    let check = Command::new("uniffi-bindgen-cli")
+        .arg("--version")
+        .output();
+    
+    if check.is_err() || !check.unwrap().status.success() {
+        println!("    Installing uniffi-bindgen-cli (this may take a few minutes)...");
+        let status = Command::new("cargo")
+            .args(&["install", "uniffi-bindgen-cli"])
+            .status()
+            .context("Failed to install uniffi-bindgen-cli")?;
+        
+        if !status.success() {
+            anyhow::bail!("Failed to install uniffi-bindgen-cli");
+        }
+        println!("    {} uniffi-bindgen-cli installed successfully", "✓".green());
+    } else {
+        println!("    {} uniffi-bindgen-cli is already installed", "✓".green());
+    }
+    
+    Ok(())
+}
+
 fn ensure_uniffi_bindgen_cs() -> Result<()> {
     println!("  {} Checking uniffi-bindgen-cs...", "→".bright_blue());
     
@@ -439,21 +470,16 @@ fn ensure_uniffi_bindgen_cs() -> Result<()> {
         println!("    {} Note: uniffi-bindgen-cs targets UniFFI v0.29.4, but JFFI uses v0.31.0", "⚠".yellow());
         println!("    {} This may cause compatibility issues", "⚠".yellow());
         let status = Command::new("cargo")
-            .args(&[
-                "install",
-                "uniffi-bindgen-cs",
-                "--git",
-                "https://github.com/NordSecurity/uniffi-bindgen-cs",
-                "--branch",
-                "main"
-            ])
+            .args(&["install", "uniffi-bindgen-cs", "--git", "https://github.com/microsoft/uniffi-bindgen-cs", "--branch", "main"])
             .status()
             .context("Failed to install uniffi-bindgen-cs")?;
         
         if !status.success() {
             anyhow::bail!("Failed to install uniffi-bindgen-cs");
         }
-        println!("  {} uniffi-bindgen-cs installed", "✓".green());
+        println!("    {} uniffi-bindgen-cs installed successfully", "✓".green());
+    } else {
+        println!("    {} uniffi-bindgen-cs is already installed", "✓".green());
     }
     
     Ok(())
