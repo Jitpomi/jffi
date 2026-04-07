@@ -23,8 +23,8 @@ cargo install --path cli
 ### Create Your First App
 
 ```bash
-# Create a new app with all platform support
-jffi new my-app --platforms ios,macos,android,linux,web,windows
+# Create a new app with platform support
+jffi new my-app --platforms ios,macos,android,linux,windows
 
 # Navigate and run
 cd my-app
@@ -32,11 +32,13 @@ jffi run --platform ios      # iOS Simulator
 jffi run --platform macos    # macOS app
 jffi run --platform android  # Android Emulator
 jffi run --platform linux    # Linux GTK app
-jffi run --platform web      # Web browser
 jffi run --platform windows  # Windows app
+# jffi run --platform web    # Web browser (🚧 In Progress)
 ```
 
 That's it! The app builds, compiles Rust, generates platform bindings, and launches automatically.
+
+**Note:** Web platform support is currently in progress. The frontend templates are created but the `ffi-web` integration is incomplete.
 
 ## 📱 Supported Platforms
 
@@ -46,10 +48,10 @@ That's it! The app builds, compiles Rust, generates platform bindings, and launc
 | macOS | ✅ Ready | SwiftUI | Swift |
 | Android | ✅ Ready | Jetpack Compose | Kotlin |
 | Linux | ✅ Ready | GTK 4 + Libadwaita | Python |
-| Web | ✅ Ready | Vanilla JS + WASM | JavaScript |
+| Web | 🚧 In Progress | Vanilla JS + WASM | JavaScript |
 | Windows | ✅ Ready | WinUI 3 | C# |
 
-##  Project Structure
+## 🏗️ Project Structure
 
 ```
 my-app/
@@ -342,21 +344,28 @@ cargo run --package jffi -- --help
 - [x] macOS support with SwiftUI
 - [x] Android support with Jetpack Compose
 - [x] Linux support with GTK 4 + Python
-- [x] Web support with Vanilla JS + WASM
+- [ ] Web support with Vanilla JS + WASM (frontend templates created, ffi-web integration incomplete)
 - [x] Windows support with WinUI 3 + C#
 - [x] Automatic Xcode project generation
 - [x] Automatic Android project generation
-- [x] One-command build and run (iOS, macOS, Android, Linux, Web, Windows)
+- [x] One-command build and run (iOS, macOS, Android, Linux, Windows)
 - [x] Hot reload for iOS (Xcode-native workflow)
 - [x] Hot reload for Android (Android Studio-native workflow)
 - [x] Hot reload for Linux (auto-restart workflow)
-- [x] Hot reload for Web (Vite hot reload)
+- [ ] Hot reload for Web (Vite hot reload - pending ffi-web completion)
 - [x] Automatic emulator/simulator management
 - [x] Auto-install build dependencies (targets, NDK, GTK, WASM, wasm-bindgen, uniffi-bindgen-cs, etc.)
 
-## Contributing
+## 🤝 Contributing
 
 Early-stage framework. Contributions welcome!
+
+**High priority:**
+- **Complete web platform support** (create ffi-web crate with wasm-bindgen integration)
+- Additional platform features and improvements
+- State persistence (SQLite/local storage)
+- Advanced UI components and patterns
+- Hot reload for Windows (file watcher workflow)
 
 ## 📄 License
 
