@@ -137,9 +137,6 @@ fn build_ios_target(release: bool, target_type: &str) -> Result<()> {
         anyhow::bail!("Rust build failed");
     }
     
-    // Ensure uniffi-bindgen-cli is installed
-    ensure_uniffi_bindgen_cli()?;
-    
     println!("  {} Generating Swift bindings...", "→".bright_blue());
     
     // Find the actual library file (it will have underscores instead of hyphens)
@@ -157,8 +154,14 @@ fn build_ios_target(release: bool, target_type: &str) -> Result<()> {
         .map(|e| e.path())
         .context("Could not find FFI library")?;
     
-    let status = Command::new("uniffi-bindgen-cli")
+    let status = Command::new("cargo")
         .args(&[
+            "run",
+            "--manifest-path",
+            "ffi/Cargo.toml",
+            "--bin",
+            "uniffi-bindgen",
+            "--",
             "generate",
             "--library",
             lib_path.to_str().unwrap(),
@@ -179,31 +182,32 @@ fn build_ios_target(release: bool, target_type: &str) -> Result<()> {
 }
 
 fn build_android(release: bool) -> Result<()> {
-    let profile = if release { "release" } else { "debug" };
-    
     println!("  {} Building Rust library for Android...", "→".bright_blue());
     
-    // Build for multiple Android architectures
-    let targets = vec![
-        "aarch64-linux-android",
-        "armv7-linux-androideabi",
-        "x86_64-linux-android",
+    // Build for all Android architectures
+    let architectures = vec![
+        ("aarch64-linux-android", "arm64-v8a"),
+        ("armv7-linux-androideabi", "armeabi-v7a"),
+        ("x86_64-linux-android", "x86_64"),
     ];
     
-    // Ensure Android targets are installed
+    // Check if Android targets are installed
+    let targets: Vec<&str> = architectures.iter().map(|(t, _)| *t).collect();
     ensure_android_targets(&targets)?;
     
-    // Ensure cargo-ndk is installed for proper linking
+    // Check if cargo-ndk is installed
     ensure_cargo_ndk()?;
     
-    for target in targets {
-        println!("    Building for {}...", target);
-        
-        let mut args = vec!["ndk", "build"];
+    let profile = if release { "release" } else { "debug" };
+    
+    for (target, abi) in &architectures {
+        println!("    Building for {} ({})", abi, target);
+        println!("    Building {} ({})", abi, target);
+        let mut args = vec!["ndk", "-t", target, "-o", "platforms/android/app/src/main/jniLibs", "build"];
         if release {
             args.push("--release");
         }
-        args.extend(&["--manifest-path", "ffi/Cargo.toml", "--target", target]);
+        args.extend(&["--manifest-path", "ffi/Cargo.toml"]);
         
         let status = Command::new("cargo")
             .args(&args)
@@ -215,11 +219,8 @@ fn build_android(release: bool) -> Result<()> {
         }
     }
     
-    println!("  {} Generating Kotlin bindings...", "→".bright_blue());
-    
-    // Find the actual library file (it will have underscores instead of hyphens)
+    // Find the library file for binding generation
     let lib_dir = format!("target/aarch64-linux-android/{}", profile);
-    
     let lib_path = std::fs::read_dir(&lib_dir)
         .context("Failed to read target directory")?
         .filter_map(|e| e.ok())
@@ -231,8 +232,14 @@ fn build_android(release: bool) -> Result<()> {
         .map(|e| e.path())
         .context("Could not find FFI library")?;
     
-    let status = Command::new("uniffi-bindgen-cli")
+    let status = Command::new("cargo")
         .args(&[
+            "run",
+            "--manifest-path",
+            "ffi/Cargo.toml",
+            "--bin",
+            "uniffi-bindgen",
+            "--",
             "generate",
             "--library",
             lib_path.to_str().unwrap(),
@@ -253,9 +260,6 @@ fn build_android(release: bool) -> Result<()> {
 }
 
 fn build_macos(arch: &str, release: bool) -> Result<()> {
-    // Ensure uniffi-bindgen-cli is installed
-    ensure_uniffi_bindgen_cli()?;
-    
     let profile = if release { "release" } else { "debug" };
     let target = format!("{}-apple-darwin", arch);
     
@@ -291,8 +295,14 @@ fn build_macos(arch: &str, release: bool) -> Result<()> {
         .map(|e| e.path())
         .context("Could not find FFI library")?;
     
-    let status = Command::new("uniffi-bindgen-cli")
+    let status = Command::new("cargo")
         .args(&[
+            "run",
+            "--manifest-path",
+            "ffi/Cargo.toml",
+            "--bin",
+            "uniffi-bindgen",
+            "--",
             "generate",
             "--library",
             lib_path.to_str().unwrap(),
@@ -433,30 +443,8 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
     Ok(())
 }
 
-fn ensure_uniffi_bindgen_cli() -> Result<()> {
-    println!("  {} Checking uniffi-bindgen-cli...", "→".bright_blue());
-    
-    let check = Command::new("uniffi-bindgen-cli")
-        .arg("--version")
-        .output();
-    
-    if check.is_err() || !check.unwrap().status.success() {
-        println!("    Installing uniffi-bindgen-cli (this may take a few minutes)...");
-        let status = Command::new("cargo")
-            .args(&["install", "uniffi-bindgen-cli"])
-            .status()
-            .context("Failed to install uniffi-bindgen-cli")?;
-        
-        if !status.success() {
-            anyhow::bail!("Failed to install uniffi-bindgen-cli");
-        }
-        println!("    {} uniffi-bindgen-cli installed successfully", "✓".green());
-    } else {
-        println!("    {} uniffi-bindgen-cli is already installed", "✓".green());
-    }
-    
-    Ok(())
-}
+// Note: uniffi-bindgen is now run via 'cargo run --bin uniffi-bindgen' from the ffi directory
+// This uses the project's own uniffi-bindgen binary defined in ffi/Cargo.toml
 
 fn ensure_uniffi_bindgen_cs() -> Result<()> {
     println!("  {} Checking uniffi-bindgen-cs...", "→".bright_blue());
