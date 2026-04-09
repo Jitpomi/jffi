@@ -35,6 +35,43 @@ fn validate_project_structure() -> Result<()> {
     Ok(())
 }
 
+fn ensure_rust_targets(targets: &[&str]) -> Result<()> {
+    let output = Command::new("rustup")
+        .args(["target", "list", "--installed"])
+        .output()
+        .context("Failed to run rustup. Please install Rust with rustup.")?;
+
+    if !output.status.success() {
+        anyhow::bail!("Failed to check installed Rust targets via rustup");
+    }
+
+    let installed = String::from_utf8_lossy(&output.stdout);
+    let mut missing = Vec::new();
+
+    for target in targets {
+        if !installed.lines().any(|l| l.trim() == *target) {
+            missing.push(*target);
+        }
+    }
+
+    if missing.is_empty() {
+        return Ok(());
+    }
+
+    let status = Command::new("rustup")
+        .arg("target")
+        .arg("add")
+        .args(&missing)
+        .status()
+        .context("Failed to install required Rust targets via rustup")?;
+
+    if !status.success() {
+        anyhow::bail!("Failed to install Rust targets: {}", missing.join(", "));
+    }
+
+    Ok(())
+}
+
 pub fn build_project(platform: Option<String>, all: bool, release: bool, device: bool) -> Result<()> {
     validate_project_structure()?;
     
@@ -60,7 +97,15 @@ pub fn build_platform_with_options(platform: &str, release: bool, device: bool) 
             build_ios_target(release, target_type)
         },
         "android" => build_android(release),
-        "macos" | "macos-arm64" => build_macos("aarch64", release),
+        "macos" => {
+            let arch = if cfg!(target_arch = "aarch64") {
+                "aarch64"
+            } else {
+                "x86_64"
+            };
+            build_macos(arch, release)
+        }
+        "macos-arm64" => build_macos("aarch64", release),
         "macos-x64" => build_macos("x86_64", release),
         "windows" | "windows-x64" => build_windows("x86_64", release),
         "windows-x86" => build_windows("i686", release),
@@ -98,7 +143,15 @@ pub fn build_platform(platform: &str, release: bool) -> Result<()> {
     match platform {
         "ios" => build_ios(release),
         "android" => build_android(release),
-        "macos" | "macos-arm64" => build_macos("aarch64", release),
+        "macos" => {
+            let arch = if cfg!(target_arch = "aarch64") {
+                "aarch64"
+            } else {
+                "x86_64"
+            };
+            build_macos(arch, release)
+        }
+        "macos-arm64" => build_macos("aarch64", release),
         "macos-x64" => build_macos("x86_64", release),
         "windows" | "windows-x64" => build_windows("x86_64", release),
         "windows-x86" => build_windows("i686", release),
@@ -118,8 +171,17 @@ fn build_ios_target(release: bool, target_type: &str) -> Result<()> {
     // Choose target based on device vs simulator
     let (target, target_name) = match target_type {
         "device" => ("aarch64-apple-ios", "iOS Device"),
-        "simulator" | _ => ("aarch64-apple-ios-sim", "iOS Simulator"),
+        "simulator" | _ => {
+            let target = if cfg!(target_arch = "aarch64") {
+                "aarch64-apple-ios-sim"
+            } else {
+                "x86_64-apple-ios"
+            };
+            (target, "iOS Simulator")
+        }
     };
+
+    ensure_rust_targets(&[target])?;
     
     println!("  {} Building Rust library for {}...", "→".bright_blue(), target_name);
     let mut args = vec!["build"];
@@ -129,6 +191,7 @@ fn build_ios_target(release: bool, target_type: &str) -> Result<()> {
     args.extend(&["--manifest-path", "ffi/Cargo.toml", "--target", target]);
     
     let status = Command::new("cargo")
+        .env("CARGO_TARGET_DIR", "target")
         .args(&args)
         .status()
         .context("Failed to build Rust library")?;
@@ -155,6 +218,7 @@ fn build_ios_target(release: bool, target_type: &str) -> Result<()> {
         .context("Could not find FFI library")?;
     
     let status = Command::new("cargo")
+        .env("CARGO_TARGET_DIR", "target")
         .args(&[
             "run",
             "--manifest-path",
@@ -210,6 +274,7 @@ fn build_android(release: bool) -> Result<()> {
         args.extend(&["--manifest-path", "ffi/Cargo.toml"]);
         
         let status = Command::new("cargo")
+            .env("CARGO_TARGET_DIR", "target")
             .args(&args)
             .status()
             .context(format!("Failed to build for {}", target))?;
@@ -233,6 +298,7 @@ fn build_android(release: bool) -> Result<()> {
         .context("Could not find FFI library")?;
     
     let status = Command::new("cargo")
+        .env("CARGO_TARGET_DIR", "target")
         .args(&[
             "run",
             "--manifest-path",
@@ -262,6 +328,8 @@ fn build_android(release: bool) -> Result<()> {
 fn build_macos(arch: &str, release: bool) -> Result<()> {
     let profile = if release { "release" } else { "debug" };
     let target = format!("{}-apple-darwin", arch);
+
+    ensure_rust_targets(&[&target])?;
     
     println!("  {} Building Rust library for macOS ({})...", "→".bright_blue(), arch);
     let mut args = vec!["build"];
@@ -271,6 +339,7 @@ fn build_macos(arch: &str, release: bool) -> Result<()> {
     args.extend(&["--manifest-path", "ffi/Cargo.toml", "--target", &target]);
     
     let status = Command::new("cargo")
+        .env("CARGO_TARGET_DIR", "target")
         .args(&args)
         .status()
         .context("Failed to build Rust library")?;
@@ -296,6 +365,7 @@ fn build_macos(arch: &str, release: bool) -> Result<()> {
         .context("Could not find FFI library")?;
     
     let status = Command::new("cargo")
+        .env("CARGO_TARGET_DIR", "target")
         .args(&[
             "run",
             "--manifest-path",
@@ -338,6 +408,7 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
     args.extend(&["--target", &target, "--manifest-path", "ffi/Cargo.toml"]);
     
     let status = Command::new("cargo")
+        .env("CARGO_TARGET_DIR", "target")
         .args(&args)
         .status()
         .context("Failed to build Rust library")?;
