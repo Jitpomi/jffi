@@ -317,6 +317,7 @@ fn generate_macos_pbxproj(app_name: &str) -> Result<String> {
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/../../target/aarch64-apple-darwin/debug",
+					"$(PROJECT_DIR)/../../target/x86_64-apple-darwin/debug",
 				);
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = "-l{module_name}_ffi";
@@ -349,6 +350,7 @@ fn generate_macos_pbxproj(app_name: &str) -> Result<String> {
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/../../target/aarch64-apple-darwin/release",
+					"$(PROJECT_DIR)/../../target/x86_64-apple-darwin/release",
 				);
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = "-l{module_name}_ffi";

@@ -41,7 +41,40 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
     let app_name_pascal = to_pascal_case(app_name);
     let module_name = app_name.replace("-", "_");
     
-    let shell_script = format!("# Copy the Rust FFI dylib into the app bundle\\nFFI_LIB=\\\"${{{{PROJECT_DIR}}}}/../../target/${{{{ARCHS}}}}-apple-ios-sim/${{{{CONFIGURATION}}}}/lib{}_ffi.dylib\\\"\\n\\nif [ -f \\\"$FFI_LIB\\\" ]; then\\n    echo \\\"Copying FFI library: $FFI_LIB\\\"\\n    cp \\\"$FFI_LIB\\\" \\\"${{{{BUILT_PRODUCTS_DIR}}}}/${{{{PRODUCT_NAME}}}}.app/\\\"\\n    echo \\\"FFI library copied successfully\\\"\\nelse\\n    echo \\\"Warning: FFI library not found at $FFI_LIB\\\"\\nfi\\n", module_name);
+    let shell_script = format!(
+        "# Copy the Rust FFI dylib into the app bundle\n\
+TARGET_DIR=\"\"\n\
+if [ \"${{PLATFORM_NAME}}\" = \"iphoneos\" ]; then\n\
+  TARGET_DIR=\"aarch64-apple-ios\"\n\
+elif [ \"${{PLATFORM_NAME}}\" = \"iphonesimulator\" ]; then\n\
+  if [ \"${{CURRENT_ARCH}}\" = \"arm64\" ]; then\n\
+    TARGET_DIR=\"aarch64-apple-ios-sim\"\n\
+  else\n\
+    TARGET_DIR=\"x86_64-apple-ios\"\n\
+  fi\n\
+fi\n\
+\n\
+if [ -z \"$TARGET_DIR\" ]; then\n\
+  echo \"Warning: Unknown PLATFORM_NAME=${{PLATFORM_NAME}} CURRENT_ARCH=${{CURRENT_ARCH}}\"\n\
+  exit 0\n\
+fi\n\
+\n\
+FFI_LIB=\"${{PROJECT_DIR}}/../../target/$TARGET_DIR/${{CONFIGURATION}}/lib{module_name}_ffi.dylib\"\n\
+\n\
+if [ -f \"$FFI_LIB\" ]; then\n\
+  echo \"Copying FFI library: $FFI_LIB\"\n\
+  cp \"$FFI_LIB\" \"${{BUILT_PRODUCTS_DIR}}/${{PRODUCT_NAME}}.app/\"\n\
+  echo \"FFI library copied successfully\"\n\
+else\n\
+  echo \"Warning: FFI library not found at $FFI_LIB\"\n\
+fi\n",
+        module_name = module_name
+    );
+
+    let escaped_shell_script = shell_script
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n");
     
     let pbxproj = format!(r#"// !$*UTF8*$!
 {{
@@ -206,7 +239,7 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "{shell_script}";
+			shellScript = "{escaped_shell_script}";
 		}};
 /* End PBXShellScriptBuildPhase section */
 
@@ -354,6 +387,8 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/../../target/aarch64-apple-ios-sim/debug",
+					"$(PROJECT_DIR)/../../target/aarch64-apple-ios/debug",
+					"$(PROJECT_DIR)/../../target/x86_64-apple-ios/debug",
 				);
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = "-l{module_name}_ffi";
@@ -390,6 +425,8 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/../../target/aarch64-apple-ios-sim/release",
+					"$(PROJECT_DIR)/../../target/aarch64-apple-ios/release",
+					"$(PROJECT_DIR)/../../target/x86_64-apple-ios/release",
 				);
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = "-l{module_name}_ffi";
@@ -427,7 +464,7 @@ fn generate_pbxproj(app_name: &str) -> Result<String> {
 	}};
 	rootObject = A0000001000000000000001 /* Project object */;
 }}
-"#, app_name = app_name, app_name_pascal = app_name_pascal, bundle_id = bundle_id, shell_script = shell_script);
+"#, app_name = app_name, app_name_pascal = app_name_pascal, bundle_id = bundle_id, escaped_shell_script = escaped_shell_script);
 
     Ok(pbxproj)
 }
