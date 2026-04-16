@@ -21,10 +21,14 @@ enum Commands {
     New {
         /// Project name
         name: String,
-        
+
         /// Target platforms (comma-separated: ios,android,macos,windows,linux,web,multi)
-        #[arg(short, long, default_value = "ios")]
-        platforms: String,
+        #[arg(short, long)]
+        platforms: Option<String>,
+
+        /// Project template (todo, hello, counter)
+        #[arg(short, long)]
+        template: Option<String>,
         
         /// Project directory (defaults to current directory)
         #[arg(short, long)]
@@ -82,8 +86,8 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     
     match cli.command {
-        Commands::New { name, platforms, path } => {
-            commands::new::create_project(&name, &platforms, path)?;
+        Commands::New { name, platforms, template, path } => {
+            commands::new::create_project(&name, platforms.as_deref(), template.as_deref(), path)?;
         }
         Commands::Build { platform, all, release, device } => {
             commands::build::build_project(platform, all, release, device)?;

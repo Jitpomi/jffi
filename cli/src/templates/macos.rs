@@ -3,14 +3,14 @@ use colored::*;
 use std::fs;
 use std::path::PathBuf;
 
-pub fn create_macos_project(platforms_dir: &PathBuf, name: &str) -> Result<()> {
+pub fn create_macos_project(platforms_dir: &PathBuf, name: &str, template: &str) -> Result<()> {
     let macos_dir = platforms_dir.join("macos");
     fs::create_dir_all(&macos_dir)?;
     
     // Create Swift files
     create_app_swift(&macos_dir, name)?;
-    create_app_state_swift(&macos_dir)?;
-    create_content_view_swift(&macos_dir)?;
+    create_app_state_swift(&macos_dir, template)?;
+    create_content_view_swift(&macos_dir, template)?;
     
     // Create Info.plist
     create_info_plist(&macos_dir, name)?;
@@ -54,43 +54,186 @@ struct {}App: App {{
     Ok(())
 }
 
-fn create_app_state_swift(dir: &PathBuf) -> Result<()> {
-    let content = r#"import SwiftUI
+fn create_app_state_swift(dir: &PathBuf, template: &str) -> Result<()> {
+    let content = match template {
+        "hello" => r#"import SwiftUI
+
+class AppState: ObservableObject {
+    @Published var greeting: String = ""
+    private let ffiApp: FfiApp?
+
+    init() {
+        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
+            self.ffiApp = nil
+            self.greeting = "Hello from Preview"
+            return
+        }
+
+        let app = FfiApp()
+        self.ffiApp = app
+        self.greeting = app.greeting()
+    }
+
+    func refresh() {
+        guard let ffiApp = ffiApp else {
+            self.greeting = "Hello from Preview"
+            return
+        }
+        self.greeting = ffiApp.greeting()
+    }
+}
+"#,
+        "counter" => r#"import SwiftUI
+
+class AppState: ObservableObject {
+    @Published var count: Int64 = 0
+    private let ffiApp: FfiApp?
+
+    init() {
+        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
+            self.ffiApp = nil
+            self.count = 42
+            return
+        }
+
+        let app = FfiApp()
+        self.ffiApp = app
+        self.count = app.get()
+    }
+
+    func inc() {
+        guard let ffiApp = ffiApp else {
+            self.count += 1
+            return
+        }
+        self.count = ffiApp.inc()
+    }
+
+    func dec() {
+        guard let ffiApp = ffiApp else {
+            self.count -= 1
+            return
+        }
+        self.count = ffiApp.dec()
+    }
+
+    func reset() {
+        guard let ffiApp = ffiApp else {
+            self.count = 0
+            return
+        }
+        self.count = ffiApp.reset()
+    }
+}
+"#,
+        _ => r#"import SwiftUI
 import Combine
 
 class AppState: ObservableObject {
     @Published var items: [ItemViewModel] = []
-    private let ffiApp: FfiApp
+    private let ffiApp: FfiApp?
     
     init() {
-        self.ffiApp = FfiApp()
-        self.items = ffiApp.getItems()
+        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
+            self.ffiApp = nil
+            self.items = []
+            return
+        }
+
+        let app = FfiApp()
+        self.ffiApp = app
+        self.items = app.getItems()
     }
     
     func addItem(title: String) {
+        guard let ffiApp = ffiApp else { return }
         let id = UUID().uuidString
         self.items = ffiApp.addItem(id: id, title: title)
     }
     
     func toggleItem(id: String) {
+        guard let ffiApp = ffiApp else { return }
         self.items = ffiApp.toggleItem(id: id)
     }
     
     func deleteItem(id: String) {
+        guard let ffiApp = ffiApp else { return }
         self.items = ffiApp.deleteItem(id: id)
     }
 }
 
-// Make ItemViewModel conform to Identifiable
 extension ItemViewModel: Identifiable {}
-"#;
+"#,
+    };
     
     fs::write(dir.join("AppState.swift"), content)?;
     Ok(())
 }
 
-fn create_content_view_swift(dir: &PathBuf) -> Result<()> {
-    let content = r#"import SwiftUI
+fn create_content_view_swift(dir: &PathBuf, template: &str) -> Result<()> {
+    let content = match template {
+        "hello" => r#"import SwiftUI
+
+struct ContentView: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text(appState.greeting)
+                .font(.title)
+                .fontWeight(.semibold)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            Button("Refresh") {
+                appState.refresh()
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding()
+    }
+}
+
+#Preview {
+    ContentView()
+        .environmentObject(AppState())
+}
+"#,
+        "counter" => r#"import SwiftUI
+
+struct ContentView: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Text("Counter")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+
+            Text("\(appState.count)")
+                .font(.system(size: 64, weight: .bold, design: .rounded))
+
+            HStack(spacing: 12) {
+                Button("-") { appState.dec() }
+                    .buttonStyle(.borderedProminent)
+
+                Button("Reset") { appState.reset() }
+                    .buttonStyle(.bordered)
+
+                Button("+") { appState.inc() }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding()
+    }
+}
+
+#Preview {
+    ContentView()
+        .environmentObject(AppState())
+}
+"#,
+        _ => r#"import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
@@ -310,7 +453,8 @@ struct AddItemView: View {
     ContentView()
         .environmentObject(AppState())
 }
-"#;
+"#,
+    };
     
     fs::write(dir.join("ContentView.swift"), content)?;
     Ok(())

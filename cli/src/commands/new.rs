@@ -1,39 +1,141 @@
 use anyhow::{Context, Result};
 use colored::*;
+use dialoguer::{theme::ColorfulTheme, Input, MultiSelect, Select};
 use std::fs;
 use std::path::PathBuf;
 
-pub fn create_project(name: &str, platforms: &str, path: Option<PathBuf>) -> Result<()> {
-    let project_dir = path.unwrap_or_else(|| PathBuf::from(name));
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProjectTemplate {
+    Todo,
+    Hello,
+    Counter,
+}
+
+impl ProjectTemplate {
+    fn from_str(s: &str) -> Option<Self> {
+        match s.trim().to_lowercase().as_str() {
+            "todo" => Some(Self::Todo),
+            "hello" | "helloworld" => Some(Self::Hello),
+            "counter" => Some(Self::Counter),
+            _ => None,
+        }
+    }
+
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Todo => "todo",
+            Self::Hello => "hello",
+            Self::Counter => "counter",
+        }
+    }
+}
+
+pub fn create_project(
+    name: &str,
+    platforms: Option<&str>,
+    template: Option<&str>,
+    path: Option<PathBuf>,
+) -> Result<()> {
+    let theme = ColorfulTheme::default();
+
+    let selected_template = if let Some(template) = template {
+        ProjectTemplate::from_str(template)
+            .with_context(|| format!("Unknown template: {} (expected: todo, hello, counter)", template))?
+    } else {
+        let items = ["Todo", "HelloWorld", "Counter"];
+        let idx = Select::with_theme(&theme)
+            .with_prompt("Choose a starter template")
+            .default(0)
+            .items(&items)
+            .interact()?;
+        match idx {
+            0 => ProjectTemplate::Todo,
+            1 => ProjectTemplate::Hello,
+            _ => ProjectTemplate::Counter,
+        }
+    };
+
+    let platform_list: Vec<String> = if let Some(platforms) = platforms {
+        if platforms == "multi" {
+            vec![
+                "ios".to_string(),
+                "android".to_string(),
+                "macos".to_string(),
+                "windows".to_string(),
+                "linux".to_string(),
+                "web".to_string(),
+            ]
+        } else {
+            platforms
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        }
+    } else {
+        let items = ["ios", "macos", "android", "windows", "linux", "web"];
+        let defaults = vec![true, false, false, false, false, false];
+        let chosen = MultiSelect::with_theme(&theme)
+            .with_prompt("Select platforms")
+            .items(&items)
+            .defaults(&defaults)
+            .interact()?;
+
+        if chosen.is_empty() {
+            anyhow::bail!("No platforms selected");
+        }
+
+        chosen.into_iter().map(|i| items[i].to_string()).collect()
+    };
+
+    if selected_template != ProjectTemplate::Todo {
+        let allowed = platform_list.iter().all(|p| p == "ios" || p == "macos");
+        if !allowed {
+            anyhow::bail!(
+                "Template '{}' is currently supported only for platforms: ios,macos",
+                selected_template.as_str()
+            );
+        }
+    }
+
+    let project_dir = if let Some(path) = path {
+        path
+    } else {
+        let default_path = name.to_string();
+        let input: String = Input::with_theme(&theme)
+            .with_prompt("Project directory")
+            .default(default_path)
+            .interact_text()?;
+        PathBuf::from(input)
+    };
     
     println!("{}", "🚀 Creating new JFFI app...".bright_green().bold());
     println!("   Name: {}", name.bright_cyan());
-    println!("   Platforms: {}", platforms.bright_cyan());
+    println!("   Platforms: {}", platform_list.join(",").bright_cyan());
+    println!("   Template: {}", selected_template.as_str().bright_cyan());
     println!();
-    
-    // Parse platforms
-    let platform_list: Vec<&str> = if platforms == "multi" {
-        vec!["ios", "android", "macos", "windows", "linux", "web"]
-    } else {
-        platforms.split(',').map(|s| s.trim()).collect()
-    };
-    
-    // Create project structure
-    create_project_structure(&project_dir, name, &platform_list)?;
+
+    let platform_list_ref: Vec<&str> = platform_list.iter().map(|s| s.as_str()).collect();
+    create_project_structure(&project_dir, name, &platform_list_ref, selected_template)?;
     
     println!();
     println!("{}", "✅ Project created successfully!".bright_green().bold());
     println!();
     println!("Next steps:");
-    println!("  cd {}", name);
-    println!("  jffi build --platform {}", platform_list[0]);
-    println!("  jffi run --platform {}", platform_list[0]);
+    println!("  cd {}", project_dir.file_name().and_then(|s| s.to_str()).unwrap_or(name));
+    println!("  jffi build --platform {}", platform_list_ref[0]);
+    println!("  jffi run --platform {}", platform_list_ref[0]);
     println!();
     
     Ok(())
 }
 
-fn create_project_structure(dir: &PathBuf, name: &str, platforms: &[&str]) -> Result<()> {
+fn create_project_structure(
+    dir: &PathBuf,
+    name: &str,
+    platforms: &[&str],
+    template: ProjectTemplate,
+) -> Result<()> {
     // Create root directory
     fs::create_dir_all(dir).context("Failed to create project directory")?;
     
@@ -41,10 +143,10 @@ fn create_project_structure(dir: &PathBuf, name: &str, platforms: &[&str]) -> Re
     create_workspace_cargo_toml(dir, platforms)?;
     
     // Create core business logic crate
-    create_core_crate(dir, name)?;
+    create_core_crate(dir, name, template)?;
     
     // Create FFI crate
-    create_ffi_crate(dir, name)?;
+    create_ffi_crate(dir, name, template)?;
     
     // Create FFI-Web crate if web platform is selected
     if platforms.contains(&"web") {
@@ -53,7 +155,7 @@ fn create_project_structure(dir: &PathBuf, name: &str, platforms: &[&str]) -> Re
     
     // Create platform directories
     for platform in platforms {
-        create_platform_dir(dir, name, platform)?;
+        create_platform_dir(dir, name, platform, template)?;
     }
     
     // Create config file
@@ -83,7 +185,7 @@ resolver = "2"
     Ok(())
 }
 
-fn create_core_crate(dir: &PathBuf, name: &str) -> Result<()> {
+fn create_core_crate(dir: &PathBuf, name: &str, template: ProjectTemplate) -> Result<()> {
     let core_dir = dir.join("core");
     fs::create_dir_all(core_dir.join("src"))?;
     
@@ -98,8 +200,8 @@ serde = {{ version = "1.0", features = ["derive"] }}
 "#, name);
     fs::write(core_dir.join("Cargo.toml"), cargo_toml)?;
     
-    // lib.rs with example code
-    let lib_rs = r#"use serde::{Deserialize, Serialize};
+    let lib_rs = match template {
+        ProjectTemplate::Todo => r#"use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Item {
@@ -145,14 +247,68 @@ impl Default for App {
         Self::new()
     }
 }
-"#;
+"#,
+        ProjectTemplate::Hello => r#"pub struct App;
+
+impl App {
+    pub fn new() -> Self {
+        Self
+    }
+
+    pub fn greeting(&self) -> String {
+        "Hello from Rust".to_string()
+    }
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+"#,
+        ProjectTemplate::Counter => r#"pub struct App {
+    count: i64,
+}
+
+impl App {
+    pub fn new() -> Self {
+        Self { count: 0 }
+    }
+
+    pub fn get(&self) -> i64 {
+        self.count
+    }
+
+    pub fn inc(&mut self) -> i64 {
+        self.count += 1;
+        self.count
+    }
+
+    pub fn dec(&mut self) -> i64 {
+        self.count -= 1;
+        self.count
+    }
+
+    pub fn reset(&mut self) -> i64 {
+        self.count = 0;
+        self.count
+    }
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+"#,
+    };
     fs::write(core_dir.join("src/lib.rs"), lib_rs)?;
     
     println!("  {} core/", "✓".green());
     Ok(())
 }
 
-fn create_ffi_crate(dir: &PathBuf, name: &str) -> Result<()> {
+fn create_ffi_crate(dir: &PathBuf, name: &str, template: ProjectTemplate) -> Result<()> {
     let ffi_dir = dir.join("ffi");
     fs::create_dir_all(ffi_dir.join("src"))?;
     
@@ -185,9 +341,10 @@ uniffi = {{ version = "0.31.0", features = ["build"] }}
 "#;
     fs::write(ffi_dir.join("uniffi-bindgen.rs"), uniffi_bindgen_rs)?;
     
-    // lib.rs with FFI exports
     let module_name = name.replace("-", "_");
-    let lib_rs = format!(r#"use {}_core::{{App, Item}};
+
+    let lib_rs = match template {
+        ProjectTemplate::Todo => format!(r#"use {}_core::{{App, Item}};
 use std::sync::Mutex;
 
 #[derive(uniffi::Record)]
@@ -246,7 +403,71 @@ impl FfiApp {{
 }}
 
 uniffi::setup_scaffolding!();
-"#, module_name);
+"#, module_name),
+        ProjectTemplate::Hello => format!(r#"use {}_core::App;
+
+#[derive(uniffi::Object)]
+pub struct FfiApp {{
+    app: App,
+}}
+
+#[uniffi::export]
+impl FfiApp {{
+    #[uniffi::constructor]
+    pub fn new() -> Self {{
+        Self {{
+            app: App::new(),
+        }}
+    }}
+
+    pub fn greeting(&self) -> String {{
+        self.app.greeting()
+    }}
+}}
+
+uniffi::setup_scaffolding!();
+"#, module_name),
+        ProjectTemplate::Counter => format!(r#"use {}_core::App;
+use std::sync::Mutex;
+
+#[derive(uniffi::Object)]
+pub struct FfiApp {{
+    app: Mutex<App>,
+}}
+
+#[uniffi::export]
+impl FfiApp {{
+    #[uniffi::constructor]
+    pub fn new() -> Self {{
+        Self {{
+            app: Mutex::new(App::new()),
+        }}
+    }}
+
+    pub fn get(&self) -> i64 {{
+        let app = self.app.lock().unwrap();
+        app.get()
+    }}
+
+    pub fn inc(&self) -> i64 {{
+        let mut app = self.app.lock().unwrap();
+        app.inc()
+    }}
+
+    pub fn dec(&self) -> i64 {{
+        let mut app = self.app.lock().unwrap();
+        app.dec()
+    }}
+
+    pub fn reset(&self) -> i64 {{
+        let mut app = self.app.lock().unwrap();
+        app.reset()
+    }}
+}}
+
+uniffi::setup_scaffolding!();
+"#, module_name),
+    };
     fs::write(ffi_dir.join("src/lib.rs"), lib_rs)?;
     
     println!("  {} ffi/", "✓".green());
@@ -345,14 +566,19 @@ impl FfiApp {{
     Ok(())
 }
 
-fn create_platform_dir(dir: &PathBuf, name: &str, platform: &str) -> Result<()> {
+fn create_platform_dir(
+    dir: &PathBuf,
+    name: &str,
+    platform: &str,
+    template: ProjectTemplate,
+) -> Result<()> {
     let platforms_dir = dir.join("platforms");
     fs::create_dir_all(&platforms_dir)?;
     
     match platform {
-        "ios" => crate::templates::ios::create_ios_project(&platforms_dir, name)?,
+        "ios" => crate::templates::ios::create_ios_project(&platforms_dir, name, template.as_str())?,
         "android" => crate::templates::android::create_android_project(&platforms_dir, name)?,
-        "macos" => crate::templates::macos::create_macos_project(&platforms_dir, name)?,
+        "macos" => crate::templates::macos::create_macos_project(&platforms_dir, name, template.as_str())?,
         "windows" => crate::templates::windows::create_windows_project(&platforms_dir, name)?,
         "linux" => crate::templates::linux::create_linux_project(&platforms_dir, name)?,
         "web" => crate::templates::web::create_web_project(&platforms_dir, name)?,

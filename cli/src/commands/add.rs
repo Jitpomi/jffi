@@ -25,9 +25,9 @@ pub fn add_platform(platform: &str) -> Result<()> {
     let platforms_dir = std::path::PathBuf::from("platforms");
     
     match platform {
-        "ios" => crate::templates::ios::create_ios_project(&platforms_dir, &name)?,
+        "ios" => crate::templates::ios::create_ios_project(&platforms_dir, &name, "todo")?,
         "android" => crate::templates::android::create_android_project(&platforms_dir, &name)?,
-        "macos" => crate::templates::macos::create_macos_project(&platforms_dir, &name)?,
+        "macos" => crate::templates::macos::create_macos_project(&platforms_dir, &name, "todo")?,
         "linux" => crate::templates::linux::create_linux_project(&platforms_dir, &name)?,
         "windows" => crate::templates::windows::create_windows_project(&platforms_dir, &name)?,
         "web" => crate::templates::web::create_web_project(&platforms_dir, &name)?,
