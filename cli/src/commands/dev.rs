@@ -6,6 +6,8 @@ use std::process::Command;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
+use crate::platform::{AndroidProject, Platform, XcodeProject};
+
 pub fn watch_project(platform: &str) -> Result<()> {
     println!("{}", format!("👀 Rust watch mode for {}...", platform).bright_green().bold());
     println!();
@@ -19,10 +21,15 @@ pub fn watch_project(platform: &str) -> Result<()> {
     println!("{}", "  ✓ Build complete!".green());
     println!();
     
+    // Parse platform
+    let platform_enum = Platform::from_str(platform)
+        .ok_or_else(|| anyhow::anyhow!("Unknown platform: {}", platform))?;
+    
     // Auto-open IDE or launch app
     if platform == "ios" || platform == "macos" {
         println!("{}", "  → Opening Xcode...".bright_blue());
-        open_xcode_project(platform)?;
+        let project = XcodeProject::find(platform_enum)?;
+        project.open()?;
         println!();
         println!("{}", "  ✓ Xcode opened!".green());
         println!();
@@ -37,7 +44,8 @@ pub fn watch_project(platform: &str) -> Result<()> {
         println!();
     } else if platform == "android" {
         println!("{}", "  → Opening Android Studio...".bright_blue());
-        open_android_studio()?;
+        let android = AndroidProject::find()?;
+        android.open()?;
         println!();
         println!("{}", "  ✓ Android Studio opened!".green());
         println!();
@@ -147,65 +155,6 @@ pub fn watch_project(platform: &str) -> Result<()> {
     }
 }
 
-fn open_xcode_project(platform: &str) -> Result<()> {
-    let platform_dir = match platform {
-        "ios" => "platforms/ios",
-        "macos" => "platforms/macos",
-        _ => return Ok(()),
-    };
-    
-    // Check if platform directory exists
-    if !std::path::Path::new(platform_dir).exists() {
-        anyhow::bail!(
-            "Platform directory '{}' not found. Make sure you're in the project root directory.",
-            platform_dir
-        );
-    }
-    
-    // Find the .xcodeproj file
-    let xcodeproj = std::fs::read_dir(platform_dir)
-        .context(format!("Failed to read directory '{}'", platform_dir))?
-        .filter_map(|e| e.ok())
-        .find(|e| {
-            e.path()
-                .extension()
-                .and_then(|s| s.to_str())
-                .map(|s| s == "xcodeproj")
-                .unwrap_or(false)
-        })
-        .map(|e| e.path())
-        .context(format!("Could not find .xcodeproj file in '{}'", platform_dir))?;
-    
-    // Open in Xcode
-    Command::new("open")
-        .arg(xcodeproj)
-        .status()
-        .context("Failed to open Xcode")?;
-    
-    Ok(())
-}
-
-fn open_android_studio() -> Result<()> {
-    let android_dir = "platforms/android";
-    
-    // Check if Android directory exists
-    if !std::path::Path::new(android_dir).exists() {
-        anyhow::bail!(
-            "Android directory '{}' not found. Make sure you're in the project root directory.",
-            android_dir
-        );
-    }
-    
-    // Open Android Studio with the android directory
-    Command::new("open")
-        .arg("-a")
-        .arg("Android Studio")
-        .arg(android_dir)
-        .status()
-        .context("Failed to open Android Studio")?;
-    
-    Ok(())
-}
 
 fn launch_linux_app_background() -> Result<()> {
     use std::process::Stdio;
