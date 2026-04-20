@@ -307,29 +307,22 @@ fn run_windows() -> Result<()> {
     
     let exe_name = format!("{}.exe", project_name);
     
-    // Recursively search for the project's .exe file in platforms/windows/bin
-    fn find_exe_recursive(dir: &std::path::Path, target_name: &str) -> Option<std::path::PathBuf> {
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.filter_map(|e| e.ok()) {
-                let path = entry.path();
-                if path.is_file() {
-                    if let Some(name) = path.file_name() {
-                        if name.to_string_lossy() == target_name {
-                            return Some(path);
-                        }
-                    }
-                } else if path.is_dir() {
-                    if let Some(exe) = find_exe_recursive(&path, target_name) {
-                        return Some(exe);
-                    }
-                }
-            }
-        }
-        None
-    }
+    // .NET builds to bin/x64/Debug/net8.0-windows10.0.19041.0/ or bin/x64/Release/...
+    let output_dirs = [
+        format!("platforms/windows/bin/x64/Debug/net8.0-windows10.0.19041.0/{}", exe_name),
+        format!("platforms/windows/bin/x64/Release/net8.0-windows10.0.19041.0/{}", exe_name),
+        format!("platforms/windows/bin/x64/Debug/{}", exe_name),
+        format!("platforms/windows/bin/x64/Release/{}", exe_name),
+        format!("platforms/windows/bin/{}", exe_name),
+    ];
     
-    let exe_path = find_exe_recursive(std::path::Path::new("platforms/windows/bin"), &exe_name)
-        .context(format!("Could not find {} in platforms/windows/bin", exe_name))?;
+    let exe_path = output_dirs.iter()
+        .map(|p| std::path::Path::new(p))
+        .find(|p| p.exists())
+        .context(format!(
+            "Could not find {}. Make sure to build first with 'jffi build --platform windows'",
+            exe_name
+        ))?;
     
     println!("  {} Found executable: {}", "→".bright_blue(), exe_path.display());
     
@@ -392,10 +385,10 @@ fn run_linux() -> Result<()> {
         .find(|e| {
             let name = e.file_name();
             let name_str = name.to_string_lossy();
-            name_str.starts_with("lib") && name_str.ends_with("ffi.so")
+            name_str.starts_with("lib") && name_str.ends_with("core.so")
         })
         .map(|e| e.path())
-        .context("Could not find FFI library")?;
+        .context("Could not find core library (lib*core.so). Make sure to build first.")?;
     
     let lib_filename = lib_path.file_name()
         .context("Could not get library filename")?;
