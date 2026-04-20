@@ -87,19 +87,19 @@ fn create_index_html(dir: &PathBuf, name: &str) -> Result<()> {
 }
 
 fn create_main_js(dir: &PathBuf) -> Result<()> {
-    let content = r#"import init, { FfiApp } from './pkg/wasm.js';
+    let content = r#"import init, { Core } from './pkg/wasm.js';
 
-let app = null;
+let core = null;
 
 async function initApp() {
     await init();
-    app = new FfiApp();
+    core = new Core();
     render();
     setupEventListeners();
 }
 
 function render() {
-    const items = app.get_items();
+    const items = core.get_items();
     renderStats(items);
     renderTasks(items);
 }
@@ -126,7 +126,7 @@ function renderTasks(items) {
         checkbox.type = 'checkbox';
         checkbox.checked = item.completed;
         checkbox.addEventListener('change', () => {
-            app.toggle_item(item.id);
+            core.toggle_item(item.id);
             render();
         });
         
@@ -161,7 +161,7 @@ function setupEventListeners() {
         const title = taskInput.value.trim();
         if (title) {
             const id = crypto.randomUUID();
-            app.add_item(id, title);
+            core.add_item(id, title);
             render();
             modal.classList.add('hidden');
             taskInput.value = '';

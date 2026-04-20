@@ -11,7 +11,7 @@ pub fn create_linux_project(platforms_dir: &PathBuf, name: &str) -> Result<()> {
     create_main_py(&linux_dir, name)?;
     create_app_py(&linux_dir, name)?;
     create_window_py(&linux_dir, name)?;
-    create_ffi_wrapper_py(&linux_dir, name)?;
+    create_core_wrapper_py(&linux_dir, name)?;
     
     // Create requirements.txt
     create_requirements(&linux_dir)?;
@@ -84,14 +84,14 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, GLib
 
-from ffi_wrapper import FfiWrapper
+from core_wrapper import CoreWrapper
 
 class {}(Adw.ApplicationWindow):
     def __init__(self, **kwargs):"#, window_class);
     let content = content + r#"
         super().__init__(**kwargs)
         
-        self.ffi = FfiWrapper()
+        self.core = CoreWrapper()
         self.items = []
         
         self.set_title("Today")
@@ -161,7 +161,7 @@ class {}(Adw.ApplicationWindow):
         return box
     
     def refresh_items(self):
-        self.items = self.ffi.get_items()
+        self.items = self.core.get_items()
         
         # Update stats
         total = len(self.items)
@@ -234,14 +234,14 @@ class {}(Adw.ApplicationWindow):
                 title = entry.get_text()
                 if title:
                     import uuid
-                    self.ffi.add_item(str(uuid.uuid4()), title)
+                    self.core.add_item(str(uuid.uuid4()), title)
                     self.refresh_items()
         
         dialog.connect("response", on_response)
         dialog.present()
     
     def on_toggle_clicked(self, check, item_id):
-        self.ffi.toggle_item(item_id)
+        self.core.toggle_item(item_id)
         self.refresh_items()
 "#;
     
@@ -249,31 +249,31 @@ class {}(Adw.ApplicationWindow):
     Ok(())
 }
 
-fn create_ffi_wrapper_py(dir: &PathBuf, name: &str) -> Result<()> {
+fn create_core_wrapper_py(dir: &PathBuf, name: &str) -> Result<()> {
     let module_name = name.replace("-", "_");
-    let content = format!(r#"from {}_ffi import FfiApp
+    let content = format!(r#"from {}_core import Core
 
-class FfiWrapper:
-    """Wrapper for Rust FFI bindings"""
+class CoreWrapper:
+    """Wrapper for Rust Core bindings"""
     
     def __init__(self):
-        self.ffi_app = FfiApp()
+        self.core = Core()
     
     def get_items(self):
-        items = self.ffi_app.get_items()
+        items = self.core.get_items()
         return [{{'id': item.id, 'title': item.title, 'completed': item.completed}} for item in items]
     
     def add_item(self, id, title):
-        self.ffi_app.add_item(id, title)
+        self.core.add_item(id, title)
     
     def toggle_item(self, id):
-        self.ffi_app.toggle_item(id)
+        self.core.toggle_item(id)
     
     def delete_item(self, id):
-        self.ffi_app.delete_item(id)
+        self.core.delete_item(id)
 "#, module_name);
     
-    fs::write(dir.join("ffi_wrapper.py"), content)?;
+    fs::write(dir.join("core_wrapper.py"), content)?;
     Ok(())
 }
 

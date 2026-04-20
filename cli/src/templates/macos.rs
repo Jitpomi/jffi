@@ -60,26 +60,12 @@ fn create_app_state_swift(dir: &PathBuf, template: &str) -> Result<()> {
 
 class AppState: ObservableObject {
     @Published var greeting: String = ""
-    private let ffiApp: FfiApp?
+    let core: Core
 
     init() {
-        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
-            self.ffiApp = nil
-            self.greeting = "Hello from Preview"
-            return
-        }
-
-        let app = FfiApp()
-        self.ffiApp = app
-        self.greeting = app.greeting()
-    }
-
-    func refresh() {
-        guard let ffiApp = ffiApp else {
-            self.greeting = "Hello from Preview"
-            return
-        }
-        self.greeting = ffiApp.greeting()
+        let core = Core()
+        self.core = core
+        self.greeting = core.greeting()
     }
 }
 "#,
@@ -87,42 +73,24 @@ class AppState: ObservableObject {
 
 class AppState: ObservableObject {
     @Published var count: Int64 = 0
-    private let ffiApp: FfiApp?
+    let core: Core
 
     init() {
-        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
-            self.ffiApp = nil
-            self.count = 42
-            return
-        }
-
-        let app = FfiApp()
-        self.ffiApp = app
-        self.count = app.get()
+        let core = Core()
+        self.core = core
+        self.count = core.get()
     }
 
     func inc() {
-        guard let ffiApp = ffiApp else {
-            self.count += 1
-            return
-        }
-        self.count = ffiApp.inc()
+        self.count = core.inc()
     }
 
     func dec() {
-        guard let ffiApp = ffiApp else {
-            self.count -= 1
-            return
-        }
-        self.count = ffiApp.dec()
+        self.count = core.dec()
     }
 
     func reset() {
-        guard let ffiApp = ffiApp else {
-            self.count = 0
-            return
-        }
-        self.count = ffiApp.reset()
+        self.count = core.reset()
     }
 }
 "#,
@@ -131,34 +99,25 @@ import Combine
 
 class AppState: ObservableObject {
     @Published var items: [ItemViewModel] = []
-    private let ffiApp: FfiApp?
+    let core: Core
     
     init() {
-        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
-            self.ffiApp = nil
-            self.items = []
-            return
-        }
-
-        let app = FfiApp()
-        self.ffiApp = app
-        self.items = app.getItems()
+        let core = Core()
+        self.core = core
+        self.items = core.getItems()
     }
     
     func addItem(title: String) {
-        guard let ffiApp = ffiApp else { return }
         let id = UUID().uuidString
-        self.items = ffiApp.addItem(id: id, title: title)
+        self.items = core.addItem(id: id, title: title)
     }
     
     func toggleItem(id: String) {
-        guard let ffiApp = ffiApp else { return }
-        self.items = ffiApp.toggleItem(id: id)
+        self.items = core.toggleItem(id: id)
     }
     
     func deleteItem(id: String) {
-        guard let ffiApp = ffiApp else { return }
-        self.items = ffiApp.deleteItem(id: id)
+        self.items = core.deleteItem(id: id)
     }
 }
 
@@ -186,7 +145,7 @@ struct ContentView: View {
                 .padding(.horizontal)
 
             Button("Refresh") {
-                appState.refresh()
+                appState.greeting = appState.core.greeting()
             }
             .buttonStyle(.borderedProminent)
         }
@@ -589,7 +548,7 @@ fn create_bridging_header(dir: &PathBuf, name: &str) -> Result<()> {
 #ifndef BridgingHeader_h
 #define BridgingHeader_h
 
-#import "{}_ffiFFI.h"
+#import "{}_coreFFI.h"
 
 #endif /* BridgingHeader_h */
 "#, module_name);

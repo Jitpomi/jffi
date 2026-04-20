@@ -26,7 +26,7 @@ pub fn add_platform(platform: &str) -> Result<()> {
     
     match platform {
         "ios" => crate::templates::ios::create_ios_project(&platforms_dir, &name, "todo")?,
-        "android" => crate::templates::android::create_android_project(&platforms_dir, &name)?,
+        "android" => crate::templates::android::create_android_project(&platforms_dir, &name, "todo")?,
         "macos" => crate::templates::macos::create_macos_project(&platforms_dir, &name, "todo")?,
         "linux" => crate::templates::linux::create_linux_project(&platforms_dir, &name)?,
         "windows" => crate::templates::windows::create_windows_project(&platforms_dir, &name)?,
@@ -38,8 +38,8 @@ pub fn add_platform(platform: &str) -> Result<()> {
     println!("{}", format!("✅ {} platform added", platform).green());
     println!();
     println!("Next steps:");
-    println!("  uniffi-app build --platform {}", platform);
-    println!("  uniffi-app run --platform {}", platform);
+    println!("  jffi build --platform {}", platform);
+    println!("  jffi run --platform {}", platform);
     
     Ok(())
 }

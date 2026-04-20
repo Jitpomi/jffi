@@ -9,7 +9,7 @@ use std::time::Duration;
 pub fn watch_project(platform: &str) -> Result<()> {
     println!("{}", format!("👀 Rust watch mode for {}...", platform).bright_green().bold());
     println!();
-    println!("   This watches your Rust code (core/ and ffi/) and rebuilds on changes.");
+    println!("   This watches your Rust code (core/) and rebuilds on changes.");
     println!("   For Swift changes, use Xcode directly - it has native hot reload.");
     println!();
     
@@ -77,9 +77,8 @@ pub fn watch_project(platform: &str) -> Result<()> {
         Config::default(),
     )?;
     
-    // Watch core and ffi directories
+    // Watch core directory
     watcher.watch(Path::new("core/src"), RecursiveMode::Recursive)?;
-    watcher.watch(Path::new("ffi/src"), RecursiveMode::Recursive)?;
     
     println!("{}", "  👀 Watching Rust files...".bright_cyan());
     println!();
@@ -95,10 +94,16 @@ pub fn watch_project(platform: &str) -> Result<()> {
                     event.kind,
                     notify::EventKind::Modify(_) | notify::EventKind::Create(_)
                 ) {
+                    // Check if core/src/lib.rs was modified
+                    let _is_core_change = event.paths.iter().any(|p| {
+                        p.to_string_lossy().contains("core/src/lib.rs")
+                    });
+                    
                     // Debounce: only rebuild if enough time has passed
                     let now = std::time::Instant::now();
                     if now.duration_since(last_rebuild) > debounce_duration {
                         println!();
+                        
                         println!("{}", "  🔄 Rust changes detected, rebuilding...".yellow());
                         
                         match crate::commands::build::build_platform(platform, false) {
@@ -212,12 +217,12 @@ fn launch_linux_app_background() -> Result<()> {
         .find(|e| {
             let name = e.file_name();
             let name_str = name.to_string_lossy();
-            name_str.starts_with("lib") && name_str.ends_with("ffi.so")
+            name_str.starts_with("lib") && name_str.ends_with("core.so")
         })
         .map(|e| e.path())
         .context("Could not find FFI library")?;
     
-    std::fs::copy(&lib_path, "platforms/linux/libffi.so")
+    std::fs::copy(&lib_path, "platforms/linux/libcore.so")
         .context("Failed to copy library to platforms/linux")?;
     
     // Launch Python app in background

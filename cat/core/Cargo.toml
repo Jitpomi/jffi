@@ -1,0 +1,10 @@
+[package]
+name = "cat-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "lib"]
+
+[dependencies]
+uniffi = { version = "0.31.0", features = ["cli"] }

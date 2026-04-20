@@ -56,26 +56,12 @@ fn create_app_state_swift(dir: &PathBuf, template: &str) -> Result<()> {
 
 class AppState: ObservableObject {
     @Published var greeting: String = ""
-    private let ffiApp: FfiApp?
+    let core: Core
 
     init() {
-        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
-            self.ffiApp = nil
-            self.greeting = "Hello from Preview"
-            return
-        }
-
-        let app = FfiApp()
-        self.ffiApp = app
-        self.greeting = app.greeting()
-    }
-
-    func refresh() {
-        guard let ffiApp = ffiApp else {
-            self.greeting = "Hello from Preview"
-            return
-        }
-        self.greeting = ffiApp.greeting()
+        let core = Core()
+        self.core = core
+        self.greeting = core.greeting()
     }
 }
 "#,
@@ -83,42 +69,12 @@ class AppState: ObservableObject {
 
 class AppState: ObservableObject {
     @Published var count: Int64 = 0
-    private let ffiApp: FfiApp?
+    let core: Core
 
     init() {
-        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
-            self.ffiApp = nil
-            self.count = 42
-            return
-        }
-
-        let app = FfiApp()
-        self.ffiApp = app
-        self.count = app.get()
-    }
-
-    func inc() {
-        guard let ffiApp = ffiApp else {
-            self.count += 1
-            return
-        }
-        self.count = ffiApp.inc()
-    }
-
-    func dec() {
-        guard let ffiApp = ffiApp else {
-            self.count -= 1
-            return
-        }
-        self.count = ffiApp.dec()
-    }
-
-    func reset() {
-        guard let ffiApp = ffiApp else {
-            self.count = 0
-            return
-        }
-        self.count = ffiApp.reset()
+        let core = Core()
+        self.core = core
+        self.count = core.get()
     }
 }
 "#,
@@ -126,34 +82,12 @@ class AppState: ObservableObject {
 
 class AppState: ObservableObject {
     @Published var items: [ItemViewModel] = []
-    private let ffiApp: FfiApp?
+    let core: Core
     
     init() {
-        if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
-            self.ffiApp = nil
-            self.items = []
-            return
-        }
-
-        let app = FfiApp()
-        self.ffiApp = app
-        self.items = app.getItems()
-    }
-    
-    func addItem(title: String) {
-        guard let ffiApp = ffiApp else { return }
-        let id = UUID().uuidString
-        self.items = ffiApp.addItem(id: id, title: title)
-    }
-    
-    func toggleItem(id: String) {
-        guard let ffiApp = ffiApp else { return }
-        self.items = ffiApp.toggleItem(id: id)
-    }
-    
-    func deleteItem(id: String) {
-        guard let ffiApp = ffiApp else { return }
-        self.items = ffiApp.deleteItem(id: id)
+        let core = Core()
+        self.core = core
+        self.items = core.getItems()
     }
 }
 
@@ -181,7 +115,7 @@ struct ContentView: View {
                 .padding(.horizontal)
 
             Button("Refresh") {
-                appState.refresh()
+                appState.greeting = appState.core.greeting()
             }
             .buttonStyle(.borderedProminent)
         }
@@ -209,14 +143,20 @@ struct ContentView: View {
                 .font(.system(size: 64, weight: .bold, design: .rounded))
 
             HStack(spacing: 12) {
-                Button("-") { appState.dec() }
-                    .buttonStyle(.borderedProminent)
+                Button("-") {
+                    appState.count = appState.core.dec()
+                }
+                .buttonStyle(.borderedProminent)
 
-                Button("Reset") { appState.reset() }
-                    .buttonStyle(.bordered)
+                Button("Reset") {
+                    appState.count = appState.core.reset()
+                }
+                .buttonStyle(.borderedProminent)
 
-                Button("+") { appState.inc() }
-                    .buttonStyle(.borderedProminent)
+                Button("+") {
+                    appState.count = appState.core.inc()
+                }
+                .buttonStyle(.borderedProminent)
             }
         }
         .padding()
@@ -272,7 +212,8 @@ struct ContentView: View {
                                 ForEach(appState.items) { item in
                                     TaskRow(item: item) {
                                         withAnimation(.spring(response: 0.3)) {
-                                            appState.toggleItem(id: item.id)
+                                            _ = appState.core.toggleItem(id: item.id)
+                                            appState.items = appState.core.getItems()
                                         }
                                     }
                                 }
@@ -388,16 +329,17 @@ struct EmptyStateView: View {
 struct AddItemView: View {
     @EnvironmentObject var appState: AppState
     @Binding var isPresented: Bool
-    @State private var title = ""
+    @State private var newItemTitle = ""
     @FocusState private var isFocused: Bool
 
     var body: some View {
         NavigationView {
             Form {
-                TextField("Title", text: $title)
+                TextField("Title", text: $newItemTitle)
                     .onSubmit {
-                        if !title.isEmpty {
-                            appState.addItem(title: title)
+                        if !newItemTitle.isEmpty {
+                            _ = appState.core.addItem(id: UUID().uuidString, title: newItemTitle)
+                            appState.items = appState.core.getItems()
                             isPresented = false
                         }
                     }
@@ -408,10 +350,12 @@ struct AddItemView: View {
                     isPresented = false
                 },
                 trailing: Button("Add") {
-                    appState.addItem(title: title)
+                    _ = appState.core.addItem(id: UUID().uuidString, title: newItemTitle)
+                    appState.items = appState.core.getItems()
+                    newItemTitle = ""
                     isPresented = false
                 }
-                .disabled(title.isEmpty)
+                .disabled(newItemTitle.isEmpty)
             )
         }
     }
@@ -593,7 +537,7 @@ fn create_bridging_header(dir: &PathBuf, name: &str) -> Result<()> {
 #ifndef BridgingHeader_h
 #define BridgingHeader_h
 
-#import "{}_ffiFFI.h"
+#import "{}_coreFFI.h"
 
 #endif /* BridgingHeader_h */
 "#, module_name);

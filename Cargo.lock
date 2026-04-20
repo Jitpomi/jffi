@@ -341,7 +341,10 @@ dependencies = [
  "dialoguer",
  "indicatif",
  "notify",
+ "proc-macro2",
+ "quote",
  "serde",
+ "syn",
  "toml",
 ]
 

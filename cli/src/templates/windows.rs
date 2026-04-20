@@ -239,12 +239,12 @@ namespace {}
     public sealed partial class MainWindow : Window
     {{
         private ObservableCollection<TaskItem> tasks = new ObservableCollection<TaskItem>();
-        private FfiApp ffiApp;
+        private Core core;
 
         public MainWindow()
         {{
             this.InitializeComponent();
-            ffiApp = new FfiApp();
+            core = new Core();
             TasksList.ItemsSource = tasks;
             LoadTasks();
             UpdateStats();
@@ -253,7 +253,7 @@ namespace {}
         private void LoadTasks()
         {{
             tasks.Clear();
-            var items = ffiApp.GetItems();
+            var items = core.GetItems();
             foreach (var item in items)
             {{
                 tasks.Add(new TaskItem
@@ -291,7 +291,7 @@ namespace {}
             if (result == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(textBox.Text))
             {{
                 var id = Guid.NewGuid().ToString();
-                var items = ffiApp.AddItem(id, textBox.Text);
+                var items = core.AddItem(id, textBox.Text);
                 
                 tasks.Clear();
                 foreach (var item in items)
@@ -311,7 +311,7 @@ namespace {}
         {{
             if (sender is CheckBox checkBox && checkBox.Tag is string id)
             {{
-                var items = ffiApp.ToggleItem(id);
+                var items = core.ToggleItem(id);
                 tasks.Clear();
                 foreach (var item in items)
                 {{

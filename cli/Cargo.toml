@@ -26,3 +26,6 @@ indicatif = "0.17"
 notify = "6.1"
 crossbeam-channel = "0.5"
 dialoguer = "0.11"
+syn = { version = "2.0", features = ["full", "parsing", "visit"] }
+quote = "1.0"
+proc-macro2 = "1.0"

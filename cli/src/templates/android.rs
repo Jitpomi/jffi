@@ -3,7 +3,7 @@ use colored::*;
 use std::fs;
 use std::path::PathBuf;
 
-pub fn create_android_project(platforms_dir: &PathBuf, name: &str) -> Result<()> {
+pub fn create_android_project(platforms_dir: &PathBuf, name: &str, template: &str) -> Result<()> {
     let android_dir = platforms_dir.join("android");
     fs::create_dir_all(&android_dir)?;
     
@@ -13,7 +13,7 @@ pub fn create_android_project(platforms_dir: &PathBuf, name: &str) -> Result<()>
     create_gradle_files(&android_dir, name)?;
     create_gradle_wrapper(&android_dir)?;
     create_manifest(&android_dir, name)?;
-    create_kotlin_sources(&android_dir, name)?;
+    create_kotlin_sources(&android_dir, name, template)?;
     create_resources(&android_dir)?;
     
     Ok(())
@@ -114,6 +114,9 @@ dependencies {{
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     
+    // Compose preview tooling
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    
     // JNA for UniFFI bindings
     implementation("net.java.dev.jna:jna:5.13.0@aar")
 }}
@@ -160,14 +163,93 @@ fn create_manifest(dir: &PathBuf, name: &str) -> Result<()> {
     Ok(())
 }
 
-fn create_kotlin_sources(dir: &PathBuf, name: &str) -> Result<()> {
+fn create_kotlin_sources(dir: &PathBuf, name: &str, template: &str) -> Result<()> {
     let package_name = format!("com.example.{}", name.replace("-", ""));
     let package_path = package_name.replace(".", "/");
+    let module_name = name.replace("-", "_");
     let kotlin_dir = dir.join(format!("app/src/main/java/{}", package_path));
     fs::create_dir_all(&kotlin_dir)?;
     
-    // MainActivity.kt
-    let main_activity = format!(r#"package {}
+    // MainActivity.kt based on template
+    let main_activity = if template == "hello" {
+        format!(r#"package {}
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import uniffi.{}_core.Core
+
+class MainActivity : ComponentActivity() {{
+    override fun onCreate(savedInstanceState: Bundle?) {{
+        super.onCreate(savedInstanceState)
+        setContent {{
+            MaterialTheme {{
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {{
+                    HelloApp()
+                }}
+            }}
+        }}
+    }}
+}}
+
+@Composable
+fun HelloApp(initialGreeting: String = "Loading...") {{
+    var greeting by remember {{ mutableStateOf(initialGreeting) }}
+    
+    // Only create Core and fetch real greeting in real app (not preview)
+    if (initialGreeting == "Loading...") {{
+        LaunchedEffect(Unit) {{
+            val core = Core()
+            greeting = core.greeting()
+        }}
+    }}
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {{
+        Text(
+            text = greeting,
+            style = MaterialTheme.typography.headlineMedium
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Button(onClick = {{
+            greeting = core.greeting()
+        }}) {{
+            Text("Refresh")
+        }}
+    }}
+}}
+
+@Preview(
+    name = "Hello Screen",
+    showBackground = true,
+    backgroundColor = 0xFFF5F5F5
+)
+@Composable
+fun HelloAppPreview() {{
+    // Preview uses same HelloApp but with hardcoded greeting
+    HelloApp(initialGreeting = "Hello from JFFI")
+}}
+"#, package_name, module_name)
+    } else {
+        // Default todo template
+        format!(r#"package {}
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -185,6 +267,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {{
@@ -436,7 +519,21 @@ data class TodoItem(
     val title: String,
     val completed: Boolean
 )
-"#, package_name);
+
+@Preview(
+    name = "Todo Screen",
+    showBackground = true,
+    backgroundColor = 0xFFEDE7F6
+)
+@Composable
+fun TodoAppPreview() {{
+    MaterialTheme {{
+        TodoApp()
+    }}
+}}
+"#, package_name)
+    };
+    
     fs::write(kotlin_dir.join("MainActivity.kt"), main_activity)?;
     
     Ok(())

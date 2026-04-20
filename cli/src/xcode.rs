@@ -59,7 +59,7 @@ if [ -z \"$TARGET_DIR\" ]; then\n\
   exit 0\n\
 fi\n\
 \n\
-FFI_LIB=\"${{PROJECT_DIR}}/../../target/$TARGET_DIR/${{CONFIGURATION}}/lib{module_name}_ffi.dylib\"\n\
+FFI_LIB=\"${{PROJECT_DIR}}/../../target/$TARGET_DIR/${{CONFIGURATION}}/lib{module_name}_core.dylib\"\n\
 \n\
 if [ -f \"$FFI_LIB\" ]; then\n\
   echo \"Copying FFI library: $FFI_LIB\"\n\
@@ -89,7 +89,7 @@ fi\n",
 		A1000002000000000000001 /* ContentView.swift in Sources */ = {{isa = PBXBuildFile; fileRef = A2000002000000000000001 /* ContentView.swift */; }};
 		A1000003000000000000001 /* AppState.swift in Sources */ = {{isa = PBXBuildFile; fileRef = A2000003000000000000001 /* AppState.swift */; }};
 		A1000004000000000000001 /* Assets.xcassets in Resources */ = {{isa = PBXBuildFile; fileRef = A2000004000000000000001 /* Assets.xcassets */; }};
-		A1000007000000000000001 /* {module_name}_ffi.swift in Sources */ = {{isa = PBXBuildFile; fileRef = A2000007000000000000001 /* {module_name}_ffi.swift */; }};
+		A1000007000000000000001 /* {module_name}_core.swift in Sources */ = {{isa = PBXBuildFile; fileRef = A2000007000000000000001 /* {module_name}_core.swift */; }};
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -100,7 +100,7 @@ fi\n",
 		A2000004000000000000001 /* Assets.xcassets */ = {{isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; }};
 		A2000005000000000000001 /* Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; }};
 		A2000006000000000000001 /* BridgingHeader.h */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BridgingHeader.h; sourceTree = "<group>"; }};
-		A2000007000000000000001 /* {module_name}_ffi.swift */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {module_name}_ffi.swift; sourceTree = "<group>"; }};
+		A2000007000000000000001 /* {module_name}_core.swift */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {module_name}_core.swift; sourceTree = "<group>"; }};
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -128,7 +128,7 @@ fi\n",
 				A2000001000000000000001 /* {app_name_pascal}App.swift */,
 				A2000002000000000000001 /* ContentView.swift */,
 				A2000003000000000000001 /* AppState.swift */,
-				A2000007000000000000001 /* {module_name}_ffi.swift */,
+				A2000007000000000000001 /* {module_name}_core.swift */,
 				A2000004000000000000001 /* Assets.xcassets */,
 				A2000005000000000000001 /* Info.plist */,
 				A2000006000000000000001 /* BridgingHeader.h */,
@@ -216,7 +216,7 @@ fi\n",
 				A1000002000000000000001 /* ContentView.swift in Sources */,
 				A1000001000000000000001 /* {app_name_pascal}App.swift in Sources */,
 				A1000003000000000000001 /* AppState.swift in Sources */,
-				A1000007000000000000001 /* {module_name}_ffi.swift in Sources */,
+				A1000007000000000000001 /* {module_name}_core.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		}};
@@ -391,7 +391,7 @@ fi\n",
 					"$(PROJECT_DIR)/../../target/x86_64-apple-ios/debug",
 				);
 				MARKETING_VERSION = 1.0;
-				OTHER_LDFLAGS = "-l{module_name}_ffi";
+				OTHER_LDFLAGS = "-l{module_name}_core";
 				PRODUCT_BUNDLE_IDENTIFIER = {bundle_id};
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -429,7 +429,7 @@ fi\n",
 					"$(PROJECT_DIR)/../../target/x86_64-apple-ios/release",
 				);
 				MARKETING_VERSION = 1.0;
-				OTHER_LDFLAGS = "-l{module_name}_ffi";
+				OTHER_LDFLAGS = "-l{module_name}_core";
 				PRODUCT_BUNDLE_IDENTIFIER = {bundle_id};
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

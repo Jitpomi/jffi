@@ -16,19 +16,11 @@ fn validate_project_structure() -> Result<()> {
         );
     }
     
-    if !Path::new("ffi").exists() {
-        anyhow::bail!(
-            "{}\n\n{}",
-            "Error: Missing 'ffi' directory.".red().bold(),
-            "Your project structure appears incomplete. Expected directories: core/, ffi/, platforms/"
-        );
-    }
-    
     if !Path::new("core").exists() {
         anyhow::bail!(
             "{}\n\n{}",
             "Error: Missing 'core' directory.".red().bold(),
-            "Your project structure appears incomplete. Expected directories: core/, ffi/, platforms/"
+            "Your project structure appears incomplete. Expected directories: core/, platforms/"
         );
     }
     
@@ -188,7 +180,7 @@ fn build_ios_target(release: bool, target_type: &str) -> Result<()> {
     if release {
         args.push("--release");
     }
-    args.extend(&["--manifest-path", "ffi/Cargo.toml", "--target", target]);
+    args.extend(&["--manifest-path", "core/Cargo.toml", "--target", target]);
     
     let status = Command::new("cargo")
         .env("CARGO_TARGET_DIR", "target")
@@ -204,7 +196,7 @@ fn build_ios_target(release: bool, target_type: &str) -> Result<()> {
     
     // Find the actual library file (it will have underscores instead of hyphens)
     let lib_dir = format!("target/{}/{}", target, profile);
-    let _lib_pattern = format!("{}/lib*ffi.dylib", lib_dir);
+    let _lib_pattern = format!("{}/lib*core.dylib", lib_dir);
     
     let lib_path = std::fs::read_dir(&lib_dir)
         .context("Failed to read target directory")?
@@ -212,20 +204,14 @@ fn build_ios_target(release: bool, target_type: &str) -> Result<()> {
         .find(|e| {
             let name = e.file_name();
             let name_str = name.to_string_lossy();
-            name_str.starts_with("lib") && name_str.ends_with("ffi.dylib")
+            name_str.starts_with("lib") && name_str.ends_with("core.dylib")
         })
         .map(|e| e.path())
         .context("Could not find FFI library")?;
     
-    let status = Command::new("cargo")
-        .env("CARGO_TARGET_DIR", "target")
+    // Generate Swift bindings using uniffi-bindgen
+    let status = Command::new("uniffi-bindgen")
         .args(&[
-            "run",
-            "--manifest-path",
-            "ffi/Cargo.toml",
-            "--bin",
-            "uniffi-bindgen",
-            "--",
             "generate",
             "--library",
             lib_path.to_str().unwrap(),
@@ -271,7 +257,7 @@ fn build_android(release: bool) -> Result<()> {
         if release {
             args.push("--release");
         }
-        args.extend(&["--manifest-path", "ffi/Cargo.toml"]);
+        args.extend(&["--manifest-path", "core/Cargo.toml"]);
         
         let status = Command::new("cargo")
             .env("CARGO_TARGET_DIR", "target")
@@ -292,20 +278,14 @@ fn build_android(release: bool) -> Result<()> {
         .find(|e| {
             let name = e.file_name();
             let name_str = name.to_string_lossy();
-            name_str.starts_with("lib") && name_str.ends_with("ffi.so")
+            name_str.starts_with("lib") && name_str.ends_with("core.so")
         })
         .map(|e| e.path())
         .context("Could not find FFI library")?;
     
-    let status = Command::new("cargo")
-        .env("CARGO_TARGET_DIR", "target")
+    // Generate Kotlin bindings using uniffi-bindgen
+    let status = Command::new("uniffi-bindgen")
         .args(&[
-            "run",
-            "--manifest-path",
-            "ffi/Cargo.toml",
-            "--bin",
-            "uniffi-bindgen",
-            "--",
             "generate",
             "--library",
             lib_path.to_str().unwrap(),
@@ -336,7 +316,7 @@ fn build_macos(arch: &str, release: bool) -> Result<()> {
     if release {
         args.push("--release");
     }
-    args.extend(&["--manifest-path", "ffi/Cargo.toml", "--target", &target]);
+    args.extend(&["--manifest-path", "core/Cargo.toml", "--target", &target]);
     
     let status = Command::new("cargo")
         .env("CARGO_TARGET_DIR", "target")
@@ -359,20 +339,14 @@ fn build_macos(arch: &str, release: bool) -> Result<()> {
         .find(|e| {
             let name = e.file_name();
             let name_str = name.to_string_lossy();
-            name_str.starts_with("lib") && name_str.ends_with("ffi.dylib")
+            name_str.starts_with("lib") && name_str.ends_with("core.dylib")
         })
         .map(|e| e.path())
         .context("Could not find FFI library")?;
     
-    let status = Command::new("cargo")
-        .env("CARGO_TARGET_DIR", "target")
+    // Generate Swift bindings using uniffi-bindgen
+    let status = Command::new("uniffi-bindgen")
         .args(&[
-            "run",
-            "--manifest-path",
-            "ffi/Cargo.toml",
-            "--bin",
-            "uniffi-bindgen",
-            "--",
             "generate",
             "--library",
             lib_path.to_str().unwrap(),
@@ -405,7 +379,7 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
     if release {
         args.push("--release");
     }
-    args.extend(&["--target", &target, "--manifest-path", "ffi/Cargo.toml"]);
+    args.extend(&["--target", &target, "--manifest-path", "core/Cargo.toml"]);
     
     let status = Command::new("cargo")
         .env("CARGO_TARGET_DIR", "target")
@@ -424,9 +398,9 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
     let lib_name = std::env::current_dir()?
         .file_name()
         .and_then(|n| n.to_str())
-        .unwrap_or("ffi")
+        .unwrap_or("core")
         .replace("-", "_");
-    let lib_path = format!("target/{}/{}/{}_ffi.dll", target, profile, lib_name);
+    let lib_path = format!("target/{}/{}/{}_core.dll", target, profile, lib_name);
     
     let status = Command::new("uniffi-bindgen-cs")
         .arg("--library")
@@ -441,8 +415,8 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
     }
     
     // Copy the .dll to platforms/windows for the build
-    let lib_path = format!("target/{}/{}/{}_ffi.dll", target, profile, lib_name);
-    let dll_name = format!("{}_ffi.dll", lib_name);
+    let lib_path = format!("target/{}/{}/{}_core.dll", target, profile, lib_name);
+    let dll_name = format!("{}_core.dll", lib_name);
     if std::path::Path::new(&lib_path).exists() {
         std::fs::copy(&lib_path, format!("platforms/windows/{}", dll_name))
             .context("Failed to copy DLL to platforms/windows")?;
@@ -501,12 +475,12 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
     println!("  {} Copying FFI DLL to output directory...", "→".bright_blue());
     let output_dir = "platforms/windows/bin/x64/Debug/net8.0-windows10.0.19041.0";
     if std::path::Path::new(output_dir).exists() {
-        let dll_source = format!("platforms/windows/{}_ffi.dll", lib_name);
-        let dll_dest = format!("{}/{}_ffi.dll", output_dir, lib_name);
+        let dll_source = format!("platforms/windows/{}_core.dll", lib_name);
+        let dll_dest = format!("{}/{}_core.dll", output_dir, lib_name);
         if std::path::Path::new(&dll_source).exists() {
             std::fs::copy(&dll_source, &dll_dest)
                 .context("Failed to copy FFI DLL to output directory")?;
-            println!("  {} Copied {} to output directory", "✓".green(), format!("{}_ffi.dll", lib_name));
+            println!("  {} Copied {} to output directory", "✓".green(), format!("{}_core.dll", lib_name));
         }
     }
     
@@ -515,7 +489,7 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
 }
 
 // Note: uniffi-bindgen is now run via 'cargo run --bin uniffi-bindgen' from the ffi directory
-// This uses the project's own uniffi-bindgen binary defined in ffi/Cargo.toml
+// This uses the project's own uniffi-bindgen binary defined in core/Cargo.toml
 
 fn ensure_uniffi_bindgen_cs() -> Result<()> {
     println!("  {} Checking uniffi-bindgen-cs...", "→".bright_blue());
@@ -553,7 +527,7 @@ fn build_linux(release: bool) -> Result<()> {
     if release {
         args.push("--release");
     }
-    args.extend(&["--manifest-path", "ffi/Cargo.toml"]);
+    args.extend(&["--manifest-path", "core/Cargo.toml"]);
     
     let status = Command::new("cargo")
         .args(&args)
@@ -574,7 +548,7 @@ fn build_linux(release: bool) -> Result<()> {
         .find(|e| {
             let name = e.file_name();
             let name_str = name.to_string_lossy();
-            name_str.starts_with("lib") && name_str.ends_with("ffi.so")
+            name_str.starts_with("lib") && name_str.ends_with("core.so")
         })
         .map(|e| e.path())
         .context("Could not find FFI library")?;
@@ -584,7 +558,7 @@ fn build_linux(release: bool) -> Result<()> {
         .args(&[
             "run",
             "--manifest-path",
-            "ffi/Cargo.toml",
+            "core/Cargo.toml",
             "--features",
             "uniffi/cli",
             "--bin",
