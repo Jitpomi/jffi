@@ -1,0 +1,203 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		{{UUID1}} /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = {{UUID2}} /* App.swift */; };
+		{{UUID3}} /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = {{UUID4}} /* ContentView.swift */; };
+		{{UUID5}} /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = {{UUID6}} /* AppState.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		{{UUID2}} /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
+		{{UUID4}} /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		{{UUID6}} /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		{{UUID7}} /* {{name_pascal}} */ = {isa = PBXFileReference; explicitFileType = "wrapper.application"; includeInIndex = 0; path = {{name_pascal}}.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		{{UUID8}} /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		{{UUID9}} /* {{name_pascal}}-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "{{name_pascal}}-Bridging-Header.h"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		{{UUID10}} /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		{{UUID11}} = {
+			isa = PBXGroup;
+			children = (
+				{{UUID2}} /* App.swift */,
+				{{UUID4}} /* ContentView.swift */,
+				{{UUID6}} /* AppState.swift */,
+				{{UUID8}} /* Info.plist */,
+				{{UUID9}} /* {{name_pascal}}-Bridging-Header.h */,
+			);
+			path = {{name_pascal}};
+			sourceTree = "<group>";
+		};
+		{{UUID12}} /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				{{UUID7}} /* {{name_pascal}}.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		{{UUID13}} = {
+			isa = PBXGroup;
+			children = (
+				{{UUID11}},
+				{{UUID12}},
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		{{UUID14}} /* {{name_pascal}} */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = {{UUID15}} /* Build configuration list for PBXNativeTarget "{{name_pascal}}" */;
+			buildPhases = (
+				{{UUID16}} /* Sources */,
+				{{UUID10}} /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = {{name_pascal}};
+			productName = {{name_pascal}};
+			productReference = {{UUID7}} /* {{name_pascal}}.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		{{UUID17}} /* Project object */ = {
+			isa = PBXProject;
+			buildConfigurationList = {{UUID18}} /* Build configuration list for PBXProject "{{name_pascal}}" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = {{UUID13}};
+			productRefGroup = {{UUID12}} /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				{{UUID14}} /* {{name_pascal}} */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		{{UUID16}} /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				{{UUID1}} /* App.swift in Sources */,
+				{{UUID3}} /* ContentView.swift in Sources */,
+				{{UUID5}} /* AppState.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		{{UUID19}} /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.{{name_package}};
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "{{name_pascal}}-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		{{UUID20}} /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.{{name_package}};
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "{{name_pascal}}-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		{{UUID15}} /* Build configuration list for PBXNativeTarget "{{name_pascal}}" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				{{UUID19}} /* Debug */,
+				{{UUID20}} /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		{{UUID18}} /* Build configuration list for PBXProject "{{name_pascal}}" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				{{UUID19}} /* Debug */,
+				{{UUID20}} /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = {{UUID17}} /* Project object */;
+}

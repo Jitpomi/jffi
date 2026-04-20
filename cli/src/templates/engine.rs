@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use rand::Rng;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -192,6 +193,19 @@ impl TemplateEngine {
         context.insert("name_pascal".to_string(), to_pascal_case(name));
         context.insert("name_snake".to_string(), name.replace("-", "_"));
         context.insert("name_package".to_string(), name.replace("-", ""));
+
+        // Generate UUIDs for Xcode project files
+        let mut rng = rand::thread_rng();
+        for i in 1..=25 {
+            let uuid = format!(
+                "{:08X}{:08X}{:08X}{:08X}",
+                rng.gen::<u32>(),
+                rng.gen::<u32>(),
+                rng.gen::<u32>(),
+                rng.gen::<u32>()
+            );
+            context.insert(format!("UUID{}", i), uuid);
+        }
 
         // Template manifest variables (can override defaults)
         for (key, value) in &manifest.variables {

@@ -12,9 +12,20 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="feat: unify all platform templates to hello pattern&#10; &#10;- Remove todo/counter template options (marked as coming soon)&#10;- Simplify all platform UIs (iOS, macOS, Android, Windows, Linux, Web)&#10;  to use only core.greeting() with refresh button&#10;- Block todo/counter selection from CLI and interactive UI&#10;- All platforms now generate consistent hello world app">
-      <change beforePath="$PROJECT_DIR$/cli/src/commands/new.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/commands/new.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/cli/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/commands/add.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/commands/add.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cli/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/templates/android.rs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/templates/engine.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/templates/engine.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/templates/ios.rs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/templates/linux.rs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/templates/macos.rs" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/cli/src/templates/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/templates/mod.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/templates/web.rs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/templates/windows.rs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/xcode.rs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/xcode_macos.rs" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

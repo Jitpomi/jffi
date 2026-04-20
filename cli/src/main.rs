@@ -4,8 +4,6 @@ use std::path::PathBuf;
 mod commands;
 mod templates;
 mod platforms;
-mod xcode;
-mod xcode_macos;
 
 #[derive(Parser)]
 #[command(name = "jffi")]
