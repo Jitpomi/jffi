@@ -19,6 +19,5 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        maven { url = uri("file://${rootProject.projectDir}/../../ffi-web/pkg") }
     }
 }

@@ -186,7 +186,7 @@
 				{{UUID20}} /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 		{{UUID18}} /* Build configuration list for PBXProject "{{name_pascal}}" */ = {
 			isa = XCConfigurationList;
@@ -195,7 +195,7 @@
 				{{UUID20}} /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 	};
