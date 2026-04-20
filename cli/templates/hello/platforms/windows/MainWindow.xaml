@@ -1,0 +1,18 @@
+<Window
+    x:Class="{{name_pascal}}.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="{{greeting}}"
+    Width="600"
+    Height="400">
+
+    <Grid Background="{ThemeResource LayerFillColorDefaultBrush}">
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="16">
+            <TextBlock x:Name="GreetingText" FontSize="24" FontWeight="SemiBold" TextAlignment="Center"/>
+            <Button x:Name="RefreshButton" Content="Refresh" Click="RefreshButton_Click" Style="{ThemeResource AccentButtonStyle}"/>
+        </StackPanel>
+    </Grid>
+</Window>

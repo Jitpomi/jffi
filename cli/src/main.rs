@@ -31,7 +31,7 @@ enum Commands {
         template: Option<String>,
         
         /// Project directory (defaults to current directory)
-        #[arg(short, long)]
+        #[arg(short = 'd', long)]
         path: Option<PathBuf>,
     },
     

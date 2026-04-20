@@ -1,0 +1,11 @@
+[template]
+name = "HelloWorld"
+description = "Simple hello world greeting app"
+author = "JFFI Team"
+version = "1.0.0"
+
+[variables]
+greeting = "Hello from JFFI"
+
+[platforms]
+supported = ["ios", "macos", "android", "windows", "linux", "web"]

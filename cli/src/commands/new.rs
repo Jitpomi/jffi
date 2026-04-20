@@ -1,98 +1,49 @@
 use anyhow::{Context, Result};
 use colored::*;
-use dialoguer::{theme::ColorfulTheme, Input, MultiSelect};
+use dialoguer::{theme::ColorfulTheme, Input, MultiSelect, Select};
+use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-// Template: Hello World
-const HELLO_TEMPLATE: &str = r##"use uniffi;
+use crate::templates::engine::TemplateEngine;
 
-#[derive(uniffi::Object)]
-pub struct Core {}
-
-#[uniffi::export]
-impl Core {
-    #[uniffi::constructor]
-    pub fn new() -> Self {
-        Self {}
+/// Find templates directory with multiple fallback locations
+fn find_templates_dir() -> Result<PathBuf> {
+    // 1. Development mode: use templates relative to source
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let dev_templates = manifest_dir.join("templates");
+    if dev_templates.exists() {
+        return Ok(dev_templates);
     }
-
-    pub fn greeting(&self) -> String {
-        "Hello from JFFI".to_string()
-    }
-}
-
-uniffi::setup_scaffolding!();
-"##;
-
-// Template: Todo (placeholder - unified platform pattern)
-const TODO_TEMPLATE: &str = r##"use uniffi;
-
-#[derive(uniffi::Object)]
-pub struct Core {}
-
-#[uniffi::export]
-impl Core {
-    #[uniffi::constructor]
-    pub fn new() -> Self {
-        Self {}
-    }
-
-    pub fn greeting(&self) -> String {
-        "Hello from JFFI (Todo Template)".to_string()
-    }
-}
-
-uniffi::setup_scaffolding!();
-"##;
-
-// Template: Counter (placeholder - unified platform pattern)
-const COUNTER_TEMPLATE: &str = r##"use uniffi;
-
-#[derive(uniffi::Object)]
-pub struct Core {}
-
-#[uniffi::export]
-impl Core {
-    #[uniffi::constructor]
-    pub fn new() -> Self {
-        Self {}
-    }
-
-    pub fn greeting(&self) -> String {
-        "Hello from JFFI (Counter Template)".to_string()
-    }
-}
-
-uniffi::setup_scaffolding!();
-"##;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ProjectTemplate {
-    Hello,
-    Todo,
-    Counter,
-}
-
-impl ProjectTemplate {
-    fn from_str(s: &str) -> Option<Self> {
-        match s.trim().to_lowercase().as_str() {
-            "hello" | "helloworld" => Some(Self::Hello),
-            "todo" => Some(Self::Todo),
-            "counter" => Some(Self::Counter),
-            _ => None,
+    
+    // 2. Installed mode: check relative to executable
+    let exe_path = env::current_exe()?;
+    
+    // If exe is in ~/.cargo/bin/, check for templates alongside
+    if let Some(exe_dir) = exe_path.parent() {
+        // Try ../share/jffi/templates (standard FHS layout)
+        let share_templates = exe_dir.join("../share/jffi/templates");
+        if share_templates.exists() {
+            return Ok(share_templates.canonicalize()?);
+        }
+        
+        // Try templates/ subdirectory of exe location
+        let local_templates = exe_dir.join("templates");
+        if local_templates.exists() {
+            return Ok(local_templates);
+        }
+        
+        // Try ../templates (if exe is in bin/)
+        let sibling_templates = exe_dir.join("../templates");
+        if sibling_templates.exists() {
+            return Ok(sibling_templates.canonicalize()?);
         }
     }
-
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::Hello => "hello",
-            Self::Todo => "todo",
-            Self::Counter => "counter",
-        }
-    }
+    
+    // 3. Default: return the development path even if it doesn't exist
+    // (will show a clearer error message later)
+    Ok(dev_templates)
 }
-
 
 pub fn create_project(
     name: &str,
@@ -102,20 +53,82 @@ pub fn create_project(
 ) -> Result<()> {
     let theme = ColorfulTheme::default();
 
-    let selected_template = if let Some(template) = template {
-        let t = ProjectTemplate::from_str(template)
-            .with_context(|| format!("Unknown template: {} (expected: hello)", template))?;
-        if t != ProjectTemplate::Hello {
-            anyhow::bail!("Template '{}' is coming soon. Only 'hello' is available.", template);
+    // Initialize template engine - find templates directory
+    let templates_dir = find_templates_dir()?;
+    let engine = TemplateEngine::new(&templates_dir);
+
+    // Discover available templates
+    let available_templates = engine.discover_templates()?;
+    
+    if available_templates.is_empty() {
+        anyhow::bail!("No templates found in {:?}", templates_dir);
+    }
+
+    // Show available templates and select one
+    let selected_template_name = if let Some(template_arg) = template {
+        let template_lower = template_arg.to_lowercase();
+        
+        if let Some(t) = available_templates.iter().find(|t| 
+            t.name.to_lowercase() == template_lower || 
+            t.path.file_name().map(|n| n.to_str()).flatten().map(|n| n.to_lowercase()) == Some(template_lower.clone())
+        ) {
+            if t.manifest.metadata.is_coming_soon() {
+                anyhow::bail!("Template '{}' is coming soon. Only 'hello' is available.", template_arg);
+            }
+            t.name.clone()
+        } else {
+            anyhow::bail!("Unknown template: {}. Available: {}", 
+                template_arg,
+                available_templates.iter()
+                    .filter(|t| !t.manifest.metadata.is_coming_soon())
+                    .map(|t| t.name.clone())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
         }
-        t
     } else {
+        // Filter available (non-coming-soon) templates
+        let available: Vec<_> = available_templates.iter()
+            .filter(|t| !t.manifest.metadata.is_coming_soon())
+            .collect();
+        
+        if available.is_empty() {
+            anyhow::bail!("No templates available yet.");
+        }
+        
+        // Show all templates with status
         println!("{}", "Available templates:".bright_green().bold());
-        println!("  ✓ HelloWorld");
-        println!("  ⏳ Todo (coming soon)");
-        println!("  ⏳ Counter (coming soon)");
+        for t in &available_templates {
+            if t.manifest.metadata.is_coming_soon() {
+                println!("  {} {} (coming soon)", "⏳".yellow(), t.name);
+            } else {
+                println!("  {} {} - {}", "✓".green(), t.name, t.manifest.template.description);
+            }
+        }
         println!();
-        ProjectTemplate::Hello
+        
+        // If only one template available, use it directly
+        // Otherwise, show interactive selection
+        if available.len() == 1 {
+            println!("Using template: {} - {}", 
+                available[0].name.bright_cyan(),
+                available[0].manifest.template.description
+            );
+            available[0].name.clone()
+        } else {
+            // Interactive template selection
+            let template_items: Vec<String> = available.iter()
+                .map(|t| format!("{} - {}", t.name, t.manifest.template.description))
+                .collect();
+            
+            let selected_idx = dialoguer::Select::with_theme(&theme)
+                .with_prompt("Choose a template")
+                .default(0)
+                .items(&template_items)
+                .interact()?;
+            
+            available[selected_idx].name.clone()
+        }
     };
 
     let platform_list: Vec<String> = if let Some(platforms) = platforms {
@@ -151,7 +164,6 @@ pub fn create_project(
         chosen.into_iter().map(|i| items[i].to_string()).collect()
     };
 
-
     let project_dir = if let Some(path) = path {
         path
     } else {
@@ -166,56 +178,50 @@ pub fn create_project(
     println!("{}", "🚀 Creating new JFFI app...".bright_green().bold());
     println!("   Name: {}", name.bright_cyan());
     println!("   Platforms: {}", platform_list.join(",").bright_cyan());
-    println!("   Template: {}", selected_template.as_str().bright_cyan());
+    println!("   Template: {}", selected_template_name.bright_cyan());
     println!();
 
     let platform_list_ref: Vec<&str> = platform_list.iter().map(|s| s.as_str()).collect();
-    create_project_structure(&project_dir, name, &platform_list_ref, selected_template)?;
+    
+    let template = engine.get_template(&selected_template_name)?
+        .ok_or_else(|| anyhow::anyhow!("Template '{}' not found", selected_template_name))?;
+    
+    create_project_structure(&engine, &template, &project_dir, name, &platform_list_ref)?;
     
     println!();
     println!("{}", "✅ Project created successfully!".bright_green().bold());
     println!();
     println!("Next steps:");
     println!("  cd {}", project_dir.file_name().and_then(|s| s.to_str()).unwrap_or(name));
-    println!("  jffi build --platform {}", platform_list_ref[0]);
-    println!("  jffi run --platform {}", platform_list_ref[0]);
+    println!();
+    println!("  {} - Compile the core and generate bindings", format!("jffi build --platform {}", platform_list_ref[0]).bright_cyan());
+    println!("  {} - Build and launch on simulator/device", format!("jffi run --platform {}", platform_list_ref[0]).bright_cyan());
+    println!("  {} - Watch mode (auto-rebuild on changes)", format!("jffi dev --platform {}", platform_list_ref[0]).bright_cyan());
     println!();
     
     Ok(())
 }
 
 fn create_project_structure(
+    engine: &TemplateEngine,
+    template: &crate::templates::engine::Template,
     dir: &PathBuf,
     name: &str,
     platforms: &[&str],
-    template: ProjectTemplate,
 ) -> Result<()> {
-    // Create root directory
     fs::create_dir_all(dir).context("Failed to create project directory")?;
     
-    // Create workspace Cargo.toml
     create_workspace_cargo_toml(dir, platforms)?;
     
-    // Create core crate with UniFFI annotations
-    create_core_crate(dir, name, template)?;
+    engine.generate(template, dir, name, platforms)?;
+    println!("  {} core/", "✓".green());
     
-    // Create FFI-Web crate if web platform is selected
     if platforms.contains(&"web") {
         create_ffi_web_crate(dir, name)?;
     }
     
-    // Create platform directories
-    for platform in platforms {
-        create_platform_dir(dir, name, platform)?;
-    }
-    
-    // Create config file
     create_config_file(dir, name, platforms)?;
-    
-    // Create Makefile
     create_makefile(dir, platforms)?;
-    
-    // Create README
     create_readme(dir, name, platforms)?;
     
     Ok(())
@@ -236,41 +242,10 @@ resolver = "2"
     Ok(())
 }
 
-fn create_core_crate(dir: &PathBuf, name: &str, template: ProjectTemplate) -> Result<()> {
-    let core_dir = dir.join("core");
-    fs::create_dir_all(core_dir.join("src"))?;
-    
-    // Cargo.toml with UniFFI
-    let cargo_toml = format!(r#"[package]
-name = "{}-core"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-crate-type = ["cdylib", "staticlib", "lib"]
-
-[dependencies]
-uniffi = {{ version = "0.31.0", features = ["cli"] }}
-"#, name);
-    fs::write(core_dir.join("Cargo.toml"), cargo_toml)?;
-    
-    // src/lib.rs with UniFFI annotations
-    let lib_rs = match template {
-        ProjectTemplate::Hello => HELLO_TEMPLATE,
-        ProjectTemplate::Todo => TODO_TEMPLATE,
-        ProjectTemplate::Counter => COUNTER_TEMPLATE,
-    };
-    fs::write(core_dir.join("src/lib.rs"), lib_rs)?;
-    
-    println!("  {} core/", "✓".green());
-    Ok(())
-}
-
 fn create_ffi_web_crate(dir: &PathBuf, name: &str) -> Result<()> {
     let ffi_web_dir = dir.join("ffi-web");
     fs::create_dir_all(ffi_web_dir.join("src"))?;
     
-    // Cargo.toml for WASM
     let cargo_toml = format!(r#"[package]
 name = "{}-ffi-web"
 version = "0.1.0"
@@ -282,8 +257,6 @@ crate-type = ["cdylib"]
 [dependencies]
 {}-core = {{ path = "../core" }}
 wasm-bindgen = "0.2"
-serde = {{ version = "1.0", features = ["derive"] }}
-serde-wasm-bindgen = "0.6"
 
 [profile.release]
 opt-level = "z"
@@ -291,91 +264,30 @@ lto = true
 "#, name, name);
     fs::write(ffi_web_dir.join("Cargo.toml"), cargo_toml)?;
     
-    // lib.rs with wasm-bindgen exports
     let module_name = name.replace("-", "_");
-    let lib_rs = format!(r#"use {}_core::{{App, Item}};
+    let lib_rs = format!(r#"use {}_core::Core;
 use wasm_bindgen::prelude::*;
-use serde::{{Serialize, Deserialize}};
 
-#[derive(Serialize, Deserialize)]
-pub struct ItemViewModel {{
-    pub id: String,
-    pub title: String,
-    pub completed: bool,
-}}
-
-impl From<&Item> for ItemViewModel {{
-    fn from(item: &Item) -> Self {{
-        Self {{
-            id: item.id.clone(),
-            title: item.title.clone(),
-            completed: item.completed,
-        }}
-    }}
+#[wasm_bindgen]
+pub struct FfiCore {{
+    core: Core,
 }}
 
 #[wasm_bindgen]
-pub struct FfiApp {{
-    app: App,
-}}
-
-#[wasm_bindgen]
-impl FfiApp {{
+impl FfiCore {{
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {{
-        Self {{
-            app: App::new(),
-        }}
+        Self {{ core: Core::new() }}
     }}
     
-    pub fn add_item(&mut self, id: String, title: String) -> JsValue {{
-        self.app.add_item(id, title);
-        let items: Vec<ItemViewModel> = self.app.get_items().iter().map(ItemViewModel::from).collect();
-        serde_wasm_bindgen::to_value(&items).unwrap()
-    }}
-    
-    pub fn toggle_item(&mut self, id: String) -> JsValue {{
-        self.app.toggle_item(&id);
-        let items: Vec<ItemViewModel> = self.app.get_items().iter().map(ItemViewModel::from).collect();
-        serde_wasm_bindgen::to_value(&items).unwrap()
-    }}
-    
-    pub fn delete_item(&mut self, id: String) -> JsValue {{
-        self.app.delete_item(&id);
-        let items: Vec<ItemViewModel> = self.app.get_items().iter().map(ItemViewModel::from).collect();
-        serde_wasm_bindgen::to_value(&items).unwrap()
-    }}
-    
-    pub fn get_items(&self) -> JsValue {{
-        let items: Vec<ItemViewModel> = self.app.get_items().iter().map(ItemViewModel::from).collect();
-        serde_wasm_bindgen::to_value(&items).unwrap()
+    pub fn greeting(&self) -> String {{
+        self.core.greeting()
     }}
 }}
 "#, module_name);
     fs::write(ffi_web_dir.join("src/lib.rs"), lib_rs)?;
     
     println!("  {} ffi-web/", "✓".green());
-    Ok(())
-}
-
-fn create_platform_dir(
-    dir: &PathBuf,
-    name: &str,
-    platform: &str,
-) -> Result<()> {
-    let platforms_dir = dir.join("platforms");
-    fs::create_dir_all(&platforms_dir)?;
-    
-    match platform {
-        "ios" => crate::templates::ios::create_ios_project(&platforms_dir, name, "hello")?,
-        "android" => crate::templates::android::create_android_project(&platforms_dir, name, "hello")?,
-        "macos" => crate::templates::macos::create_macos_project(&platforms_dir, name, "hello")?,
-        "windows" => crate::templates::windows::create_windows_project(&platforms_dir, name)?,
-        "linux" => crate::templates::linux::create_linux_project(&platforms_dir, name)?,
-        "web" => crate::templates::web::create_web_project(&platforms_dir, name)?,
-        _ => println!("  {} Unknown platform: {}", "✗".red(), platform),
-    }
-    
     Ok(())
 }
 
@@ -419,7 +331,7 @@ fn create_makefile(dir: &PathBuf, platforms: &[&str]) -> Result<()> {
     let makefile = format!(r#".PHONY: help build run dev clean
 
 help:
-	@echo "UniFFI App - Build Commands"
+	@echo "JFFI App - Build Commands"
 	@echo ""
 	@echo "  make build PLATFORM=<platform>  - Build for platform"
 	@echo "  make run PLATFORM=<platform>    - Run on platform"
@@ -475,7 +387,7 @@ jffi dev --platform {}
 ## Project Structure
 
 - `core/` - Business logic (pure Rust)
-- `ffi/` - FFI layer (UniFFI exports)
+- `ffi-web/` - WASM FFI layer (for web platform)
 - `platforms/` - Platform-specific UIs
 
 ## Development
@@ -485,11 +397,11 @@ Edit your business logic in `core/src/lib.rs`. The FFI bindings will be automati
 ## Adding Features
 
 1. Add logic to `core/src/lib.rs`
-2. Expose via `#[uniffi::export]` in `core/src/lib.rs`
+2. Expose via `#[uniffi::export]`
 3. Rebuild: `jffi build --platform <platform>`
 4. Update UI in `platforms/<platform>/`
 
-Built with [UniFFI Framework](https://github.com/mozilla/uniffi-rs)
+Built with [JFFI](https://github.com/yourusername/jffi)
 "#, name, 
     platforms.iter().map(|p| format!("- {}", p)).collect::<Vec<_>>().join("\n"),
     platforms[0], platforms[0], platforms[0]);

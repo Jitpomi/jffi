@@ -1,0 +1,12 @@
+[template]
+name = "Todo"
+description = "Full-featured todo app (coming soon)"
+author = "JFFI Team"
+version = "0.0.0"
+
+[platforms]
+supported = []
+
+[metadata]
+status = "coming_soon"
+message = "Todo template is coming soon. Only HelloWorld is available."

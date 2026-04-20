@@ -1,0 +1,12 @@
+[template]
+name = "Counter"
+description = "Simple counter app (coming soon)"
+author = "JFFI Team"
+version = "0.0.0"
+
+[platforms]
+supported = []
+
+[metadata]
+status = "coming_soon"
+message = "Counter template is coming soon. Only HelloWorld is available."
