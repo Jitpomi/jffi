@@ -82,168 +82,53 @@ fn create_window_py(dir: &PathBuf, name: &str) -> Result<()> {
 
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, GLib
+from gi.repository import Gtk, Adw
 
 from core_wrapper import CoreWrapper
 
 class {}(Adw.ApplicationWindow):
-    def __init__(self, **kwargs):"#, window_class);
-    let content = content + r#"
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
         self.core = CoreWrapper()
-        self.items = []
         
-        self.set_title("Today")
-        self.set_default_size(600, 450)
+        self.set_title("Hello from JFFI")
+        self.set_default_size(600, 400)
         
         # Create header bar
         header = Adw.HeaderBar()
-        add_button = Gtk.Button(icon_name="list-add-symbolic")
-        add_button.connect("clicked", self.on_add_clicked)
-        header.pack_end(add_button)
         
         # Create main content
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         main_box.append(header)
         
-        # Stats cards
-        stats_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        stats_box.set_margin_start(20)
-        stats_box.set_margin_end(20)
-        stats_box.set_margin_top(20)
-        stats_box.set_margin_bottom(20)
-        stats_box.set_homogeneous(True)
+        # Center content
+        center_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        center_box.set_vexpand(True)
+        center_box.set_valign(Gtk.Align.CENTER)
+        center_box.set_halign(Gtk.Align.CENTER)
         
-        self.total_label = self.create_stat_card("Total", "0")
-        self.active_label = self.create_stat_card("Active", "0")
-        self.done_label = self.create_stat_card("Done", "0")
+        # Greeting label
+        self.greeting_label = Gtk.Label()
+        self.greeting_label.add_css_class("title-1")
+        center_box.append(self.greeting_label)
         
-        stats_box.append(self.total_label)
-        stats_box.append(self.active_label)
-        stats_box.append(self.done_label)
+        # Refresh button
+        refresh_button = Gtk.Button(label="Refresh")
+        refresh_button.add_css_class("suggested-action")
+        refresh_button.connect("clicked", self.on_refresh_clicked)
+        center_box.append(refresh_button)
         
-        main_box.append(stats_box)
-        
-        # Tasks list
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_vexpand(True)
-        
-        self.list_box = Gtk.ListBox()
-        self.list_box.set_margin_start(20)
-        self.list_box.set_margin_end(20)
-        self.list_box.set_margin_bottom(20)
-        self.list_box.add_css_class("boxed-list")
-        
-        scrolled.set_child(self.list_box)
-        main_box.append(scrolled)
+        main_box.append(center_box)
         
         self.set_content(main_box)
-        self.refresh_items()
+        
+        # Load initial greeting
+        self.greeting_label.set_text(self.core.greeting())
     
-    def create_stat_card(self, title, value):
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        box.set_margin_top(16)
-        box.set_margin_bottom(16)
-        
-        value_label = Gtk.Label(label=value)
-        value_label.add_css_class("title-1")
-        
-        title_label = Gtk.Label(label=title)
-        title_label.add_css_class("dim-label")
-        
-        box.append(value_label)
-        box.append(title_label)
-        
-        frame = Gtk.Frame()
-        frame.set_child(box)
-        
-        return box
-    
-    def refresh_items(self):
-        self.items = self.core.get_items()
-        
-        # Update stats
-        total = len(self.items)
-        active = sum(1 for item in self.items if not item['completed'])
-        done = sum(1 for item in self.items if item['completed'])
-        
-        self.total_label.get_first_child().set_label(str(total))
-        self.active_label.get_first_child().set_label(str(active))
-        self.done_label.get_first_child().set_label(str(done))
-        
-        # Clear and rebuild list
-        while True:
-            row = self.list_box.get_row_at_index(0)
-            if row is None:
-                break
-            self.list_box.remove(row)
-        
-        for item in self.items:
-            row = self.create_task_row(item)
-            self.list_box.append(row)
-    
-    def create_task_row(self, item):
-        row = Gtk.ListBoxRow()
-        
-        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        box.set_margin_start(12)
-        box.set_margin_end(12)
-        box.set_margin_top(12)
-        box.set_margin_bottom(12)
-        
-        # Checkbox
-        check = Gtk.CheckButton()
-        check.set_active(item['completed'])
-        check.connect("toggled", self.on_toggle_clicked, item['id'])
-        
-        # Title
-        label = Gtk.Label(label=item['title'])
-        label.set_hexpand(True)
-        label.set_halign(Gtk.Align.START)
-        
-        if item['completed']:
-            label.add_css_class("dim-label")
-        
-        box.append(check)
-        box.append(label)
-        
-        row.set_child(box)
-        return row
-    
-    def on_add_clicked(self, button):
-        dialog = Adw.MessageDialog(
-            transient_for=self,
-            heading="New Task",
-            body="Enter task name:"
-        )
-        
-        entry = Gtk.Entry()
-        entry.set_margin_start(12)
-        entry.set_margin_end(12)
-        entry.set_margin_top(12)
-        entry.set_margin_bottom(12)
-        
-        dialog.set_extra_child(entry)
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("add", "Add")
-        dialog.set_response_appearance("add", Adw.ResponseAppearance.SUGGESTED)
-        
-        def on_response(dialog, response):
-            if response == "add":
-                title = entry.get_text()
-                if title:
-                    import uuid
-                    self.core.add_item(str(uuid.uuid4()), title)
-                    self.refresh_items()
-        
-        dialog.connect("response", on_response)
-        dialog.present()
-    
-    def on_toggle_clicked(self, check, item_id):
-        self.core.toggle_item(item_id)
-        self.refresh_items()
-"#;
+    def on_refresh_clicked(self, button):
+        self.greeting_label.set_text(self.core.greeting())
+"#, window_class);
     
     fs::write(dir.join("window.py"), content)?;
     Ok(())
@@ -259,18 +144,8 @@ class CoreWrapper:
     def __init__(self):
         self.core = Core()
     
-    def get_items(self):
-        items = self.core.get_items()
-        return [{{'id': item.id, 'title': item.title, 'completed': item.completed}} for item in items]
-    
-    def add_item(self, id, title):
-        self.core.add_item(id, title)
-    
-    def toggle_item(self, id):
-        self.core.toggle_item(id)
-    
-    def delete_item(self, id):
-        self.core.delete_item(id)
+    def greeting(self):
+        return self.core.greeting()
 "#, module_name);
     
     fs::write(dir.join("core_wrapper.py"), content)?;

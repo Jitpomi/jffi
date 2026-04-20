@@ -43,37 +43,9 @@ fn create_index_html(dir: &PathBuf, name: &str) -> Result<()> {
 </head>
 <body>
     <div id="app">
-        <header>
-            <h1>Today</h1>
-            <button id="add-btn" class="btn-primary">+ Add Task</button>
-        </header>
-        
-        <div class="stats">
-            <div class="stat-card">
-                <div class="stat-value" id="total-count">0</div>
-                <div class="stat-label">Total</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="active-count">0</div>
-                <div class="stat-label">Active</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="done-count">0</div>
-                <div class="stat-label">Done</div>
-            </div>
-        </div>
-        
-        <div id="tasks-container" class="tasks-list"></div>
-    </div>
-    
-    <div id="modal" class="modal hidden">
-        <div class="modal-content">
-            <h2>New Task</h2>
-            <input type="text" id="task-input" placeholder="Enter task name..." />
-            <div class="modal-actions">
-                <button id="cancel-btn" class="btn-secondary">Cancel</button>
-                <button id="submit-btn" class="btn-primary">Add</button>
-            </div>
+        <div class="greeting-container">
+            <h1 id="greeting">Loading...</h1>
+            <button id="refresh-btn" class="btn-primary">Refresh</button>
         </div>
     </div>
     
@@ -94,84 +66,12 @@ let core = null;
 async function initApp() {
     await init();
     core = new Core();
-    render();
-    setupEventListeners();
-}
-
-function render() {
-    const items = core.get_items();
-    renderStats(items);
-    renderTasks(items);
-}
-
-function renderStats(items) {
-    const total = items.length;
-    const active = items.filter(item => !item.completed).length;
-    const done = items.filter(item => item.completed).length;
     
-    document.getElementById('total-count').textContent = total;
-    document.getElementById('active-count').textContent = active;
-    document.getElementById('done-count').textContent = done;
-}
-
-function renderTasks(items) {
-    const container = document.getElementById('tasks-container');
-    container.innerHTML = '';
+    const greetingEl = document.getElementById('greeting');
+    greetingEl.textContent = core.greeting();
     
-    items.forEach(item => {
-        const taskEl = document.createElement('div');
-        taskEl.className = 'task-item';
-        
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.checked = item.completed;
-        checkbox.addEventListener('change', () => {
-            core.toggle_item(item.id);
-            render();
-        });
-        
-        const label = document.createElement('span');
-        label.textContent = item.title;
-        label.className = item.completed ? 'completed' : '';
-        
-        taskEl.appendChild(checkbox);
-        taskEl.appendChild(label);
-        container.appendChild(taskEl);
-    });
-}
-
-function setupEventListeners() {
-    const addBtn = document.getElementById('add-btn');
-    const modal = document.getElementById('modal');
-    const cancelBtn = document.getElementById('cancel-btn');
-    const submitBtn = document.getElementById('submit-btn');
-    const taskInput = document.getElementById('task-input');
-    
-    addBtn.addEventListener('click', () => {
-        modal.classList.remove('hidden');
-        taskInput.focus();
-    });
-    
-    cancelBtn.addEventListener('click', () => {
-        modal.classList.add('hidden');
-        taskInput.value = '';
-    });
-    
-    submitBtn.addEventListener('click', () => {
-        const title = taskInput.value.trim();
-        if (title) {
-            const id = crypto.randomUUID();
-            core.add_item(id, title);
-            render();
-            modal.classList.add('hidden');
-            taskInput.value = '';
-        }
-    });
-    
-    taskInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            submitBtn.click();
-        }
+    document.getElementById('refresh-btn').addEventListener('click', () => {
+        greetingEl.textContent = core.greeting();
     });
 }
 
@@ -193,163 +93,44 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     background: #f5f5f7;
     min-height: 100vh;
-    padding: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 #app {
-    max-width: 600px;
-    margin: 0 auto;
     background: white;
+    padding: 48px;
     border-radius: 16px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    overflow: hidden;
 }
 
-header {
-    background: white;
-    color: #1d1d1f;
-    padding: 24px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #e5e5e7;
+.greeting-container {
+    text-align: center;
 }
 
-h1 {
-    font-size: 28px;
+#greeting {
+    font-size: 24px;
     font-weight: 600;
+    color: #1d1d1f;
+    margin-bottom: 24px;
+    min-height: 32px;
 }
 
 .btn-primary {
     background: #007aff;
     color: white;
     border: none;
-    padding: 10px 20px;
+    padding: 12px 24px;
     border-radius: 8px;
     font-weight: 600;
+    font-size: 16px;
     cursor: pointer;
     transition: background 0.2s;
 }
 
 .btn-primary:hover {
     background: #0051d5;
-}
-
-.btn-secondary {
-    background: #e5e7eb;
-    color: #374151;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.stats {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-    padding: 24px;
-    background: #fafafa;
-}
-
-.stat-card {
-    background: white;
-    padding: 20px;
-    border-radius: 12px;
-    text-align: center;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.stat-value {
-    font-size: 32px;
-    font-weight: 700;
-    color: #1d1d1f;
-}
-
-.stat-label {
-    font-size: 14px;
-    color: #86868b;
-    margin-top: 4px;
-}
-
-.tasks-list {
-    padding: 24px;
-}
-
-.task-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px;
-    background: #fafafa;
-    border-radius: 8px;
-    margin-bottom: 8px;
-}
-
-.task-item input[type="checkbox"] {
-    width: 20px;
-    height: 20px;
-    cursor: pointer;
-}
-
-.task-item span {
-    flex: 1;
-    font-size: 16px;
-}
-
-.task-item span.completed {
-    text-decoration: line-through;
-    color: #9ca3af;
-}
-
-.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.modal.hidden {
-    display: none;
-}
-
-.modal-content {
-    background: white;
-    padding: 24px;
-    border-radius: 16px;
-    width: 90%;
-    max-width: 400px;
-}
-
-.modal-content h2 {
-    margin-bottom: 16px;
-    color: #111827;
-}
-
-.modal-content input {
-    width: 100%;
-    padding: 12px;
-    border: 2px solid #e5e7eb;
-    border-radius: 8px;
-    font-size: 16px;
-    margin-bottom: 16px;
-}
-
-.modal-content input:focus {
-    outline: none;
-    border-color: #007aff;
-}
-
-.modal-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
 }
 "#;
     

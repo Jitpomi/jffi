@@ -50,9 +50,8 @@ struct {}App: App {{
     Ok(())
 }
 
-fn create_app_state_swift(dir: &PathBuf, template: &str) -> Result<()> {
-    let content = match template {
-        "hello" => r#"import SwiftUI
+fn create_app_state_swift(dir: &PathBuf, _template: &str) -> Result<()> {
+    let content = r#"import SwiftUI
 
 class AppState: ObservableObject {
     @Published var greeting: String = ""
@@ -64,44 +63,14 @@ class AppState: ObservableObject {
         self.greeting = core.greeting()
     }
 }
-"#,
-        "counter" => r#"import SwiftUI
-
-class AppState: ObservableObject {
-    @Published var count: Int64 = 0
-    let core: Core
-
-    init() {
-        let core = Core()
-        self.core = core
-        self.count = core.get()
-    }
-}
-"#,
-        _ => r#"import SwiftUI
-
-class AppState: ObservableObject {
-    @Published var items: [ItemViewModel] = []
-    let core: Core
-    
-    init() {
-        let core = Core()
-        self.core = core
-        self.items = core.getItems()
-    }
-}
-
-extension ItemViewModel: Identifiable {}
-"#,
-    };
+"#;
     
     fs::write(dir.join("AppState.swift"), content)?;
     Ok(())
 }
 
-fn create_content_view_swift(dir: &PathBuf, template: &str) -> Result<()> {
-    let content = match template {
-        "hello" => r#"import SwiftUI
+fn create_content_view_swift(dir: &PathBuf, _template: &str) -> Result<()> {
+    let content = r#"import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
@@ -127,246 +96,7 @@ struct ContentView: View {
     ContentView()
         .environmentObject(AppState())
 }
-"#,
-        "counter" => r#"import SwiftUI
-
-struct ContentView: View {
-    @EnvironmentObject var appState: AppState
-
-    var body: some View {
-        VStack(spacing: 24) {
-            Text("Counter")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-
-            Text("\(appState.count)")
-                .font(.system(size: 64, weight: .bold, design: .rounded))
-
-            HStack(spacing: 12) {
-                Button("-") {
-                    appState.count = appState.core.dec()
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button("Reset") {
-                    appState.count = appState.core.reset()
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button("+") {
-                    appState.count = appState.core.inc()
-                }
-                .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding()
-    }
-}
-
-#Preview {
-    ContentView()
-        .environmentObject(AppState())
-}
-"#,
-        _ => r#"import SwiftUI
-
-struct ContentView: View {
-    @EnvironmentObject var appState: AppState
-    @State private var showingAddItem = false
-    
-    var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Header Stats
-                    HStack(spacing: 16) {
-                        StatCard(
-                            title: "Total",
-                            count: appState.items.count,
-                            color: .blue
-                        )
-                        StatCard(
-                            title: "Active",
-                            count: appState.items.filter { !$0.completed }.count,
-                            color: .orange
-                        )
-                        StatCard(
-                            title: "Done",
-                            count: appState.items.filter { $0.completed }.count,
-                            color: .green
-                        )
-                    }
-                    .padding(.horizontal)
-                    
-                    // Tasks List
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Tasks")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .padding(.horizontal)
-                        
-                        if appState.items.isEmpty {
-                            EmptyStateView()
-                        } else {
-                            VStack(spacing: 8) {
-                                ForEach(appState.items) { item in
-                                    TaskRow(item: item) {
-                                        withAnimation(.spring(response: 0.3)) {
-                                            _ = appState.core.toggleItem(id: item.id)
-                                            appState.items = appState.core.getItems()
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(.horizontal)
-                        }
-                    }
-                }
-                .padding(.vertical)
-            }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("Today")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showingAddItem = true }) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.blue)
-                    }
-                }
-            }
-            .sheet(isPresented: $showingAddItem) {
-                AddItemView(isPresented: $showingAddItem)
-                    .environmentObject(appState)
-            }
-        }
-    }
-}
-
-struct StatCard: View {
-    let title: String
-    let count: Int
-    let color: Color
-    
-    var body: some View {
-        VStack(spacing: 8) {
-            Text("\(count)")
-                .font(.system(size: 28, weight: .bold))
-                .foregroundColor(color)
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(.systemBackground))
-                .shadow(color: color.opacity(0.1), radius: 8, x: 0, y: 4)
-        )
-    }
-}
-
-struct TaskRow: View {
-    let item: ItemViewModel
-    let onToggle: () -> Void
-    
-    var body: some View {
-        Button(action: onToggle) {
-            HStack(spacing: 16) {
-                ZStack {
-                    Circle()
-                        .stroke(item.completed ? Color.green : Color.gray.opacity(0.3), lineWidth: 2)
-                        .frame(width: 24, height: 24)
-                    
-                    if item.completed {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.green)
-                    }
-                }
-                
-                Text(item.title)
-                    .font(.body)
-                    .strikethrough(item.completed)
-                    .foregroundColor(item.completed ? .secondary : .primary)
-                
-                Spacer()
-            }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(.systemBackground))
-            )
-            .opacity(item.completed ? 0.6 : 1.0)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-struct EmptyStateView: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "checkmark.circle")
-                .font(.system(size: 60))
-                .foregroundColor(.gray.opacity(0.3))
-            
-            Text("No tasks yet")
-                .font(.title3)
-                .fontWeight(.medium)
-                .foregroundColor(.secondary)
-            
-            Text("Tap + to add your first task")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 60)
-    }
-}
-
-struct AddItemView: View {
-    @EnvironmentObject var appState: AppState
-    @Binding var isPresented: Bool
-    @State private var newItemTitle = ""
-    @FocusState private var isFocused: Bool
-
-    var body: some View {
-        NavigationView {
-            Form {
-                TextField("Title", text: $newItemTitle)
-                    .onSubmit {
-                        if !newItemTitle.isEmpty {
-                            _ = appState.core.addItem(id: UUID().uuidString, title: newItemTitle)
-                            appState.items = appState.core.getItems()
-                            isPresented = false
-                        }
-                    }
-            }
-            .navigationTitle("New Item")
-            .navigationBarItems(
-                leading: Button("Cancel") {
-                    isPresented = false
-                },
-                trailing: Button("Add") {
-                    _ = appState.core.addItem(id: UUID().uuidString, title: newItemTitle)
-                    appState.items = appState.core.getItems()
-                    newItemTitle = ""
-                    isPresented = false
-                }
-                .disabled(newItemTitle.isEmpty)
-            )
-        }
-    }
-}
-
-#Preview {
-    ContentView()
-        .environmentObject(AppState())
-}
-"#,
-    };
+"#;
     
     fs::write(dir.join("ContentView.swift"), content)?;
     Ok(())

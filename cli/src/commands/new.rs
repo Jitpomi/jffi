@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
 use colored::*;
-use dialoguer::{theme::ColorfulTheme, Input, MultiSelect, Select};
+use dialoguer::{theme::ColorfulTheme, Input, MultiSelect};
 use std::fs;
 use std::path::PathBuf;
 
-// Template for Hello World
+// Template: Hello World
 const HELLO_TEMPLATE: &str = r##"use uniffi;
 
 #[derive(uniffi::Object)]
@@ -25,87 +25,42 @@ impl Core {
 uniffi::setup_scaffolding!();
 "##;
 
-// Template for Todo
+// Template: Todo (placeholder - unified platform pattern)
 const TODO_TEMPLATE: &str = r##"use uniffi;
-use std::sync::Mutex;
-
-#[derive(uniffi::Record)]
-pub struct ItemViewModel {
-    pub id: String,
-    pub title: String,
-    pub completed: bool,
-}
 
 #[derive(uniffi::Object)]
-pub struct Core {
-    items: Mutex<Vec<ItemViewModel>>,
-}
+pub struct Core {}
 
 #[uniffi::export]
 impl Core {
     #[uniffi::constructor]
     pub fn new() -> Self {
-        Self { items: Mutex::new(Vec::new()) }
+        Self {}
     }
-    
-    pub fn add_item(&self, id: String, title: String) -> Vec<ItemViewModel> {
-        let mut items = self.items.lock().unwrap();
-        items.push(ItemViewModel { id, title, completed: false });
-        items.clone()
-    }
-    
-    pub fn toggle_item(&self, id: String) -> Vec<ItemViewModel> {
-        let mut items = self.items.lock().unwrap();
-        if let Some(item) = items.iter_mut().find(|i| i.id == id) {
-            item.completed = !item.completed;
-        }
-        items.clone()
-    }
-    
-    pub fn get_items(&self) -> Vec<ItemViewModel> {
-        self.items.lock().unwrap().clone()
+
+    pub fn greeting(&self) -> String {
+        "Hello from JFFI (Todo Template)".to_string()
     }
 }
 
 uniffi::setup_scaffolding!();
 "##;
 
-// Template for Counter
+// Template: Counter (placeholder - unified platform pattern)
 const COUNTER_TEMPLATE: &str = r##"use uniffi;
-use std::sync::Mutex;
 
 #[derive(uniffi::Object)]
-pub struct Core {
-    count: Mutex<i64>,
-}
+pub struct Core {}
 
 #[uniffi::export]
 impl Core {
     #[uniffi::constructor]
     pub fn new() -> Self {
-        Self { count: Mutex::new(0) }
+        Self {}
     }
 
-    pub fn get(&self) -> i64 {
-        *self.count.lock().unwrap()
-    }
-
-    pub fn inc(&self) -> i64 {
-        let mut count = self.count.lock().unwrap();
-        *count += 1;
-        *count
-    }
-
-    pub fn dec(&self) -> i64 {
-        let mut count = self.count.lock().unwrap();
-        *count -= 1;
-        *count
-    }
-
-    pub fn reset(&self) -> i64 {
-        let mut count = self.count.lock().unwrap();
-        *count = 0;
-        *count
+    pub fn greeting(&self) -> String {
+        "Hello from JFFI (Counter Template)".to_string()
     }
 }
 
@@ -114,16 +69,16 @@ uniffi::setup_scaffolding!();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ProjectTemplate {
-    Todo,
     Hello,
+    Todo,
     Counter,
 }
 
 impl ProjectTemplate {
     fn from_str(s: &str) -> Option<Self> {
         match s.trim().to_lowercase().as_str() {
-            "todo" => Some(Self::Todo),
             "hello" | "helloworld" => Some(Self::Hello),
+            "todo" => Some(Self::Todo),
             "counter" => Some(Self::Counter),
             _ => None,
         }
@@ -131,12 +86,13 @@ impl ProjectTemplate {
 
     fn as_str(&self) -> &'static str {
         match self {
-            Self::Todo => "todo",
             Self::Hello => "hello",
+            Self::Todo => "todo",
             Self::Counter => "counter",
         }
     }
 }
+
 
 pub fn create_project(
     name: &str,
@@ -147,20 +103,19 @@ pub fn create_project(
     let theme = ColorfulTheme::default();
 
     let selected_template = if let Some(template) = template {
-        ProjectTemplate::from_str(template)
-            .with_context(|| format!("Unknown template: {} (expected: todo, hello, counter)", template))?
-    } else {
-        let items = ["Todo", "HelloWorld", "Counter"];
-        let idx = Select::with_theme(&theme)
-            .with_prompt("Choose a starter template")
-            .default(0)
-            .items(&items)
-            .interact()?;
-        match idx {
-            0 => ProjectTemplate::Todo,
-            1 => ProjectTemplate::Hello,
-            _ => ProjectTemplate::Counter,
+        let t = ProjectTemplate::from_str(template)
+            .with_context(|| format!("Unknown template: {} (expected: hello)", template))?;
+        if t != ProjectTemplate::Hello {
+            anyhow::bail!("Template '{}' is coming soon. Only 'hello' is available.", template);
         }
+        t
+    } else {
+        println!("{}", "Available templates:".bright_green().bold());
+        println!("  ✓ HelloWorld");
+        println!("  ⏳ Todo (coming soon)");
+        println!("  ⏳ Counter (coming soon)");
+        println!();
+        ProjectTemplate::Hello
     };
 
     let platform_list: Vec<String> = if let Some(platforms) = platforms {
@@ -196,15 +151,6 @@ pub fn create_project(
         chosen.into_iter().map(|i| items[i].to_string()).collect()
     };
 
-    if selected_template != ProjectTemplate::Todo {
-        let allowed = platform_list.iter().all(|p| p == "ios" || p == "macos" || p == "android");
-        if !allowed {
-            anyhow::bail!(
-                "Template '{}' is currently supported only for platforms: ios,macos,android",
-                selected_template.as_str()
-            );
-        }
-    }
 
     let project_dir = if let Some(path) = path {
         path
@@ -260,7 +206,7 @@ fn create_project_structure(
     
     // Create platform directories
     for platform in platforms {
-        create_platform_dir(dir, name, platform, template)?;
+        create_platform_dir(dir, name, platform)?;
     }
     
     // Create config file
@@ -416,15 +362,14 @@ fn create_platform_dir(
     dir: &PathBuf,
     name: &str,
     platform: &str,
-    template: ProjectTemplate,
 ) -> Result<()> {
     let platforms_dir = dir.join("platforms");
     fs::create_dir_all(&platforms_dir)?;
     
     match platform {
-        "ios" => crate::templates::ios::create_ios_project(&platforms_dir, name, template.as_str())?,
-        "android" => crate::templates::android::create_android_project(&platforms_dir, name, template.as_str())?,
-        "macos" => crate::templates::macos::create_macos_project(&platforms_dir, name, template.as_str())?,
+        "ios" => crate::templates::ios::create_ios_project(&platforms_dir, name, "hello")?,
+        "android" => crate::templates::android::create_android_project(&platforms_dir, name, "hello")?,
+        "macos" => crate::templates::macos::create_macos_project(&platforms_dir, name, "hello")?,
         "windows" => crate::templates::windows::create_windows_project(&platforms_dir, name)?,
         "linux" => crate::templates::linux::create_linux_project(&platforms_dir, name)?,
         "web" => crate::templates::web::create_web_project(&platforms_dir, name)?,

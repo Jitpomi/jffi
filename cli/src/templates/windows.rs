@@ -143,66 +143,16 @@ fn create_main_window_xaml(dir: &PathBuf, name: &str) -> Result<()> {
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d">
+    mc:Ignorable="d"
+    Title="Hello from JFFI"
+    Width="600"
+    Height="400">
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-
-        <!-- Header -->
-        <Grid Grid.Row="0" Background="{{ThemeResource CardBackgroundFillColorDefaultBrush}}" Padding="24">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="Today" FontSize="28" FontWeight="SemiBold" Grid.Column="0"/>
-            <Button x:Name="AddButton" Content="+ Add Task" Grid.Column="1" Click="AddButton_Click"/>
-        </Grid>
-
-        <!-- Stats -->
-        <Grid Grid.Row="1" Padding="24" Background="{{ThemeResource LayerFillColorDefaultBrush}}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-
-            <StackPanel Grid.Column="0" Padding="12" Background="{{ThemeResource CardBackgroundFillColorDefaultBrush}}" CornerRadius="8" Margin="0,0,8,0">
-                <TextBlock x:Name="TotalCount" FontSize="32" FontWeight="Bold" HorizontalAlignment="Center"/>
-                <TextBlock Text="Total" FontSize="14" Foreground="{{ThemeResource TextFillColorSecondaryBrush}}" HorizontalAlignment="Center"/>
-            </StackPanel>
-
-            <StackPanel Grid.Column="1" Padding="12" Background="{{ThemeResource CardBackgroundFillColorDefaultBrush}}" CornerRadius="8" Margin="0,0,8,0">
-                <TextBlock x:Name="ActiveCount" FontSize="32" FontWeight="Bold" HorizontalAlignment="Center"/>
-                <TextBlock Text="Active" FontSize="14" Foreground="{{ThemeResource TextFillColorSecondaryBrush}}" HorizontalAlignment="Center"/>
-            </StackPanel>
-
-            <StackPanel Grid.Column="2" Padding="12" Background="{{ThemeResource CardBackgroundFillColorDefaultBrush}}" CornerRadius="8">
-                <TextBlock x:Name="DoneCount" FontSize="32" FontWeight="Bold" HorizontalAlignment="Center"/>
-                <TextBlock Text="Done" FontSize="14" Foreground="{{ThemeResource TextFillColorSecondaryBrush}}" HorizontalAlignment="Center"/>
-            </StackPanel>
-        </Grid>
-
-        <!-- Tasks List -->
-        <ScrollViewer Grid.Row="2" Padding="24">
-            <ItemsControl x:Name="TasksList">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Padding="16" Background="{{ThemeResource LayerFillColorDefaultBrush}}" CornerRadius="8" Margin="0,0,0,8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <CheckBox Grid.Column="0" IsChecked="{{Binding Completed}}" Margin="0,0,12,0" Click="TaskCheckBox_Click" Tag="{{Binding Id}}"/>
-                            <TextBlock Grid.Column="1" Text="{{Binding Title}}" VerticalAlignment="Center"/>
-                        </Grid>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+    <Grid Background="{{ThemeResource LayerFillColorDefaultBrush}}">
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="16">
+            <TextBlock x:Name="GreetingText" FontSize="24" FontWeight="SemiBold" TextAlignment="Center"/>
+            <Button x:Name="RefreshButton" Content="Refresh" Click="RefreshButton_Click" Style="{{ThemeResource AccentButtonStyle}}"/>
+        </StackPanel>
     </Grid>
 </Window>
 "#, class_name);
@@ -222,115 +172,24 @@ fn create_main_window_xaml_cs(dir: &PathBuf, name: &str) -> Result<()> {
     
     let content = format!(r#"using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using System;
-using System.Collections.ObjectModel;
-using System.Linq;
 using uniffi.{}_ffi;
 
 namespace {}
 {{
-    public class TaskItem
-    {{
-        public string Id {{ get; set; }}
-        public string Title {{ get; set; }}
-        public bool Completed {{ get; set; }}
-    }}
-
     public sealed partial class MainWindow : Window
     {{
-        private ObservableCollection<TaskItem> tasks = new ObservableCollection<TaskItem>();
         private Core core;
 
         public MainWindow()
         {{
             this.InitializeComponent();
             core = new Core();
-            TasksList.ItemsSource = tasks;
-            LoadTasks();
-            UpdateStats();
+            GreetingText.Text = core.Greeting();
         }}
 
-        private void LoadTasks()
+        private void RefreshButton_Click(object sender, RoutedEventArgs e)
         {{
-            tasks.Clear();
-            var items = core.GetItems();
-            foreach (var item in items)
-            {{
-                tasks.Add(new TaskItem
-                {{
-                    Id = item.id,
-                    Title = item.title,
-                    Completed = item.completed
-                }});
-            }}
-        }}
-
-        private void AddButton_Click(object sender, RoutedEventArgs e)
-        {{
-            ShowAddTaskDialog();
-        }}
-
-        private async void ShowAddTaskDialog()
-        {{
-            var dialog = new ContentDialog
-            {{
-                Title = "New Task",
-                PrimaryButtonText = "Add",
-                CloseButtonText = "Cancel",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = this.Content.XamlRoot
-            }};
-
-            var textBox = new TextBox
-            {{
-                PlaceholderText = "Enter task name..."
-            }};
-            dialog.Content = textBox;
-
-            var result = await dialog.ShowAsync();
-            if (result == ContentDialogResult.Primary && !string.IsNullOrWhiteSpace(textBox.Text))
-            {{
-                var id = Guid.NewGuid().ToString();
-                var items = core.AddItem(id, textBox.Text);
-                
-                tasks.Clear();
-                foreach (var item in items)
-                {{
-                    tasks.Add(new TaskItem
-                    {{
-                        Id = item.id,
-                        Title = item.title,
-                        Completed = item.completed
-                    }});
-                }}
-                UpdateStats();
-            }}
-        }}
-
-        private void TaskCheckBox_Click(object sender, RoutedEventArgs e)
-        {{
-            if (sender is CheckBox checkBox && checkBox.Tag is string id)
-            {{
-                var items = core.ToggleItem(id);
-                tasks.Clear();
-                foreach (var item in items)
-                {{
-                    tasks.Add(new TaskItem
-                    {{
-                        Id = item.id,
-                        Title = item.title,
-                        Completed = item.completed
-                    }});
-                }}
-                UpdateStats();
-            }}
-        }}
-
-        private void UpdateStats()
-        {{
-            TotalCount.Text = tasks.Count.ToString();
-            ActiveCount.Text = tasks.Count(t => !t.Completed).ToString();
-            DoneCount.Text = tasks.Count(t => t.Completed).ToString();
+            GreetingText.Text = core.Greeting();
         }}
     }}
 }}

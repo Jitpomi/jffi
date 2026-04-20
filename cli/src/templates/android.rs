@@ -163,16 +163,15 @@ fn create_manifest(dir: &PathBuf, name: &str) -> Result<()> {
     Ok(())
 }
 
-fn create_kotlin_sources(dir: &PathBuf, name: &str, template: &str) -> Result<()> {
+fn create_kotlin_sources(dir: &PathBuf, name: &str, _template: &str) -> Result<()> {
     let package_name = format!("com.example.{}", name.replace("-", ""));
     let package_path = package_name.replace(".", "/");
     let module_name = name.replace("-", "_");
     let kotlin_dir = dir.join(format!("app/src/main/java/{}", package_path));
     fs::create_dir_all(&kotlin_dir)?;
     
-    // MainActivity.kt based on template
-    let main_activity = if template == "hello" {
-        format!(r#"package {}
+    // MainActivity.kt - simple greeting pattern
+    let main_activity = format!(r#"package {}
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -205,12 +204,14 @@ class MainActivity : ComponentActivity() {{
 @Composable
 fun HelloApp(initialGreeting: String = "Loading...") {{
     var greeting by remember {{ mutableStateOf(initialGreeting) }}
+    var core: Core? by remember {{ mutableStateOf(null) }}
     
     // Only create Core and fetch real greeting in real app (not preview)
     if (initialGreeting == "Loading...") {{
         LaunchedEffect(Unit) {{
-            val core = Core()
-            greeting = core.greeting()
+            val newCore = Core()
+            core = newCore
+            greeting = newCore.greeting()
         }}
     }}
     
@@ -229,7 +230,7 @@ fun HelloApp(initialGreeting: String = "Loading...") {{
         Spacer(modifier = Modifier.height(16.dp))
         
         Button(onClick = {{
-            greeting = core.greeting()
+            core?.let {{ greeting = it.greeting() }}
         }}) {{
             Text("Refresh")
         }}
@@ -246,293 +247,7 @@ fun HelloAppPreview() {{
     // Preview uses same HelloApp but with hardcoded greeting
     HelloApp(initialGreeting = "Hello from JFFI")
 }}
-"#, package_name, module_name)
-    } else {
-        // Default todo template
-        format!(r#"package {}
-
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.outlined.Circle
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-
-class MainActivity : ComponentActivity() {{
-    override fun onCreate(savedInstanceState: Bundle?) {{
-        super.onCreate(savedInstanceState)
-        setContent {{
-            MaterialTheme {{
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {{
-                    TodoApp()
-                }}
-            }}
-        }}
-    }}
-}}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TodoApp() {{
-    var items by remember {{ mutableStateOf(listOf<TodoItem>()) }}
-    var showDialog by remember {{ mutableStateOf(false) }}
-    
-    Scaffold(
-        topBar = {{
-            TopAppBar(
-                title = {{ Text("Today") }},
-                actions = {{
-                    IconButton(onClick = {{ showDialog = true }}) {{
-                        Icon(Icons.Default.Add, contentDescription = "Add Task")
-                    }}
-                }}
-            )
-        }}
-    ) {{ padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
-        ) {{
-            // Stats Cards
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {{
-                StatCard(
-                    title = "Total",
-                    count = items.size,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f)
-                )
-                StatCard(
-                    title = "Active",
-                    count = items.count {{ !it.completed }},
-                    color = MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.weight(1f)
-                )
-                StatCard(
-                    title = "Done",
-                    count = items.count {{ it.completed }},
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.weight(1f)
-                )
-            }}
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            Text(
-                text = "Tasks",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            if (items.isEmpty()) {{
-                EmptyState()
-            }} else {{
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {{
-                    items(items) {{ item ->
-                        TaskRow(
-                            item = item,
-                            onToggle = {{
-                                items = items.map {{
-                                    if (it.id == item.id) it.copy(completed = !it.completed)
-                                    else it
-                                }}
-                            }}
-                        )
-                    }}
-                }}
-            }}
-        }}
-    }}
-    
-    if (showDialog) {{
-        AddTaskDialog(
-            onDismiss = {{ showDialog = false }},
-            onAdd = {{ title ->
-                items = items + TodoItem(
-                    id = items.size.toLong(),
-                    title = title,
-                    completed = false
-                )
-                showDialog = false
-            }}
-        )
-    }}
-}}
-
-@Composable
-fun StatCard(
-    title: String,
-    count: Int,
-    color: androidx.compose.ui.graphics.Color,
-    modifier: Modifier = Modifier
-) {{
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = color.copy(alpha = 0.1f)
-        )
-    ) {{
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {{
-            Text(
-                text = count.toString(),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = color
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }}
-    }}
-}}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TaskRow(
-    item: TodoItem,
-    onToggle: () -> Unit
-) {{
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onToggle
-    ) {{
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {{
-            Icon(
-                imageVector = if (item.completed) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
-                contentDescription = if (item.completed) "Completed" else "Not completed",
-                tint = if (item.completed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.bodyLarge,
-                textDecoration = if (item.completed) TextDecoration.LineThrough else null,
-                color = if (item.completed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
-            )
-        }}
-    }}
-}}
-
-@Composable
-fun EmptyState() {{
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 48.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {{
-        Icon(
-            imageVector = Icons.Outlined.Circle,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "No tasks yet",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = "Click + to add your first task",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-        )
-    }}
-}}
-
-@Composable
-fun AddTaskDialog(
-    onDismiss: () -> Unit,
-    onAdd: (String) -> Unit
-) {{
-    var text by remember {{ mutableStateOf("") }}
-    
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {{ Text("New Task") }},
-        text = {{
-            OutlinedTextField(
-                value = text,
-                onValueChange = {{ text = it }},
-                label = {{ Text("Task Name") }},
-                singleLine = true
-            )
-        }},
-        confirmButton = {{
-            TextButton(
-                onClick = {{
-                    if (text.isNotBlank()) {{
-                        onAdd(text)
-                    }}
-                }},
-                enabled = text.isNotBlank()
-            ) {{
-                Text("Add")
-            }}
-        }},
-        dismissButton = {{
-            TextButton(onClick = onDismiss) {{
-                Text("Cancel")
-            }}
-        }}
-    )
-}}
-
-data class TodoItem(
-    val id: Long,
-    val title: String,
-    val completed: Boolean
-)
-
-@Preview(
-    name = "Todo Screen",
-    showBackground = true,
-    backgroundColor = 0xFFEDE7F6
-)
-@Composable
-fun TodoAppPreview() {{
-    MaterialTheme {{
-        TodoApp()
-    }}
-}}
-"#, package_name)
-    };
+"#, package_name, module_name);
     
     fs::write(kotlin_dir.join("MainActivity.kt"), main_activity)?;
     
