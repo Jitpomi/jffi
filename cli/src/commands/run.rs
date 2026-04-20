@@ -1,11 +1,8 @@
 use anyhow::{Context, Result};
 use colored::*;
-use std::path::Path;
 use std::process::Command;
-use std::thread;
-use std::time::Duration;
 
-use crate::platform::{AndroidProject, IOSSimulator, Platform, XcodeProject, find_ios_app_bundle};
+use crate::platform::Platform;
 
 pub fn run_project(platform_str: &str, device: bool) -> Result<()> {
     let platform = Platform::from_str(platform_str)

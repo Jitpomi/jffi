@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use colored::*;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -38,10 +37,12 @@ impl Platform {
         }
     }
 
+    #[allow(dead_code)]
     pub fn project_dir(&self) -> PathBuf {
         PathBuf::from(format!("platforms/{}", self.as_str()))
     }
 
+    #[allow(dead_code)]
     pub fn display_name(&self) -> &'static str {
         match self {
             Self::Ios => "iOS",
@@ -55,6 +56,7 @@ impl Platform {
 }
 
 /// Trait for platform-specific project operations
+#[allow(dead_code)]
 pub trait Project {
     fn platform(&self) -> Platform;
     fn exists(&self) -> bool {
@@ -64,6 +66,7 @@ pub trait Project {
 
 /// iOS/macOS Xcode project
 pub struct XcodeProject {
+    #[allow(dead_code)]
     pub platform: Platform,
     pub project_path: PathBuf,
     pub scheme: String,
@@ -138,6 +141,7 @@ impl Project for XcodeProject {
 
 /// Android project
 pub struct AndroidProject {
+    #[allow(dead_code)]
     pub platform: Platform,
     pub project_path: PathBuf,
 }

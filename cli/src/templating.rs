@@ -22,6 +22,7 @@ pub struct TemplateMetadata {
     #[serde(default)]
     pub status: String,
     #[serde(default)]
+    #[allow(dead_code)]
     pub message: String,
 }
 
@@ -37,8 +38,10 @@ pub struct TemplateInfo {
     #[serde(default)]
     pub description: String,
     #[serde(default)]
+    #[allow(dead_code)]
     pub author: String,
     #[serde(default = "default_version")]
+    #[allow(dead_code)]
     pub version: String,
 }
 

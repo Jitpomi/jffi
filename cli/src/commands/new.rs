@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use colored::*;
-use dialoguer::{theme::ColorfulTheme, Input, MultiSelect, Select};
+use dialoguer::{theme::ColorfulTheme, Input, MultiSelect};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
