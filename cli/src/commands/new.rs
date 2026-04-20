@@ -5,7 +5,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::templates::engine::TemplateEngine;
+use crate::templating::TemplateEngine;
 
 /// Find templates directory with multiple fallback locations
 fn find_templates_dir() -> Result<PathBuf> {
@@ -204,7 +204,7 @@ pub fn create_project(
 
 fn create_project_structure(
     engine: &TemplateEngine,
-    template: &crate::templates::engine::Template,
+    template: &crate::templating::Template,
     dir: &PathBuf,
     name: &str,
     platforms: &[&str],

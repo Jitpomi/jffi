@@ -112,7 +112,7 @@ fn build_all_platforms(release: bool) -> Result<()> {
     println!();
     
     // Read config to get enabled platforms
-    let config = crate::platforms::config::load_config()?;
+    let config = crate::config::load_config()?;
     
     for platform in &config.platforms.enabled {
         println!("{} Building {}...", "→".bright_blue(), platform.bright_cyan());

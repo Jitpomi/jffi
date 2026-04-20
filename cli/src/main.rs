@@ -2,8 +2,9 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 mod commands;
-mod templates;
-mod platforms;
+mod config;
+mod platform;
+mod templating;
 
 #[derive(Parser)]
 #[command(name = "jffi")]

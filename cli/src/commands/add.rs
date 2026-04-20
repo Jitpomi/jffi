@@ -4,7 +4,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::templates::engine::TemplateEngine;
+use crate::templating::TemplateEngine;
 
 /// Find templates directory (same logic as new.rs)
 fn find_templates_dir() -> Result<PathBuf> {
@@ -46,7 +46,7 @@ pub fn add_platform(platform: &str) -> Result<()> {
     }
     
     // Read current config
-    let mut config = crate::platforms::config::load_config()?;
+    let mut config = crate::config::load_config()?;
     let name = config.package.name.clone();
     
     // Initialize template engine
@@ -102,7 +102,7 @@ pub fn add_platform(platform: &str) -> Result<()> {
     // Add platform to config
     if !config.platforms.enabled.contains(&platform.to_string()) {
         config.platforms.enabled.push(platform.to_string());
-        crate::platforms::config::save_config(&config)?;
+        crate::config::save_config(&config)?;
     }
     
     println!("  {} platforms/{}/", "✓".green(), platform);

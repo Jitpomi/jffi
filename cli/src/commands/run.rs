@@ -1,55 +1,42 @@
 use anyhow::{Context, Result};
 use colored::*;
+use std::path::Path;
 use std::process::Command;
+use std::thread;
+use std::time::Duration;
 
-pub fn run_project(platform: &str, device: bool) -> Result<()> {
-    let target_desc = if device && platform == "ios" { "iOS Device" } else { platform };
+use crate::platform::{AndroidProject, IOSSimulator, Platform, XcodeProject, find_ios_app_bundle};
+
+pub fn run_project(platform_str: &str, device: bool) -> Result<()> {
+    let platform = Platform::from_str(platform_str)
+        .ok_or_else(|| anyhow::anyhow!("Unknown platform: {}", platform_str))?;
+    
+    let target_desc = if device && platform == Platform::Ios { "iOS Device" } else { platform.as_str() };
     println!("{}", format!("🚀 Running on {}...", target_desc).bright_green().bold());
     println!();
     
     // Build first
-    crate::commands::build::build_project(Some(platform.to_string()), false, false, device)?;
+    crate::commands::build::build_project(Some(platform_str.to_string()), false, false, device)?;
     
     println!();
     println!("{}", format!("▶️  Launching {}...", target_desc).bright_cyan().bold());
     
-    run_platform_with_options(platform, device)
-}
-
-pub fn run_platform_with_options(platform: &str, device: bool) -> Result<()> {
     match platform {
-        "ios" => {
-            if device {
-                run_ios_device()
-            } else {
-                run_ios()
-            }
-        },
-        "android" => run_android(),
-        "macos" | "macos-arm64" | "macos-x64" => run_macos(),
-        "windows" | "windows-x64" | "windows-x86" => run_windows(),
-        "linux" => run_linux(),
-        "web" => run_web(),
-        _ => anyhow::bail!("Unknown platform: {}", platform),
+        Platform::Ios if device => run_ios_device(),
+        Platform::Ios => run_ios(),
+        Platform::Macos => run_macos(),
+        Platform::Android => run_android(),
+        Platform::Windows => run_windows(),
+        Platform::Linux => run_linux(),
+        Platform::Web => run_web(),
     }
 }
 
 fn run_ios_device() -> Result<()> {
-    println!("  {} Finding Xcode project...", "→".bright_blue());
+    use crate::platform::XcodeProject;
     
-    // Find the xcodeproj
-    let ios_dir = std::path::Path::new("platforms/ios");
-    let xcodeproj = std::fs::read_dir(ios_dir)?
-        .filter_map(|e| e.ok())
-        .find(|e| {
-            e.path()
-                .extension()
-                .and_then(|s| s.to_str())
-                .map(|s| s == "xcodeproj")
-                .unwrap_or(false)
-        })
-        .map(|e| e.path())
-        .context("Could not find .xcodeproj file")?;
+    println!("  {} Finding Xcode project...", "→".bright_blue());
+    let project = XcodeProject::find(crate::platform::Platform::Ios)?;
     
     println!("  {} Building and deploying to device...", "→".bright_blue());
     println!();
@@ -57,24 +44,8 @@ fn run_ios_device() -> Result<()> {
     println!("{}", "  You may need to configure code signing in Xcode first.".yellow());
     println!();
     
-    // Build and run on device using xcodebuild
-    // This will use the first connected device
-    let status = Command::new("xcodebuild")
-        .args(&[
-            "-project",
-            xcodeproj.to_str().unwrap(),
-            "-scheme",
-            xcodeproj.file_stem().unwrap().to_str().unwrap(),
-            "-destination",
-            "generic/platform=iOS",
-            "build",
-        ])
-        .status()
-        .context("Failed to build with xcodebuild")?;
-    
-    if !status.success() {
-        anyhow::bail!("Build failed. Make sure code signing is configured in Xcode.");
-    }
+    project.build("generic/platform=iOS")
+        .context("Build failed. Make sure code signing is configured in Xcode.")?;
     
     println!();
     println!("{}", "  ✅ Build complete!".green());
@@ -90,144 +61,41 @@ fn run_ios_device() -> Result<()> {
 }
 
 fn run_ios() -> Result<()> {
-    println!("  {} Finding Xcode project...", "→".bright_blue());
+    use crate::platform::{IOSSimulator, XcodeProject, find_ios_app_bundle};
     
-    // Find the xcodeproj
-    let ios_dir = std::path::Path::new("platforms/ios");
-    let xcodeproj = std::fs::read_dir(ios_dir)?
-        .filter_map(|e| e.ok())
-        .find(|e| {
-            e.path()
-                .extension()
-                .and_then(|s| s.to_str())
-                .map(|s| s == "xcodeproj")
-                .unwrap_or(false)
-        })
-        .map(|e| e.path())
-        .context("Could not find .xcodeproj file")?;
+    println!("  {} Finding Xcode project...", "→".bright_blue());
+    let project = XcodeProject::find(crate::platform::Platform::Ios)?;
     
     println!("  {} Finding available simulator...", "→".bright_blue());
-    
-    // Get list of available simulators and pick the first iPhone
-    let (simulator_name, simulator_id) = get_available_iphone_simulator()?;
+    let (simulator_name, simulator_id) = IOSSimulator::get_available()?;
     println!("  {} Using simulator: {}", "→".bright_blue(), simulator_name);
     
     println!("  {} Building and launching in simulator...", "→".bright_blue());
     
-    // Build and run in simulator using xcodebuild
-    // Use id= instead of name= to avoid OS version conflicts
     let destination = format!("platform=iOS Simulator,id={}", simulator_id);
+    project.build(&destination)?;
     
-    let status = Command::new("xcodebuild")
-        .args(&[
-            "-project",
-            xcodeproj.to_str().unwrap(),
-            "-scheme",
-            xcodeproj.file_stem().unwrap().to_str().unwrap(),
-            "-destination",
-            &destination,
-            "build",
-        ])
-        .status()
-        .context("Failed to build with xcodebuild")?;
-    
-    if !status.success() {
-        anyhow::bail!("Build failed");
-    }
-    
-    // Get app and module names for later use
-    let app_name = xcodeproj.file_stem().unwrap().to_str().unwrap();
-    let _module_name = app_name.replace("-", "_");
+    let app_name = &project.scheme;
     
     println!("  {} Launching app in simulator...", "→".bright_blue());
     
-    // Get the app name and find the built .app bundle
-    let app_name = xcodeproj.file_stem().unwrap().to_str().unwrap();
+    // Find the built app
+    let app_path = find_ios_app_bundle(app_name)?;
     
-    // The app bundle is in the DerivedData directory
-    // We need to find it by looking for the project-specific DerivedData folder
-    let home = std::env::var("HOME").unwrap();
-    let derived_data = format!("{}/Library/Developer/Xcode/DerivedData", home);
-    
-    // Find the app bundle
-    let _app_bundle = format!(
-        "{}/Build/Products/Debug-iphonesimulator/{}.app",
-        derived_data, app_name
-    );
-    
-    // Check if app bundle exists by searching DerivedData
-    let app_path = std::fs::read_dir(&derived_data)
-        .context("Could not read DerivedData directory")?
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.file_name()
-                .to_string_lossy()
-                .starts_with(app_name)
-        })
-        .find_map(|project_dir| {
-            let app_path = project_dir
-                .path()
-                .join("Build/Products/Debug-iphonesimulator")
-                .join(format!("{}.app", app_name));
-            if app_path.exists() {
-                Some(app_path)
-            } else {
-                None
-            }
-        })
-        .context("Could not find built .app bundle. Try running 'jffi build --platform ios' first.")?;
-    
-    // Boot simulator if needed
-    println!("  {} Booting simulator...", "→".bright_blue());
-    Command::new("xcrun")
-        .args(&["simctl", "boot", &simulator_id])
-        .output()
-        .ok(); // Ignore error if already booted
-    
-    // Open Simulator app
-    Command::new("open")
-        .args(&["-a", "Simulator"])
-        .status()
-        .ok();
+    // Use simulator abstraction
+    let sim = IOSSimulator;
+    sim.boot(&simulator_id)?;
+    sim.open_app()?;
     
     // Give simulator time to boot
     std::thread::sleep(std::time::Duration::from_secs(3));
     
-    // Install the app
-    println!("  {} Installing app...", "→".bright_blue());
-    let install_status = Command::new("xcrun")
-        .args(&[
-            "simctl",
-            "install",
-            "booted",
-            app_path.to_str().unwrap(),
-        ])
-        .status()
-        .context("Failed to install app")?;
+    sim.install_app(&app_path)?;
+    sim.open_app()?; // Bring to foreground
     
-    if !install_status.success() {
-        anyhow::bail!("Failed to install app in simulator");
-    }
-    
-    // Bring Simulator to foreground
-    Command::new("open")
-        .args(&["-a", "Simulator"])
-        .status()
-        .ok();
-    
-    // Get the bundle identifier from Info.plist
+    // Get bundle ID and launch
     let bundle_id = format!("com.example.{}", app_name.replace("-", ""));
-    
-    // Launch the app
-    println!("  {} Launching app...", "→".bright_blue());
-    let launch_status = Command::new("xcrun")
-        .args(&["simctl", "launch", "booted", &bundle_id])
-        .status()
-        .context("Failed to launch app")?;
-    
-    if !launch_status.success() {
-        anyhow::bail!("Failed to launch app in simulator");
-    }
+    sim.launch_app(&bundle_id)?;
     
     println!();
     println!("{}", "  ✅ App launched in simulator!".green());
@@ -235,35 +103,19 @@ fn run_ios() -> Result<()> {
     Ok(())
 }
 
-fn find_android_tool(tool_name: &str) -> Option<String> {
-    // Check if tool is in PATH first
-    if Command::new(tool_name).arg("--version").output().is_ok() {
-        return Some(tool_name.to_string());
-    }
-    
-    // Try default Android SDK locations
-    let home = std::env::var("HOME").unwrap_or_default();
-    let tool_subdir = if tool_name == "emulator" { "emulator" } else { "platform-tools" };
-    
-    let possible_paths = vec![
-        format!("{}/Library/Android/sdk/{}/{}", home, tool_subdir, tool_name),
-        format!("{}/Android/Sdk/{}/{}", home, tool_subdir, tool_name),
-        format!("{}/.android/sdk/{}/{}", home, tool_subdir, tool_name),
-    ];
-    
-    possible_paths.into_iter()
-        .find(|path| std::path::Path::new(path).exists())
-}
-
 fn run_android() -> Result<()> {
+    use crate::platform::AndroidProject;
+    
     println!("  {} Preparing Android emulator...", "→".bright_blue());
     
+    let android = AndroidProject::find()?;
+    
     // Find emulator command
-    let emulator_cmd = find_android_tool("emulator")
+    let emulator_cmd = android.find_tool("emulator")
         .context("Android SDK emulator not found. Please install Android Studio and ensure the SDK is set up.")?;
     
     // Find adb command
-    let adb_cmd = find_android_tool("adb")
+    let adb_cmd = android.find_tool("adb")
         .context("adb not found. Please install Android SDK platform-tools.")?;
     
     // Check if an emulator is already running
@@ -402,75 +254,32 @@ fn run_android() -> Result<()> {
 }
 
 fn run_macos() -> Result<()> {
-    println!("  {} Finding Xcode project...", "→".bright_blue());
+    use crate::platform::XcodeProject;
     
-    // Find the xcodeproj
-    let macos_dir = std::path::Path::new("platforms/macos");
-    let xcodeproj = std::fs::read_dir(macos_dir)?
-        .filter_map(|e| e.ok())
-        .find(|e| {
-            e.path()
-                .extension()
-                .and_then(|s| s.to_str())
-                .map(|s| s == "xcodeproj")
-                .unwrap_or(false)
-        })
-        .map(|e| e.path())
-        .context("Could not find .xcodeproj file")?;
+    println!("  {} Finding Xcode project...", "→".bright_blue());
+    let project = XcodeProject::find(crate::platform::Platform::Macos)?;
     
     println!("  {} Building and launching macOS app...", "→".bright_blue());
-    
-    // Build and run using xcodebuild
-    let status = Command::new("xcodebuild")
-        .args(&[
-            "-project",
-            xcodeproj.to_str().unwrap(),
-            "-scheme",
-            xcodeproj.file_stem().unwrap().to_str().unwrap(),
-            "build",
-        ])
-        .status()
-        .context("Failed to build with xcodebuild")?;
-    
-    if !status.success() {
-        anyhow::bail!("Build failed");
-    }
+    project.build("")?; // No destination needed for macOS
     
     println!("  {} Launching app...", "→".bright_blue());
-    
-    // Get the app name
-    let app_name = xcodeproj.file_stem().unwrap().to_str().unwrap();
-    
-    // Find the built app in DerivedData
     let home = std::env::var("HOME").unwrap();
     let derived_data = format!("{}/Library/Developer/Xcode/DerivedData", home);
     
     let app_path = std::fs::read_dir(&derived_data)
         .context("Could not read DerivedData directory")?
         .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.file_name()
-                .to_string_lossy()
-                .starts_with(app_name)
-        })
+        .filter(|e| e.file_name().to_string_lossy().starts_with(&project.scheme))
         .find_map(|project_dir| {
             let app_path = project_dir
                 .path()
                 .join("Build/Products/Debug")
-                .join(format!("{}.app", app_name));
-            if app_path.exists() {
-                Some(app_path)
-            } else {
-                None
-            }
+                .join(format!("{}.app", &project.scheme));
+            if app_path.exists() { Some(app_path) } else { None }
         })
-        .context("Could not find built .app bundle. Try running 'jffi build --platform macos' first.")?;
+        .context("Could not find built .app bundle")?;
     
-    // Launch the app
-    Command::new("open")
-        .arg(app_path)
-        .status()
-        .context("Failed to launch app")?;
+    Command::new("open").arg(&app_path).status().context("Failed to open app")?;
     
     println!();
     println!("{}", "  ✅ macOS app launched!".green());
@@ -663,60 +472,3 @@ fn run_web() -> Result<()> {
     Ok(())
 }
 
-fn get_available_iphone_simulator() -> Result<(String, String)> {
-    // Get list of available simulators
-    let output = Command::new("xcrun")
-        .args(&["simctl", "list", "devices", "available"])
-        .output()
-        .context("Failed to list simulators")?;
-    
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("Failed to get simulator list: {}", stderr);
-    }
-    
-    let output_str = String::from_utf8_lossy(&output.stdout);
-    
-    // Parse the output to find available iPhones
-    // Format is like: "    iPhone 16 Pro (1135816D-CD90-40BC-93F9-CAD0F1F077DC) (Shutdown)"
-    let mut booted_iphones = Vec::new();
-    let mut shutdown_iphones = Vec::new();
-    
-    for line in output_str.lines() {
-        if line.contains("iPhone") {
-            // Extract name and UUID
-            let trimmed = line.trim();
-            if let Some(first_paren) = trimmed.find(" (") {
-                let name = &trimmed[..first_paren];
-                let rest = &trimmed[first_paren + 2..];
-                if let Some(second_paren) = rest.find(')') {
-                    let uuid = &rest[..second_paren];
-                    
-                    if line.contains("(Booted)") {
-                        booted_iphones.push((name.to_string(), uuid.to_string()));
-                    } else if line.contains("(Shutdown)") {
-                        shutdown_iphones.push((name.to_string(), uuid.to_string()));
-                    }
-                }
-            }
-        }
-    }
-    
-    // Prefer already-booted simulators to save time
-    if let Some((name, id)) = booted_iphones.first() {
-        println!("  {} Using already-booted simulator: {}", "→".bright_blue(), name);
-        return Ok((name.clone(), id.clone()));
-    }
-    
-    // Otherwise use the first shutdown simulator
-    if let Some((name, id)) = shutdown_iphones.first() {
-        println!("  {} Found {} available iPhone simulators", "→".bright_blue(), shutdown_iphones.len());
-        return Ok((name.clone(), id.clone()));
-    }
-    
-    anyhow::bail!(
-        "No iPhone simulator found. Please create one in Xcode.\n\
-        Available devices output:\n{}",
-        output_str
-    )
-}
