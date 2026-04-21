@@ -12,16 +12,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="feat: unify all platform templates to hello pattern&#10; &#10;- Remove todo/counter template options (marked as coming soon)&#10;- Simplify all platform UIs (iOS, macOS, Android, Windows, Linux, Web)&#10;  to use only core.greeting() with refresh button&#10;- Block todo/counter selection from CLI and interactive UI&#10;- All platforms now generate consistent hello world app">
-      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/android/app/src/main/res/drawable/ic_launcher_background.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/android/app/src/main/res/drawable/ic_launcher_foreground.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/android/gradle/libs.versions.toml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/android/gradle/wrapper/gradle-wrapper.jar" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/android/gradle/wrapper/gradle-wrapper.properties" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/src/templating.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/templating.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/android/app/build.gradle.kts" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/android/app/build.gradle.kts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/android/build.gradle.kts" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/android/build.gradle.kts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

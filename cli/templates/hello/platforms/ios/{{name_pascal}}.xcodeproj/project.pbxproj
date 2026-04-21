@@ -7,13 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		{{UUID1}} /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = {{UUID2}} /* App.swift */; };
+		{{UUID1}} /* {{name_pascal}}App.swift in Sources */ = {isa = PBXBuildFile; fileRef = {{UUID2}} /* {{name_pascal}}App.swift */; };
 		{{UUID3}} /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = {{UUID4}} /* ContentView.swift */; };
 		{{UUID5}} /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = {{UUID6}} /* AppState.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		{{UUID2}} /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
+		{{UUID2}} /* {{name_pascal}}App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {{name_pascal}}App.swift; sourceTree = "<group>"; };
 		{{UUID4}} /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		{{UUID6}} /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		{{UUID7}} /* {{name_pascal}} */ = {isa = PBXFileReference; explicitFileType = "wrapper.application"; includeInIndex = 0; path = {{name_pascal}}.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -35,7 +35,7 @@
 		{{UUID11}} = {
 			isa = PBXGroup;
 			children = (
-				{{UUID2}} /* App.swift */,
+				{{UUID2}} /* {{name_pascal}}App.swift */,
 				{{UUID4}} /* ContentView.swift */,
 				{{UUID6}} /* AppState.swift */,
 				{{UUID8}} /* Info.plist */,
@@ -107,7 +107,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				{{UUID1}} /* App.swift in Sources */,
+				{{UUID1}} /* {{name_pascal}}App.swift in Sources */,
 				{{UUID3}} /* ContentView.swift in Sources */,
 				{{UUID5}} /* AppState.swift in Sources */,
 			);
