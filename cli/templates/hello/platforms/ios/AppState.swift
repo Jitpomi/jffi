@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 class AppState: ObservableObject {
     @Published var greeting: String = ""
     let core: Core

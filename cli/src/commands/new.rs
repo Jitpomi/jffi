@@ -189,14 +189,40 @@ pub fn create_project(
     create_project_structure(&engine, &template, &project_dir, name, &platform_list_ref)?;
     
     println!();
+    println!("{}", "🔧 Generating FFI bindings...".bright_cyan().bold());
+    println!();
+    
+    // Change to project directory for initial build
+    let original_dir = env::current_dir()?;
+    env::set_current_dir(&project_dir)?;
+    
+    // Run initial build for the first platform to generate FFI bindings
+    let first_platform = platform_list_ref[0];
+    match crate::commands::build::build_platform(first_platform, false) {
+        Ok(_) => {
+            println!();
+            println!("{}", format!("  ✅ FFI bindings generated for {}!", first_platform).green());
+        }
+        Err(e) => {
+            println!();
+            println!("{}", format!("  ⚠️  Warning: Initial build failed: {}", e).yellow());
+            println!("{}", "  You can run 'jffi build' manually later.".yellow());
+        }
+    }
+    
+    // Return to original directory
+    env::set_current_dir(original_dir)?;
+    
+    println!();
     println!("{}", "✅ Project created successfully!".bright_green().bold());
     println!();
     println!("Next steps:");
     println!("  cd {}", project_dir.file_name().and_then(|s| s.to_str()).unwrap_or(name));
     println!();
-    println!("  {} - Compile the core and generate bindings", format!("jffi build --platform {}", platform_list_ref[0]).bright_cyan());
     println!("  {} - Build and launch on simulator/device", format!("jffi run --platform {}", platform_list_ref[0]).bright_cyan());
     println!("  {} - Watch mode (auto-rebuild on changes)", format!("jffi dev --platform {}", platform_list_ref[0]).bright_cyan());
+    println!();
+    println!("{}", "  💡 Tip: All commands work independently - no need to build first!".bright_blue());
     println!();
     
     Ok(())

@@ -199,7 +199,7 @@ impl TemplateEngine {
 
         // Generate UUIDs for Xcode project files
         let mut rng = rand::thread_rng();
-        for i in 1..=25 {
+        for i in 1..=30 {
             let uuid = format!(
                 "{:08X}{:08X}{:08X}{:08X}",
                 rng.gen::<u32>(),

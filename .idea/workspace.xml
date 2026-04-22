@@ -13,6 +13,9 @@
   <component name="ChangeListManager">
     <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="feat: unify all platform templates to hello pattern&#10; &#10;- Remove todo/counter template options (marked as coming soon)&#10;- Simplify all platform UIs (iOS, macOS, Android, Windows, Linux, Web)&#10;  to use only core.greeting() with refresh button&#10;- Block todo/counter selection from CLI and interactive UI&#10;- All platforms now generate consistent hello world app">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/platform.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/platform.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/ios/AppState.swift" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/ios/AppState.swift" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/ios/{{name_pascal}}.xcodeproj/project.pbxproj" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/ios/{{name_pascal}}.xcodeproj/project.pbxproj" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

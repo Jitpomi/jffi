@@ -154,50 +154,51 @@ pub fn build_platform(platform: &str, release: bool) -> Result<()> {
 }
 
 fn build_ios(release: bool) -> Result<()> {
-    build_ios_target(release, "simulator")
+    build_ios_xcframework(release)
 }
 
-fn build_ios_target(release: bool, target_type: &str) -> Result<()> {
+fn build_ios_target(release: bool, _target_type: &str) -> Result<()> {
+    // Note: XCFramework includes both simulator and device, so target_type is ignored
+    build_ios_xcframework(release)
+}
+
+fn build_ios_xcframework(release: bool) -> Result<()> {
     let profile = if release { "release" } else { "debug" };
     
-    // Choose target based on device vs simulator
-    let (target, target_name) = match target_type {
-        "device" => ("aarch64-apple-ios", "iOS Device"),
-        "simulator" | _ => {
-            let target = if cfg!(target_arch = "aarch64") {
-                "aarch64-apple-ios-sim"
-            } else {
-                "x86_64-apple-ios"
-            };
-            (target, "iOS Simulator")
+    // Build for all iOS targets
+    let targets = vec![
+        ("aarch64-apple-ios-sim", "iOS Simulator (ARM64)"),
+        ("x86_64-apple-ios", "iOS Simulator (x86_64)"),
+        ("aarch64-apple-ios", "iOS Device"),
+    ];
+    
+    let target_names: Vec<&str> = targets.iter().map(|(t, _)| *t).collect();
+    ensure_rust_targets(&target_names)?;
+    
+    // Build for each target
+    for (target, target_name) in &targets {
+        println!("  {} Building Rust library for {}...", "→".bright_blue(), target_name);
+        let mut args = vec!["build"];
+        if release {
+            args.push("--release");
         }
-    };
-
-    ensure_rust_targets(&[target])?;
-    
-    println!("  {} Building Rust library for {}...", "→".bright_blue(), target_name);
-    let mut args = vec!["build"];
-    if release {
-        args.push("--release");
-    }
-    args.extend(&["--manifest-path", "core/Cargo.toml", "--target", target]);
-    
-    let status = Command::new("cargo")
-        .env("CARGO_TARGET_DIR", "target")
-        .args(&args)
-        .status()
-        .context("Failed to build Rust library")?;
-    
-    if !status.success() {
-        anyhow::bail!("Rust build failed");
+        args.extend(&["--manifest-path", "core/Cargo.toml", "--target", target]);
+        
+        let status = Command::new("cargo")
+            .env("CARGO_TARGET_DIR", "target")
+            .args(&args)
+            .status()
+            .context(format!("Failed to build Rust library for {}", target))?;
+        
+        if !status.success() {
+            anyhow::bail!("Rust build failed for {}", target);
+        }
     }
     
     println!("  {} Generating Swift bindings...", "→".bright_blue());
     
-    // Find the actual library file (it will have underscores instead of hyphens)
-    let lib_dir = format!("target/{}/{}", target, profile);
-    let _lib_pattern = format!("{}/lib*core.dylib", lib_dir);
-    
+    // Use the first target's library for binding generation
+    let lib_dir = format!("target/aarch64-apple-ios-sim/{}", profile);
     let lib_path = std::fs::read_dir(&lib_dir)
         .context("Failed to read target directory")?
         .filter_map(|e| e.ok())
@@ -227,7 +228,58 @@ fn build_ios_target(release: bool, target_type: &str) -> Result<()> {
         anyhow::bail!("Binding generation failed");
     }
     
-    println!("{}", "  ✅ iOS build complete".green());
+    println!("  {} Creating XCFramework...", "→".bright_blue());
+    
+    // Find library name from the built file
+    let lib_name = lib_path.file_stem()
+        .and_then(|s| s.to_str())
+        .and_then(|s| s.strip_prefix("lib"))
+        .context("Could not determine library name")?;
+    
+    // Create lipo'd simulator library (combine arm64 and x86_64 simulators)
+    let sim_arm64_lib = format!("target/aarch64-apple-ios-sim/{}/lib{}.a", profile, lib_name);
+    let sim_x86_lib = format!("target/x86_64-apple-ios/{}/lib{}.a", profile, lib_name);
+    let sim_universal_lib = format!("target/ios-simulator-universal/lib{}.a", lib_name);
+    
+    std::fs::create_dir_all("target/ios-simulator-universal")?;
+    
+    let lipo_status = Command::new("lipo")
+        .args(&[
+            "-create",
+            &sim_arm64_lib,
+            &sim_x86_lib,
+            "-output",
+            &sim_universal_lib,
+        ])
+        .status()
+        .context("Failed to create universal simulator library")?;
+    
+    if !lipo_status.success() {
+        anyhow::bail!("lipo failed to create universal simulator library");
+    }
+    
+    // Create XCFramework
+    let device_lib = format!("target/aarch64-apple-ios/{}/lib{}.a", profile, lib_name);
+    let xcframework_path = format!("platforms/ios/{}.xcframework", lib_name);
+    
+    // Remove existing XCFramework if it exists
+    let _ = std::fs::remove_dir_all(&xcframework_path);
+    
+    let xcframework_status = Command::new("xcodebuild")
+        .args(&[
+            "-create-xcframework",
+            "-library", &sim_universal_lib,
+            "-library", &device_lib,
+            "-output", &xcframework_path,
+        ])
+        .status()
+        .context("Failed to create XCFramework")?;
+    
+    if !xcframework_status.success() {
+        anyhow::bail!("xcodebuild failed to create XCFramework");
+    }
+    
+    println!("{}", "  ✅ iOS XCFramework created successfully".green());
     Ok(())
 }
 
@@ -305,34 +357,47 @@ fn build_android(release: bool) -> Result<()> {
     Ok(())
 }
 
-fn build_macos(arch: &str, release: bool) -> Result<()> {
-    let profile = if release { "release" } else { "debug" };
-    let target = format!("{}-apple-darwin", arch);
+fn build_macos(_arch: &str, release: bool) -> Result<()> {
+    // Note: We build universal XCFramework regardless of specified arch
+    build_macos_xcframework(release)
+}
 
-    ensure_rust_targets(&[&target])?;
+fn build_macos_xcframework(release: bool) -> Result<()> {
+    let profile = if release { "release" } else { "debug" };
     
-    println!("  {} Building Rust library for macOS ({})...", "→".bright_blue(), arch);
-    let mut args = vec!["build"];
-    if release {
-        args.push("--release");
-    }
-    args.extend(&["--manifest-path", "core/Cargo.toml", "--target", &target]);
+    // Build for both macOS architectures
+    let targets = vec![
+        ("aarch64-apple-darwin", "macOS Apple Silicon"),
+        ("x86_64-apple-darwin", "macOS Intel"),
+    ];
     
-    let status = Command::new("cargo")
-        .env("CARGO_TARGET_DIR", "target")
-        .args(&args)
-        .status()
-        .context("Failed to build Rust library")?;
+    let target_names: Vec<&str> = targets.iter().map(|(t, _)| *t).collect();
+    ensure_rust_targets(&target_names)?;
     
-    if !status.success() {
-        anyhow::bail!("Rust build failed");
+    // Build for each target
+    for (target, target_name) in &targets {
+        println!("  {} Building Rust library for {}...", "→".bright_blue(), target_name);
+        let mut args = vec!["build"];
+        if release {
+            args.push("--release");
+        }
+        args.extend(&["--manifest-path", "core/Cargo.toml", "--target", target]);
+        
+        let status = Command::new("cargo")
+            .env("CARGO_TARGET_DIR", "target")
+            .args(&args)
+            .status()
+            .context(format!("Failed to build Rust library for {}", target))?;
+        
+        if !status.success() {
+            anyhow::bail!("Rust build failed for {}", target);
+        }
     }
     
     println!("  {} Generating Swift bindings...", "→".bright_blue());
     
-    // Find the actual library file (it will have underscores instead of hyphens)
-    let lib_dir = format!("target/{}/{}", target, profile);
-    
+    // Use the first target's library for binding generation
+    let lib_dir = format!("target/aarch64-apple-darwin/{}", profile);
     let lib_path = std::fs::read_dir(&lib_dir)
         .context("Failed to read target directory")?
         .filter_map(|e| e.ok())
@@ -362,7 +427,57 @@ fn build_macos(arch: &str, release: bool) -> Result<()> {
         anyhow::bail!("Binding generation failed");
     }
     
-    println!("{}", "  ✅ macOS build complete".green());
+    println!("  {} Creating XCFramework...", "→".bright_blue());
+    
+    // Find library name from the built file
+    let lib_name = lib_path.file_stem()
+        .and_then(|s| s.to_str())
+        .and_then(|s| s.strip_prefix("lib"))
+        .context("Could not determine library name")?;
+    
+    // Create lipo'd universal library (combine arm64 and x86_64)
+    // Use dylib for macOS because static libraries cannot be code signed when embedded
+    let arm64_lib = format!("target/aarch64-apple-darwin/{}/lib{}.dylib", profile, lib_name);
+    let x86_lib = format!("target/x86_64-apple-darwin/{}/lib{}.dylib", profile, lib_name);
+    let universal_lib = format!("target/macos-universal/lib{}.dylib", lib_name);
+    
+    std::fs::create_dir_all("target/macos-universal")?;
+    
+    let lipo_status = Command::new("lipo")
+        .args(&[
+            "-create",
+            &arm64_lib,
+            &x86_lib,
+            "-output",
+            &universal_lib,
+        ])
+        .status()
+        .context("Failed to create universal macOS library")?;
+    
+    if !lipo_status.success() {
+        anyhow::bail!("lipo failed to create universal macOS library");
+    }
+    
+    // Create XCFramework
+    let xcframework_path = format!("platforms/macos/{}.xcframework", lib_name);
+    
+    // Remove existing XCFramework if it exists
+    let _ = std::fs::remove_dir_all(&xcframework_path);
+    
+    let xcframework_status = Command::new("xcodebuild")
+        .args(&[
+            "-create-xcframework",
+            "-library", &universal_lib,
+            "-output", &xcframework_path,
+        ])
+        .status()
+        .context("Failed to create XCFramework")?;
+    
+    if !xcframework_status.success() {
+        anyhow::bail!("xcodebuild failed to create XCFramework");
+    }
+    
+    println!("{}", "  ✅ macOS XCFramework created successfully".green());
     Ok(())
 }
 

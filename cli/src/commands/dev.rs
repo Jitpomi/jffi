@@ -26,7 +26,34 @@ pub fn watch_project(platform: &str) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("Unknown platform: {}", platform))?;
     
     // Auto-open IDE or launch app
-    if platform == "ios" || platform == "macos" {
+    if platform == "ios" {
+        use crate::platform::IOSSimulator;
+        
+        println!("{}", "  → Finding iOS simulator...".bright_blue());
+        let (sim_name, sim_id) = IOSSimulator::get_available()?;
+        println!("{}", format!("  → Using: {}", sim_name).bright_blue());
+        
+        println!("{}", "  → Booting simulator...".bright_blue());
+        let sim = IOSSimulator;
+        sim.boot(&sim_id)?;
+        sim.open_app()?;
+        
+        println!("{}", "  → Opening Xcode...".bright_blue());
+        let project = XcodeProject::find(platform_enum)?;
+        project.open()?;
+        println!();
+        println!("{}", "  ✓ Xcode opened with iOS Simulator ready!".green());
+        println!();
+        println!("{}", "   🚀 IMPORTANT: Press Cmd+R in Xcode to RUN the app!".bright_yellow().bold());
+        println!("{}", format!("   The destination is already set to: {}", sim_name).bright_cyan());
+        println!();
+        println!("   Development workflow:");
+        println!("   • Edit Swift files → Changes appear instantly (native hot reload)");
+        println!("   • Edit Rust files → This watcher rebuilds → Press Cmd+B in Xcode");
+        println!();
+        println!("   Press Ctrl+C to stop watching");
+        println!();
+    } else if platform == "macos" {
         println!("{}", "  → Opening Xcode...".bright_blue());
         let project = XcodeProject::find(platform_enum)?;
         project.open()?;
