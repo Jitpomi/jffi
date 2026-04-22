@@ -101,10 +101,10 @@ pub fn watch_project(platform: &str) -> Result<()> {
         Config::default(),
     )?;
     
-    // Watch core directory
-    watcher.watch(Path::new("core/src"), RecursiveMode::Recursive)?;
+    // Watch entire core directory (catches src/, Cargo.toml, build.rs, .udl files, etc.)
+    watcher.watch(Path::new("core"), RecursiveMode::Recursive)?;
     
-    println!("{}", "  👀 Watching Rust files...".bright_cyan());
+    println!("{}", "  👀 Watching Rust project (core/)...".bright_cyan());
     println!();
     
     let mut last_rebuild = std::time::Instant::now();
@@ -113,15 +113,44 @@ pub fn watch_project(platform: &str) -> Result<()> {
     loop {
         match rx.recv_timeout(Duration::from_millis(100)) {
             Ok(event) => {
-                // Check if this is a modify or create event
-                if matches!(
+                // Check if this is any relevant file system event
+                // Include: Modify, Create, Remove, and other events
+                // Note: We process all events and filter by file type instead
+                let should_process = !matches!(
                     event.kind,
-                    notify::EventKind::Modify(_) | notify::EventKind::Create(_)
-                ) {
-                    // Check if core/src/lib.rs was modified
-                    let _is_core_change = event.paths.iter().any(|p| {
-                        p.to_string_lossy().contains("core/src/lib.rs")
+                    notify::EventKind::Access(_) // Ignore file access events (too noisy)
+                );
+                
+                if should_process {
+                    // Filter out irrelevant files (target/, .git/, temp files, etc.)
+                    let is_relevant_change = event.paths.iter().any(|p| {
+                        let path_str = p.to_string_lossy();
+                        // Ignore target directory, hidden files, and temp files
+                        !path_str.contains("/target/") 
+                        && !path_str.contains("/.") 
+                        && !path_str.ends_with('~')
+                        && !path_str.contains(".swp")
+                        && !path_str.contains(".tmp")
                     });
+                    
+                    if !is_relevant_change {
+                        continue;
+                    }
+                    
+                    // Debug: show which files changed
+                    for path in &event.paths {
+                        let ext = path.extension().and_then(|s| s.to_str());
+                        let filename = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                        
+                        // Show changes to Rust files, Cargo.toml, UDL files, build scripts
+                        if ext == Some("rs") 
+                            || ext == Some("toml") 
+                            || ext == Some("udl")
+                            || filename == "build.rs"
+                        {
+                            println!("  📝 Detected change: {}", path.display());
+                        }
+                    }
                     
                     // Debounce: only rebuild if enough time has passed
                     let now = std::time::Instant::now();
