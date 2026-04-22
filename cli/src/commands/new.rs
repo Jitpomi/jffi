@@ -294,12 +294,12 @@ lto = true
     let lib_rs = format!(r#"use {}_core::Core;
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen]
+#[wasm_bindgen(js_name = Core)]
 pub struct FfiCore {{
     core: Core,
 }}
 
-#[wasm_bindgen]
+#[wasm_bindgen(js_class = Core)]
 impl FfiCore {{
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {{

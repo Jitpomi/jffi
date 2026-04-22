@@ -87,6 +87,20 @@ pub fn watch_project(platform: &str) -> Result<()> {
         println!();
         println!("   Press Ctrl+C to stop watching");
         println!();
+    } else if platform == "web" {
+        println!("{}", "  → Starting web dev server...".bright_blue());
+        start_web_dev_server()?;
+        println!();
+        println!("{}", "  ✓ Vite dev server running!".green());
+        println!();
+        println!("{}", "   🚀 Development mode active!".bright_yellow().bold());
+        println!();
+        println!("   Development workflow:");
+        println!("   • Edit JS/HTML/CSS files → Hot reload via Vite");
+        println!("   • Edit Rust files → This watcher rebuilds WASM → Refresh browser");
+        println!();
+        println!("   Press Ctrl+C to stop watching");
+        println!();
     }
     
     // Set up file watcher
@@ -176,8 +190,10 @@ pub fn watch_project(platform: &str) -> Result<()> {
                                     // Touch XCFramework to update timestamp and notify Xcode
                                     let _ = touch_xcframework(platform);
                                     println!("{}", "  ✓ Rust rebuild complete! Press Cmd+B in Xcode to use new code.".green());
+                                } else if platform == "web" {
+                                    println!("{}", "  ✓ Rust rebuild complete! Refresh your browser to use new code.".green());
                                 } else {
-                                    println!("{}", "  ✓ Rust rebuild complete! Press Cmd+B in Xcode to use new code.".green());
+                                    println!("{}", "  ✓ Rust rebuild complete!".green());
                                 }
                                 println!();
                             }
@@ -277,6 +293,41 @@ fn touch_xcframework(platform: &str) -> Result<()> {
             }
         }
     }
+    
+    Ok(())
+}
+
+fn start_web_dev_server() -> Result<()> {
+    use std::process::Stdio;
+    
+    // Install npm dependencies if needed
+    let node_modules = std::path::Path::new("platforms/web/node_modules");
+    if !node_modules.exists() {
+        println!("  {} Installing npm dependencies...", "→".bright_blue());
+        let status = Command::new("npm")
+            .arg("install")
+            .current_dir("platforms/web")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .context("Failed to install npm dependencies")?;
+        
+        if !status.success() {
+            anyhow::bail!("npm install failed");
+        }
+    }
+    
+    // Start Vite dev server in background
+    Command::new("npm")
+        .args(&["run", "dev"])
+        .current_dir("platforms/web")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .context("Failed to start Vite dev server")?;
+    
+    // Give it a moment to start
+    std::thread::sleep(Duration::from_millis(1000));
     
     Ok(())
 }

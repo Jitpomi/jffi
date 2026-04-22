@@ -247,7 +247,7 @@ edition = "2021"
 crate-type = ["cdylib", "staticlib", "lib"]
 
 [dependencies]
-uniffi = {{ version = "0.31.0", features = ["cli"] }}
+uniffi = {{ version = "0.31.1", features = ["cli", "wasm-unstable-single-threaded"] }}
 "#,
             context.get("name_snake").unwrap_or(&"app".to_string())
         );
