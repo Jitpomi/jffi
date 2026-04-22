@@ -154,7 +154,8 @@ pub fn build_platform(platform: &str, release: bool) -> Result<()> {
 }
 
 fn build_ios(release: bool) -> Result<()> {
-    build_ios_xcframework(release)
+    build_ios_xcframework(release)?;
+    Ok(())
 }
 
 fn build_ios_target(release: bool, _target_type: &str) -> Result<()> {
@@ -165,7 +166,8 @@ fn build_ios_target(release: bool, _target_type: &str) -> Result<()> {
 fn build_ios_xcframework(release: bool) -> Result<()> {
     let profile = if release { "release" } else { "debug" };
     
-    // Build for all iOS targets
+    // Always build for all architectures to ensure Xcode compatibility
+    // (Xcode may build for device even when running on simulator)
     let targets = vec![
         ("aarch64-apple-ios-sim", "iOS Simulator (ARM64)"),
         ("x86_64-apple-ios", "iOS Simulator (x86_64)"),
@@ -205,7 +207,7 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
         .find(|e| {
             let name = e.file_name();
             let name_str = name.to_string_lossy();
-            name_str.starts_with("lib") && name_str.ends_with("core.dylib")
+            name_str.starts_with("lib") && name_str.ends_with("core.a")
         })
         .map(|e| e.path())
         .context("Could not find FFI library")?;
@@ -236,7 +238,9 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
         .and_then(|s| s.strip_prefix("lib"))
         .context("Could not determine library name")?;
     
-    // Create lipo'd simulator library (combine arm64 and x86_64 simulators)
+    let xcframework_path = format!("platforms/ios/{}.xcframework", lib_name);
+    
+    // Create universal simulator library (combine arm64 and x86_64 simulators)
     let sim_arm64_lib = format!("target/aarch64-apple-ios-sim/{}/lib{}.a", profile, lib_name);
     let sim_x86_lib = format!("target/x86_64-apple-ios/{}/lib{}.a", profile, lib_name);
     let sim_universal_lib = format!("target/ios-simulator-universal/lib{}.a", lib_name);
@@ -258,13 +262,68 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
         anyhow::bail!("lipo failed to create universal simulator library");
     }
     
-    // Create XCFramework
     let device_lib = format!("target/aarch64-apple-ios/{}/lib{}.a", profile, lib_name);
-    let xcframework_path = format!("platforms/ios/{}.xcframework", lib_name);
     
-    // Remove existing XCFramework if it exists
-    let _ = std::fs::remove_dir_all(&xcframework_path);
+    // Check if XCFramework exists - if so, try to update in-place (preserves Xcode reference)
+    if std::path::Path::new(&xcframework_path).exists() {
+        // Find actual subdirectories in XCFramework (don't hardcode names)
+        let mut sim_dir = None;
+        let mut device_dir = None;
+        
+        if let Ok(entries) = std::fs::read_dir(&xcframework_path) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if path.is_dir() {
+                    let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    // Security: skip if directory name contains path traversal attempts
+                    if dir_name.contains("..") || dir_name.contains('/') || dir_name.contains('\\') {
+                        continue;
+                    }
+                    if dir_name.contains("simulator") {
+                        sim_dir = Some(dir_name.to_string());
+                    } else if dir_name.starts_with("ios-arm64") && !dir_name.contains("simulator") {
+                        device_dir = Some(dir_name.to_string());
+                    }
+                }
+            }
+        }
+        
+        // If we found both directories, update in-place
+        if let (Some(sim), Some(dev)) = (sim_dir, device_dir) {
+            let sim_dest = format!("{}/{}/lib{}.a", xcframework_path, sim, lib_name);
+            let device_dest = format!("{}/{}/lib{}.a", xcframework_path, dev, lib_name);
+            
+            match (
+                std::fs::copy(&sim_universal_lib, &sim_dest),
+                std::fs::copy(&device_lib, &device_dest)
+            ) {
+                (Ok(_), Ok(_)) => {
+                    // Touch Info.plist to update modification time (helps Xcode detect changes)
+                    let info_plist = format!("{}/Info.plist", xcframework_path);
+                    if Command::new("touch").arg(&info_plist).status().is_err() {
+                        // Fallback: update timestamp by reading and writing
+                        if let Ok(content) = std::fs::read(&info_plist) {
+                            let _ = std::fs::write(&info_plist, content);
+                        }
+                    }
+                    
+                    println!("{}", "  ✅ iOS XCFramework updated in-place".green());
+                    return Ok(());
+                }
+                _ => {
+                    // Copy failed, fall through to recreate
+                    println!("  {} XCFramework update failed, recreating...", "⚠".yellow());
+                    let _ = std::fs::remove_dir_all(&xcframework_path);
+                }
+            }
+        } else {
+            // Structure mismatch or incomplete, recreate
+            println!("  {} XCFramework structure incomplete, recreating...", "⚠".yellow());
+            let _ = std::fs::remove_dir_all(&xcframework_path);
+        }
+    }
     
+    // XCFramework doesn't exist - create it fresh
     let xcframework_status = Command::new("xcodebuild")
         .args(&[
             "-create-xcframework",
@@ -358,14 +417,13 @@ fn build_android(release: bool) -> Result<()> {
 }
 
 fn build_macos(_arch: &str, release: bool) -> Result<()> {
-    // Note: We build universal XCFramework regardless of specified arch
     build_macos_xcframework(release)
 }
 
 fn build_macos_xcframework(release: bool) -> Result<()> {
     let profile = if release { "release" } else { "debug" };
     
-    // Build for both macOS architectures
+    // Always build for both architectures to ensure compatibility
     let targets = vec![
         ("aarch64-apple-darwin", "macOS Apple Silicon"),
         ("x86_64-apple-darwin", "macOS Intel"),
@@ -435,7 +493,9 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
         .and_then(|s| s.strip_prefix("lib"))
         .context("Could not determine library name")?;
     
-    // Create lipo'd universal library (combine arm64 and x86_64)
+    let xcframework_path = format!("platforms/macos/{}.xcframework", lib_name);
+    
+    // Create universal library (combine arm64 and x86_64)
     // Use dylib for macOS because static libraries cannot be code signed when embedded
     let arm64_lib = format!("target/aarch64-apple-darwin/{}/lib{}.dylib", profile, lib_name);
     let x86_lib = format!("target/x86_64-apple-darwin/{}/lib{}.dylib", profile, lib_name);
@@ -458,12 +518,60 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
         anyhow::bail!("lipo failed to create universal macOS library");
     }
     
-    // Create XCFramework
-    let xcframework_path = format!("platforms/macos/{}.xcframework", lib_name);
+    // Check if XCFramework exists - if so, try to update in-place (preserves Xcode reference)
+    if std::path::Path::new(&xcframework_path).exists() {
+        // Find actual subdirectory in XCFramework (don't hardcode name)
+        let mut macos_dir = None;
+        
+        if let Ok(entries) = std::fs::read_dir(&xcframework_path) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if path.is_dir() {
+                    let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    // Security: skip if directory name contains path traversal attempts
+                    if dir_name.contains("..") || dir_name.contains('/') || dir_name.contains('\\') {
+                        continue;
+                    }
+                    if dir_name.starts_with("macos-") {
+                        macos_dir = Some(dir_name.to_string());
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // If we found the directory, update in-place
+        if let Some(dir) = macos_dir {
+            let dest = format!("{}/{}/lib{}.dylib", xcframework_path, dir, lib_name);
+            
+            match std::fs::copy(&universal_lib, &dest) {
+                Ok(_) => {
+                    // Touch Info.plist to update modification time (helps Xcode detect changes)
+                    let info_plist = format!("{}/Info.plist", xcframework_path);
+                    if Command::new("touch").arg(&info_plist).status().is_err() {
+                        // Fallback: update timestamp by reading and writing
+                        if let Ok(content) = std::fs::read(&info_plist) {
+                            let _ = std::fs::write(&info_plist, content);
+                        }
+                    }
+                    
+                    println!("{}", "  ✅ macOS XCFramework updated in-place".green());
+                    return Ok(());
+                }
+                Err(_) => {
+                    // Copy failed, fall through to recreate
+                    println!("  {} XCFramework update failed, recreating...", "⚠".yellow());
+                    let _ = std::fs::remove_dir_all(&xcframework_path);
+                }
+            }
+        } else {
+            // Structure mismatch, recreate
+            println!("  {} XCFramework structure not found, recreating...", "⚠".yellow());
+            let _ = std::fs::remove_dir_all(&xcframework_path);
+        }
+    }
     
-    // Remove existing XCFramework if it exists
-    let _ = std::fs::remove_dir_all(&xcframework_path);
-    
+    // XCFramework doesn't exist - create it fresh
     let xcframework_status = Command::new("xcodebuild")
         .args(&[
             "-create-xcframework",

@@ -15,7 +15,7 @@ pub fn watch_project(platform: &str) -> Result<()> {
     println!("   For Swift changes, use Xcode directly - it has native hot reload.");
     println!();
     
-    // Initial build
+    // Initial build (full build to ensure Xcode compatibility)
     println!("{}", "  → Initial Rust build...".bright_blue());
     crate::commands::build::build_platform(platform, false)?;
     println!("{}", "  ✓ Build complete!".green());
@@ -27,25 +27,14 @@ pub fn watch_project(platform: &str) -> Result<()> {
     
     // Auto-open IDE or launch app
     if platform == "ios" {
-        use crate::platform::IOSSimulator;
-        
-        println!("{}", "  → Finding iOS simulator...".bright_blue());
-        let (sim_name, sim_id) = IOSSimulator::get_available()?;
-        println!("{}", format!("  → Using: {}", sim_name).bright_blue());
-        
-        println!("{}", "  → Booting simulator...".bright_blue());
-        let sim = IOSSimulator;
-        sim.boot(&sim_id)?;
-        sim.open_app()?;
-        
         println!("{}", "  → Opening Xcode...".bright_blue());
         let project = XcodeProject::find(platform_enum)?;
         project.open()?;
         println!();
-        println!("{}", "  ✓ Xcode opened with iOS Simulator ready!".green());
+        println!("{}", "  ✓ Xcode opened!".green());
         println!();
         println!("{}", "   🚀 IMPORTANT: Press Cmd+R in Xcode to RUN the app!".bright_yellow().bold());
-        println!("{}", format!("   The destination is already set to: {}", sim_name).bright_cyan());
+        println!("   (Select your simulator/device and run)");
         println!();
         println!("   Development workflow:");
         println!("   • Edit Swift files → Changes appear instantly (native hot reload)");
@@ -154,6 +143,10 @@ pub fn watch_project(platform: &str) -> Result<()> {
                                             println!("{}", format!("  ✗ Failed to restart app: {}", e).red());
                                         }
                                     }
+                                } else if platform == "ios" || platform == "macos" {
+                                    // Touch XCFramework to update timestamp and notify Xcode
+                                    let _ = touch_xcframework(platform);
+                                    println!("{}", "  ✓ Rust rebuild complete! Press Cmd+B in Xcode to use new code.".green());
                                 } else {
                                     println!("{}", "  ✓ Rust rebuild complete! Press Cmd+B in Xcode to use new code.".green());
                                 }
@@ -227,4 +220,34 @@ fn restart_linux_app() -> Result<()> {
     
     // Relaunch
     launch_linux_app_background()
+}
+
+fn touch_xcframework(platform: &str) -> Result<()> {
+    // Touch the XCFramework to update its timestamp, signaling to Xcode it changed
+    let platform_dir = if platform == "ios" {
+        "platforms/ios"
+    } else {
+        "platforms/macos"
+    };
+    
+    if let Ok(entries) = std::fs::read_dir(platform_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("xcframework") {
+                // Touch the XCFramework directory and its Info.plist
+                let _ = Command::new("touch")
+                    .arg(&path)
+                    .status();
+                let info_plist = path.join("Info.plist");
+                if info_plist.exists() {
+                    let _ = Command::new("touch")
+                        .arg(&info_plist)
+                        .status();
+                }
+                return Ok(());
+            }
+        }
+    }
+    
+    Ok(())
 }
