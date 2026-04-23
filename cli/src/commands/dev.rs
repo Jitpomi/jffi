@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use colored::*;
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
-use std::process::Command;
+use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
@@ -24,6 +24,9 @@ pub fn watch_project(platform: &str) -> Result<()> {
     // Parse platform
     let platform_enum = Platform::from_str(platform)
         .ok_or_else(|| anyhow::anyhow!("Unknown platform: {}", platform))?;
+
+    // Windows: keep track of launched app so we can restart it on rebuilds.
+    let mut windows_child: Option<Child> = None;
     
     // Auto-open IDE or launch app
     if platform == "ios" {
@@ -98,6 +101,19 @@ pub fn watch_project(platform: &str) -> Result<()> {
         println!("   Development workflow:");
         println!("   • Edit JS/HTML/CSS files → Hot reload via Vite");
         println!("   • Edit Rust files → This watcher rebuilds WASM → Refresh browser");
+        println!();
+        println!("   Press Ctrl+C to stop watching");
+        println!();
+    } else if platform == "windows" {
+        println!("{}", "  → Launching Windows app...".bright_blue());
+        windows_child = Some(launch_windows_app_background()?);
+        println!();
+        println!("{}", "  ✓ App launched!".green());
+        println!();
+        println!("{}", "   🚀 Development mode active!".bright_yellow().bold());
+        println!();
+        println!("   Development workflow:");
+        println!("   • Edit Rust files → This watcher rebuilds → App auto-restarts");
         println!();
         println!("   Press Ctrl+C to stop watching");
         println!();
@@ -192,6 +208,21 @@ pub fn watch_project(platform: &str) -> Result<()> {
                                     println!("{}", "  ✓ Rust rebuild complete! Press Cmd+B in Xcode to use new code.".green());
                                 } else if platform == "web" {
                                     println!("{}", "  ✓ Rust rebuild complete! Refresh your browser to use new code.".green());
+                                } else if platform == "windows" {
+                                    println!("{}", "  ✓ Rust rebuild complete! Restarting app...".green());
+                                    if let Some(mut c) = windows_child.take() {
+                                        let _ = c.kill();
+                                        let _ = c.wait();
+                                    }
+                                    match launch_windows_app_background() {
+                                        Ok(c) => {
+                                            windows_child = Some(c);
+                                            println!("{}", "  ✓ App restarted!".green());
+                                        }
+                                        Err(e) => {
+                                            println!("{}", format!("  ✗ Failed to relaunch app: {}", e).red());
+                                        }
+                                    }
                                 } else {
                                     println!("{}", "  ✓ Rust rebuild complete!".green());
                                 }
@@ -218,6 +249,54 @@ pub fn watch_project(platform: &str) -> Result<()> {
             }
         }
     }
+}
+
+fn find_windows_exe() -> Result<std::path::PathBuf> {
+    let project_name = std::fs::read_dir("platforms/windows")
+        .ok()
+        .and_then(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .find(|e| e.file_name().to_string_lossy().ends_with(".csproj"))
+                .and_then(|e| e.path().file_stem().map(|s| s.to_string_lossy().to_string()))
+        })
+        .context("Could not find .csproj file to determine project name")?;
+
+    let exe_name = format!("{}.exe", project_name);
+
+    let output_dirs = [
+        format!("platforms/windows/bin/x64/Debug/net8.0-windows10.0.19041.0/{}", exe_name),
+        format!("platforms/windows/bin/x64/Release/net8.0-windows10.0.19041.0/{}", exe_name),
+        format!("platforms/windows/bin/x64/Debug/{}", exe_name),
+        format!("platforms/windows/bin/x64/Release/{}", exe_name),
+        format!("platforms/windows/bin/{}", exe_name),
+    ];
+
+    let exe_path = output_dirs
+        .iter()
+        .map(|p| std::path::Path::new(p))
+        .find(|p| p.exists())
+        .context(format!(
+            "Could not find {}. Make sure the Windows project built successfully.",
+            exe_name
+        ))?;
+
+    Ok(exe_path.to_path_buf())
+}
+
+fn launch_windows_app_background() -> Result<Child> {
+    let exe_path = find_windows_exe()?;
+    let exe_dir = exe_path.parent().context("Could not get executable directory")?;
+
+    let child = Command::new(&exe_path)
+        .current_dir(exe_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .context("Failed to launch Windows app")?;
+
+    Ok(child)
 }
 
 

@@ -659,12 +659,11 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
         .map(|e| e.path())
         .context("Could not find .csproj file")?;
     
-    // Build with MSBuild (or dotnet build)
-    let build_cmd = if Command::new("dotnet").arg("--version").output().is_ok() {
-        "dotnet"
-    } else {
-        "msbuild"
-    };
+    // Prefer `dotnet build` (works with WinUI 3 projects).
+    // If tools aren't on PATH, try common install locations / VS discovery.
+    let dotnet_cmd = find_dotnet();
+    let msbuild_cmd = find_msbuild();
+    let build_cmd: &str = if dotnet_cmd.is_some() { "dotnet" } else { "msbuild" };
     
     let mut build_args = vec!["build"];
     if build_cmd == "dotnet" {
@@ -685,10 +684,30 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
         }
     }
     
-    let status = Command::new(build_cmd)
+    let mut cmd = if build_cmd == "dotnet" {
+        Command::new(dotnet_cmd.as_deref().unwrap_or("dotnet"))
+    } else {
+        Command::new(msbuild_cmd.as_deref().unwrap_or("msbuild"))
+    };
+
+    let status = cmd
         .args(&build_args)
         .status()
-        .context(format!("Failed to build with {}", build_cmd))?;
+        .with_context(|| {
+            let dotnet_hint = if dotnet_cmd.is_some() {
+                "dotnet was found but failed to run."
+            } else {
+                "dotnet was not found (checked PATH and `C:\\Program Files\\dotnet\\dotnet.exe`)."
+            };
+            let msbuild_hint = if msbuild_cmd.is_some() {
+                "msbuild was found but failed to run."
+            } else {
+                "msbuild was not found (checked PATH and Visual Studio via vswhere)."
+            };
+            format!(
+                "Failed to build Windows app. {dotnet_hint} {msbuild_hint} Install the .NET SDK (recommended) or Visual Studio Build Tools."
+            )
+        })?;
     
     if !status.success() {
         anyhow::bail!("C# build failed");
@@ -711,6 +730,64 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
     Ok(())
 }
 
+fn find_dotnet() -> Option<String> {
+    // 1) PATH
+    if Command::new("dotnet").arg("--version").output().is_ok() {
+        return Some("dotnet".to_string());
+    }
+    // 2) Default install location
+    let candidates = [
+        r"C:\Program Files\dotnet\dotnet.exe",
+        r"C:\Program Files (x86)\dotnet\dotnet.exe",
+    ];
+    for c in candidates {
+        if std::path::Path::new(c).exists() {
+            return Some(c.to_string());
+        }
+    }
+    None
+}
+
+fn find_msbuild() -> Option<String> {
+    // 1) PATH
+    if Command::new("msbuild").arg("-version").output().is_ok() {
+        return Some("msbuild".to_string());
+    }
+
+    // 2) Visual Studio discovery via vswhere (installed with VS / Build Tools)
+    let vswhere = r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe";
+    if !std::path::Path::new(vswhere).exists() {
+        return None;
+    }
+
+    // Ask vswhere to locate MSBuild.exe. Example output:
+    // C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe
+    let out = Command::new(vswhere)
+        .args(&[
+            "-latest",
+            "-products",
+            "*",
+            "-requires",
+            "Microsoft.Component.MSBuild",
+            "-find",
+            r"MSBuild\**\Bin\MSBuild.exe",
+        ])
+        .output()
+        .ok()?;
+
+    if !out.status.success() {
+        return None;
+    }
+
+    let s = String::from_utf8_lossy(&out.stdout);
+    let first = s.lines().find(|l| !l.trim().is_empty())?.trim().to_string();
+    if std::path::Path::new(&first).exists() {
+        Some(first)
+    } else {
+        None
+    }
+}
+
 // Note: uniffi-bindgen is now run via 'cargo run --bin uniffi-bindgen' from the ffi directory
 // This uses the project's own uniffi-bindgen binary defined in core/Cargo.toml
 
@@ -722,11 +799,32 @@ fn ensure_uniffi_bindgen_cs() -> Result<()> {
         .output();
     
     if check.is_err() || !check.unwrap().status.success() {
-        println!("    Installing uniffi-bindgen-cs from main branch (this may take a few minutes)...");
-        println!("    {} Note: uniffi-bindgen-cs targets UniFFI v0.29.4, but JFFI uses v0.31.0", "⚠".yellow());
-        println!("    {} This may cause compatibility issues", "⚠".yellow());
-        let status = Command::new("cargo")
-            .args(&["install", "uniffi-bindgen-cs", "--git", "https://github.com/microsoft/uniffi-bindgen-cs", "--branch", "main"])
+        // Use git CLI for fetching (more reliable than libgit2 on Windows).
+        // See Cargo docs: https://doc.rust-lang.org/cargo/reference/config.html#netgit-fetch-with-cli
+        let repo = std::env::var("JFFI_UNIFFI_BINDGEN_CS_GIT").unwrap_or_else(|_| {
+            // The previously-used microsoft/uniffi-bindgen-cs URL is no longer available.
+            // NordSecurity maintains the widely-used fork.
+            "https://github.com/NordSecurity/uniffi-bindgen-cs".to_string()
+        });
+
+        // Prefer an explicit tag for repeatable installs; users can override to a fork/branch
+        // that matches their UniFFI version.
+        let tag = std::env::var("JFFI_UNIFFI_BINDGEN_CS_TAG").unwrap_or_else(|_| "v0.10.0+v0.29.4".to_string());
+        let branch = std::env::var("JFFI_UNIFFI_BINDGEN_CS_BRANCH").ok();
+
+        println!("    Installing uniffi-bindgen-cs ({} @ {})...", repo, branch.as_deref().unwrap_or(&tag));
+        println!("    {} If you use UniFFI v0.31+, you may need a newer uniffi-bindgen-cs fork; set JFFI_UNIFFI_BINDGEN_CS_GIT/JFFI_UNIFFI_BINDGEN_CS_TAG.", "⚠".yellow());
+
+        let mut cmd = Command::new("cargo");
+        cmd.env("CARGO_NET_GIT_FETCH_WITH_CLI", "true")
+            .args(&["install", "uniffi-bindgen-cs", "--git", &repo]);
+        if let Some(branch) = branch.as_deref() {
+            cmd.args(&["--branch", branch]);
+        } else {
+            cmd.args(&["--tag", &tag]);
+        }
+
+        let status = cmd
             .status()
             .context("Failed to install uniffi-bindgen-cs")?;
         
