@@ -251,6 +251,18 @@ pub fn watch_project(platform: &str) -> Result<()> {
     }
 }
 
+fn find_windows_csproj() -> Result<std::path::PathBuf> {
+    std::fs::read_dir("platforms/windows")
+        .ok()
+        .and_then(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .find(|e| e.file_name().to_string_lossy().ends_with(".csproj"))
+                .map(|e| e.path())
+        })
+        .context("Could not find .csproj file in platforms/windows")
+}
+
 fn find_windows_exe() -> Result<std::path::PathBuf> {
     let project_name = std::fs::read_dir("platforms/windows")
         .ok()
@@ -285,18 +297,40 @@ fn find_windows_exe() -> Result<std::path::PathBuf> {
 }
 
 fn launch_windows_app_background() -> Result<Child> {
-    let exe_path = find_windows_exe()?;
-    let exe_dir = exe_path.parent().context("Could not get executable directory")?;
+    // Prefer dotnet run --no-build for proper WinUI 3 activation context
+    let has_dotnet = Command::new("dotnet")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
 
-    let child = Command::new(&exe_path)
-        .current_dir(exe_dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .context("Failed to launch Windows app")?;
-
-    Ok(child)
+    if has_dotnet {
+        let csproj_path = find_windows_csproj()?;
+        let child = Command::new("dotnet")
+            .arg("run")
+            .arg("--no-build")
+            .arg("--project")
+            .arg(&csproj_path)
+            .current_dir("platforms/windows")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .context("Failed to launch Windows app via dotnet run")?;
+        Ok(child)
+    } else {
+        // Fallback: direct .exe launch (requires unpackaged app)
+        let exe_path = find_windows_exe()?;
+        let exe_dir = exe_path.parent().context("Could not get executable directory")?;
+        let child = Command::new(&exe_path)
+            .current_dir(exe_dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .context("Failed to launch Windows app")?;
+        Ok(child)
+    }
 }
 
 

@@ -288,67 +288,83 @@ fn run_windows() -> Result<()> {
     // Build first
     println!("  {} Building Windows app...", "→".bright_blue());
     crate::commands::build::build_project(Some("windows".to_string()), false, false, false)?;
-    
+
     println!("  {} Launching Windows app...", "→".bright_blue());
-    
-    // Get the project name from the .csproj file
-    let project_name = std::fs::read_dir("platforms/windows")
+
+    // Find the .csproj file
+    let csproj_path = std::fs::read_dir("platforms/windows")
         .ok()
         .and_then(|entries| {
             entries
                 .filter_map(|e| e.ok())
-                .find(|e| {
-                    let name = e.file_name();
-                    name.to_string_lossy().ends_with(".csproj")
-                })
-                .and_then(|e| e.path().file_stem().map(|s| s.to_string_lossy().to_string()))
+                .find(|e| e.file_name().to_string_lossy().ends_with(".csproj"))
+                .map(|e| e.path())
         })
-        .context("Could not find .csproj file to determine project name")?;
-    
-    let exe_name = format!("{}.exe", project_name);
-    
-    // .NET builds to bin/x64/Debug/net8.0-windows10.0.19041.0/ or bin/x64/Release/...
-    let output_dirs = [
-        format!("platforms/windows/bin/x64/Debug/net8.0-windows10.0.19041.0/{}", exe_name),
-        format!("platforms/windows/bin/x64/Release/net8.0-windows10.0.19041.0/{}", exe_name),
-        format!("platforms/windows/bin/x64/Debug/{}", exe_name),
-        format!("platforms/windows/bin/x64/Release/{}", exe_name),
-        format!("platforms/windows/bin/{}", exe_name),
-    ];
-    
-    let exe_path = output_dirs.iter()
-        .map(|p| std::path::Path::new(p))
-        .find(|p| p.exists())
-        .context(format!(
-            "Could not find {}. Make sure to build first with 'jffi build --platform windows'",
-            exe_name
-        ))?;
-    
-    println!("  {} Found executable: {}", "→".bright_blue(), exe_path.display());
-    
-    // Check if FFI DLL exists in the same directory
-    let exe_dir = exe_path.parent().context("Could not get executable directory")?;
-    let dll_files: Vec<_> = std::fs::read_dir(exe_dir)?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("dll"))
-        .collect();
-    
-    println!("  {} DLLs in output directory:", "→".bright_blue());
-    for dll in &dll_files {
-        println!("    - {}", dll.file_name().to_string_lossy());
-    }
-    
-    // Launch the app
-    let output = Command::new(&exe_path)
+        .context("Could not find .csproj file in platforms/windows")?;
+
+    println!("  {} Found project: {}", "→".bright_blue(), csproj_path.display());
+
+    // Check if dotnet CLI is available
+    let has_dotnet = Command::new("dotnet")
+        .arg("--version")
         .output()
-        .context("Failed to launch Windows app")?;
-    
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    let output = if has_dotnet {
+        println!("  {} Launching via dotnet run (proper WinUI 3 activation)...", "→".bright_blue());
+        Command::new("dotnet")
+            .arg("run")
+            .arg("--no-build")
+            .arg("--project")
+            .arg(&csproj_path)
+            .current_dir("platforms/windows")
+            .output()
+            .context("Failed to launch Windows app via dotnet run")?
+    } else {
+        println!("  {} dotnet not found, falling back to direct .exe launch...", "→".yellow());
+        let project_name = csproj_path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .context("Could not get project name from .csproj")?;
+        let exe_name = format!("{}.exe", project_name);
+
+        let output_dirs = [
+            format!("platforms/windows/bin/x64/Debug/net8.0-windows10.0.19041.0/{}", exe_name),
+            format!("platforms/windows/bin/x64/Release/net8.0-windows10.0.19041.0/{}", exe_name),
+            format!("platforms/windows/bin/x64/Debug/{}", exe_name),
+            format!("platforms/windows/bin/x64/Release/{}", exe_name),
+            format!("platforms/windows/bin/{}", exe_name),
+        ];
+
+        let exe_path = output_dirs
+            .iter()
+            .map(|p| std::path::Path::new(p))
+            .find(|p| p.exists())
+            .context(format!(
+                "Could not find {}. Make sure to build first with 'jffi build --platform windows'",
+                exe_name
+            ))?;
+
+        println!("  {} Found executable: {}", "→".bright_blue(), exe_path.display());
+        Command::new(&exe_path)
+            .current_dir(exe_path.parent().context("Could not get executable directory")?)
+            .output()
+            .context("Failed to launch Windows app")?
+    };
+
     if !output.status.success() {
-        eprintln!("  {} stdout: {}", "→".bright_red(), String::from_utf8_lossy(&output.stdout));
-        eprintln!("  {} stderr: {}", "→".bright_red(), String::from_utf8_lossy(&output.stderr));
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stdout.trim().is_empty() {
+            eprintln!("  {} stdout: {}", "→".bright_red(), stdout);
+        }
+        if !stderr.trim().is_empty() {
+            eprintln!("  {} stderr: {}", "→".bright_red(), stderr);
+        }
         anyhow::bail!("App exited with code: {:?}", output.status.code());
     }
-    
+
     println!("{}", "  ✅ App launched!".green());
     Ok(())
 }
