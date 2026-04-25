@@ -318,6 +318,7 @@ fn run_windows() -> Result<()> {
             .arg("--no-build")
             .arg("--project")
             .arg(&csproj_path)
+            .arg("-p:Platform=x64")
             .output()
             .context("Failed to launch Windows app via dotnet run")?
     } else {

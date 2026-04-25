@@ -311,6 +311,7 @@ fn launch_windows_app_background() -> Result<Child> {
             .arg("--no-build")
             .arg("--project")
             .arg(&csproj_path)
+            .arg("-p:Platform=x64")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
