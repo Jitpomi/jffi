@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "{{name_pascal}} (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "{{name_pascal}} (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

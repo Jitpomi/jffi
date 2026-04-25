@@ -312,13 +312,13 @@ fn run_windows() -> Result<()> {
         .unwrap_or(false);
 
     let output = if has_dotnet {
-        println!("  {} Launching via dotnet run (proper WinUI 3 activation)...", "→".bright_blue());
+        println!("  {} Launching via dotnet run (with MSIX deployment)...", "→".bright_blue());
         Command::new("dotnet")
             .arg("run")
-            .arg("--no-build")
             .arg("--project")
             .arg(&csproj_path)
             .arg("-p:Platform=x64")
+            .arg("-p:RuntimeIdentifier=win-x64")
             .output()
             .context("Failed to launch Windows app via dotnet run")?
     } else {
@@ -330,8 +330,8 @@ fn run_windows() -> Result<()> {
         let exe_name = format!("{}.exe", project_name);
 
         let output_dirs = [
-            format!("platforms/windows/bin/x64/Debug/net8.0-windows10.0.19041.0/{}", exe_name),
-            format!("platforms/windows/bin/x64/Release/net8.0-windows10.0.19041.0/{}", exe_name),
+            format!("platforms/windows/bin/x64/Debug/net8.0-windows10.0.26100.0/win-x64/{}", exe_name),
+            format!("platforms/windows/bin/x64/Release/net8.0-windows10.0.26100.0/win-x64/{}", exe_name),
             format!("platforms/windows/bin/x64/Debug/{}", exe_name),
             format!("platforms/windows/bin/x64/Release/{}", exe_name),
             format!("platforms/windows/bin/{}", exe_name),

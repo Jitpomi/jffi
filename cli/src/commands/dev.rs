@@ -25,9 +25,6 @@ pub fn watch_project(platform: &str) -> Result<()> {
     let platform_enum = Platform::from_str(platform)
         .ok_or_else(|| anyhow::anyhow!("Unknown platform: {}", platform))?;
 
-    // Windows: keep track of launched app so we can restart it on rebuilds.
-    let mut windows_child: Option<Child> = None;
-    
     // Auto-open IDE or launch app
     if platform == "ios" {
         println!("{}", "  → Opening Xcode...".bright_blue());
@@ -105,15 +102,16 @@ pub fn watch_project(platform: &str) -> Result<()> {
         println!("   Press Ctrl+C to stop watching");
         println!();
     } else if platform == "windows" {
-        println!("{}", "  → Launching Windows app...".bright_blue());
-        windows_child = Some(launch_windows_app_background()?);
+        println!("{}", "  → Opening Visual Studio...".bright_blue());
+        open_visual_studio()?;
         println!();
-        println!("{}", "  ✓ App launched!".green());
+        println!("{}", "  ✓ Visual Studio opened!".green());
         println!();
-        println!("{}", "   🚀 Development mode active!".bright_yellow().bold());
+        println!("{}", "   🚀 IMPORTANT: Press ▶️ (F5) in Visual Studio to RUN the app!".bright_yellow().bold());
         println!();
         println!("   Development workflow:");
-        println!("   • Edit Rust files → This watcher rebuilds → App auto-restarts");
+        println!("   • Edit C# files → Use Visual Studio's hot reload (Edit & Continue)");
+        println!("   • Edit Rust files → This watcher rebuilds → Press F5 in Visual Studio");
         println!();
         println!("   Press Ctrl+C to stop watching");
         println!();
@@ -209,20 +207,9 @@ pub fn watch_project(platform: &str) -> Result<()> {
                                 } else if platform == "web" {
                                     println!("{}", "  ✓ Rust rebuild complete! Refresh your browser to use new code.".green());
                                 } else if platform == "windows" {
-                                    println!("{}", "  ✓ Rust rebuild complete! Restarting app...".green());
-                                    if let Some(mut c) = windows_child.take() {
-                                        let _ = c.kill();
-                                        let _ = c.wait();
-                                    }
-                                    match launch_windows_app_background() {
-                                        Ok(c) => {
-                                            windows_child = Some(c);
-                                            println!("{}", "  ✓ App restarted!".green());
-                                        }
-                                        Err(e) => {
-                                            println!("{}", format!("  ✗ Failed to relaunch app: {}", e).red());
-                                        }
-                                    }
+                                    // Copy updated FFI DLL to output directory for Visual Studio to pick up
+                                    let _ = copy_windows_ffi_dll();
+                                    println!("{}", "  ✓ Rust rebuild complete! Press F5 in Visual Studio to use new code.".green());
                                 } else {
                                     println!("{}", "  ✓ Rust rebuild complete!".green());
                                 }
@@ -263,74 +250,44 @@ fn find_windows_csproj() -> Result<std::path::PathBuf> {
         .context("Could not find .csproj file in platforms/windows")
 }
 
-fn find_windows_exe() -> Result<std::path::PathBuf> {
-    let project_name = std::fs::read_dir("platforms/windows")
-        .ok()
-        .and_then(|entries| {
-            entries
-                .filter_map(|e| e.ok())
-                .find(|e| e.file_name().to_string_lossy().ends_with(".csproj"))
-                .and_then(|e| e.path().file_stem().map(|s| s.to_string_lossy().to_string()))
-        })
-        .context("Could not find .csproj file to determine project name")?;
-
-    let exe_name = format!("{}.exe", project_name);
-
-    let output_dirs = [
-        format!("platforms/windows/bin/x64/Debug/net8.0-windows10.0.19041.0/{}", exe_name),
-        format!("platforms/windows/bin/x64/Release/net8.0-windows10.0.19041.0/{}", exe_name),
-        format!("platforms/windows/bin/x64/Debug/{}", exe_name),
-        format!("platforms/windows/bin/x64/Release/{}", exe_name),
-        format!("platforms/windows/bin/{}", exe_name),
-    ];
-
-    let exe_path = output_dirs
-        .iter()
-        .map(|p| std::path::Path::new(p))
-        .find(|p| p.exists())
-        .context(format!(
-            "Could not find {}. Make sure the Windows project built successfully.",
-            exe_name
-        ))?;
-
-    Ok(exe_path.to_path_buf())
+fn open_visual_studio() -> Result<()> {
+    let csproj_path = find_windows_csproj()?;
+    let csproj_str = csproj_path.to_str().unwrap_or("platforms/windows\\hit.csproj");
+    let _ = Command::new("cmd")
+        .args(&["/c", "start", "", csproj_str])
+        .spawn()
+        .context("Failed to open Visual Studio. Make sure it is installed.")?;
+    Ok(())
 }
 
-fn launch_windows_app_background() -> Result<Child> {
-    // Prefer dotnet run --no-build for proper WinUI 3 activation context
-    let has_dotnet = Command::new("dotnet")
-        .arg("--version")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-
-    if has_dotnet {
-        let csproj_path = find_windows_csproj()?;
-        let child = Command::new("dotnet")
-            .arg("run")
-            .arg("--no-build")
-            .arg("--project")
-            .arg(&csproj_path)
-            .arg("-p:Platform=x64")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .context("Failed to launch Windows app via dotnet run")?;
-        Ok(child)
-    } else {
-        // Fallback: direct .exe launch (requires unpackaged app)
-        let exe_path = find_windows_exe()?;
-        let exe_dir = exe_path.parent().context("Could not get executable directory")?;
-        let child = Command::new(&exe_path)
-            .current_dir(exe_dir)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .context("Failed to launch Windows app")?;
-        Ok(child)
+fn copy_windows_ffi_dll() -> Result<()> {
+    let lib_name = std::env::current_dir()?
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("core")
+        .replace("-", "_");
+    let dll_source = format!("platforms/windows/{}_ffi.dll", lib_name);
+    if !std::path::Path::new(&dll_source).exists() {
+        return Ok(());
     }
+
+    let _project_name = find_windows_csproj()?
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "hit".to_string());
+
+    let output_dirs = [
+        format!("platforms/windows/bin/x64/Debug/net8.0-windows10.0.26100.0/win-x64/{}_ffi.dll", lib_name),
+        format!("platforms/windows/bin/x64/Debug/net8.0-windows10.0.26100.0/{}_ffi.dll", lib_name),
+        format!("platforms/windows/bin/x64/Debug/{}_ffi.dll", lib_name),
+    ];
+
+    for dest in &output_dirs {
+        if std::path::Path::new(dest).exists() {
+            let _ = std::fs::copy(&dll_source, dest);
+        }
+    }
+    Ok(())
 }
 
 

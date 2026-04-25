@@ -4,9 +4,11 @@ namespace {{name_pascal}}
 {
     public partial class App : Application
     {
+        private Window? _window;
+
         public App()
         {
-            this.InitializeComponent();
+            InitializeComponent();
         }
 
         protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
@@ -14,7 +16,5 @@ namespace {{name_pascal}}
             _window = new MainWindow();
             _window.Activate();
         }
-
-        private Window _window = null!;
     }
 }
