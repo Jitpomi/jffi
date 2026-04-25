@@ -107,7 +107,9 @@ pub fn watch_project(platform: &str) -> Result<()> {
         println!();
         println!("{}", "  ✓ Visual Studio opened!".green());
         println!();
-        println!("{}", "   🚀 IMPORTANT: Press ▶️ (F5) in Visual Studio to RUN the app!".bright_yellow().bold());
+        println!("{}", "   🚀 IMPORTANT: Enable Deploy in VS before running!".bright_yellow().bold());
+        println!("{}", "      Build → Configuration Manager → ☑ Deploy".bright_yellow());
+        println!("{}", "      Then press ▶️ (F5) to RUN the app!".bright_yellow().bold());
         println!();
         println!("   Development workflow:");
         println!("   • Edit C# files → Use Visual Studio's hot reload (Edit & Continue)");
