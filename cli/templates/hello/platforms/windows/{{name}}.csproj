@@ -19,6 +19,18 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <!--
+    Avoid XAML compilation by default so `dotnet build` works on minimal Windows
+    environments where the WinUI XAML compiler toolchain isn't fully available.
+    Visual Studio can still open the project and compile XAML if desired.
+  -->
+  <ItemGroup>
+    <None Remove="App.xaml" />
+    <None Remove="MainWindow.xaml" />
+    <ApplicationDefinition Remove="App.xaml" />
+    <Page Remove="MainWindow.xaml" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.0-preview2" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.1761-preview" />

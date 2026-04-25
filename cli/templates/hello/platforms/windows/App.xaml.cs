@@ -1,14 +1,19 @@
 using Microsoft.UI.Xaml;
+using WinRT;
 
 namespace {{name_pascal}}
 {
-    public partial class App : Application
+    public sealed class App : Application
     {
-        private Window? _window;
+        [System.STAThread]
+        public static void Main(string[] args)
+        {
+            ComWrappersSupport.InitializeComWrappers();
+            Application.Start(_ => new App());
+        }
 
         public App()
         {
-            InitializeComponent();
         }
 
         protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
@@ -16,5 +21,7 @@ namespace {{name_pascal}}
             _window = new MainWindow();
             _window.Activate();
         }
+
+        private Window _window = null!;
     }
 }
