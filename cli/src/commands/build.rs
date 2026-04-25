@@ -665,8 +665,9 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
     let msbuild_cmd = find_msbuild();
     let build_cmd: &str = if dotnet_cmd.is_some() { "dotnet" } else { "msbuild" };
     
-    let mut build_args = vec!["build"];
+    let mut build_args: Vec<&str> = Vec::new();
     if build_cmd == "dotnet" {
+        build_args.push("build");
         build_args.push(csproj_file.to_str().unwrap());
         // WinUI 3 requires a specific platform, not AnyCPU
         build_args.extend(&["-p:Platform=x64"]);
@@ -676,6 +677,7 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
             build_args.extend(&["-c", "Release"]);
         }
     } else {
+        // MSBuild: project file is the first positional argument (no 'build' subcommand)
         build_args.push(csproj_file.to_str().unwrap());
         build_args.extend(&["/p:Platform=x64"]);
         build_args.extend(&["/p:WindowsAppSDKSelfContained=true"]);
