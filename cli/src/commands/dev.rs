@@ -311,7 +311,6 @@ fn launch_windows_app_background() -> Result<Child> {
             .arg("--no-build")
             .arg("--project")
             .arg(&csproj_path)
-            .current_dir("platforms/windows")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
