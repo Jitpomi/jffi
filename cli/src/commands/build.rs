@@ -699,10 +699,10 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
             let dotnet_hint = if dotnet_cmd.is_some() {
                 "dotnet was found but failed to run."
             } else {
-                "dotnet was not found (checked PATH and `C:\\Program Files\\dotnet\\dotnet.exe`)."
+                "dotnet was not found (checked PATH and `C:\\Program Files\\dotnet\\dotnet.exe`). Install .NET 8 SDK from https://dotnet.microsoft.com/download"
             };
             let msbuild_hint = if msbuild_cmd.is_some() {
-                "msbuild was found but failed to run."
+                "msbuild was found but failed to run. Note: MSBuild requires the .NET SDK to resolve Microsoft.NET.Sdk-style projects."
             } else {
                 "msbuild was not found (checked PATH and Visual Studio via vswhere)."
             };
