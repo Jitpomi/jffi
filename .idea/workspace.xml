@@ -11,20 +11,7 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="feat: windows">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/App.xaml" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/App.xaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/App.xaml.cs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/App.xaml.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Assets/SplashScreen.scale-200.png" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Assets/SplashScreen.scale-200.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Assets/Square150x150Logo.scale-200.png" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Assets/Square150x150Logo.scale-200.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Assets/Square44x44Logo.scale-200.png" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Assets/Square44x44Logo.scale-200.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Assets/StoreLogo.png" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Assets/StoreLogo.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Assets/Wide310x150Logo.scale-200.png" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Assets/Wide310x150Logo.scale-200.png" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/MainWindow.xaml" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/MainWindow.xaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/MainWindow.xaml.cs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/MainWindow.xaml.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Package.appxmanifest" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Package.appxmanifest" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/{{name}}.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/{{name}}.csproj" afterDir="false" />
-    </list>
+    <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="feat: windows" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -137,7 +124,7 @@
       <workItem from="1775399602549" duration="35206000" />
       <workItem from="1776574893845" duration="369000" />
       <workItem from="1776575270900" duration="16172000" />
-      <workItem from="1777146781648" duration="19291000" />
+      <workItem from="1777146781648" duration="19863000" />
     </task>
     <task id="LOCAL-00001" summary="feat: unify all platform templates to hello pattern&#10; &#10;- Remove todo/counter template options (marked as coming soon)&#10;- Simplify all platform UIs (iOS, macOS, Android, Windows, Linux, Web)&#10;  to use only core.greeting() with refresh button&#10;- Block todo/counter selection from CLI and interactive UI&#10;- All platforms now generate consistent hello world app">
       <option name="closed" value="true" />
@@ -171,7 +158,15 @@
       <option name="project" value="LOCAL" />
       <updated>1777156170340</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="feat: windows">
+      <option name="closed" value="true" />
+      <created>1777227853274</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1777227853274</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
