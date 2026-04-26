@@ -632,40 +632,6 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
         if !status.success() {
             anyhow::bail!("Rust build failed for {}", arch);
         }
-        
-        // Copy DLL directly to bin output directory
-        let lib_name = std::env::current_dir()?
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("core")
-            .replace("-", "_");
-        let lib_path = format!("target/{}/{}/{}_core.dll", target, profile, lib_name);
-        let dll_name = format!("{}_core.dll", lib_name);
-        let platform_name = match *arch {
-            "i686" => "x86",
-            "x86_64" => "x64",
-            "aarch64" => "ARM64",
-            _ => arch,
-        };
-        
-        // Copy to bin output directory for each configuration
-        let config = if release { "Release" } else { "Debug" };
-        let rid = match *arch {
-            "i686" => "win-x86",
-            "x86_64" => "win-x64",
-            "aarch64" => "win-arm64",
-            _ => "win-x64",
-        };
-        let output_dir = format!("platforms/windows/bin/{}/{}/net8.0-windows10.0.19041.0/{}", 
-                                 platform_name, config, rid);
-        std::fs::create_dir_all(&output_dir)?;
-        let dll_dest = format!("{}/{}", output_dir, dll_name);
-        
-        if std::path::Path::new(&lib_path).exists() {
-            std::fs::copy(&lib_path, &dll_dest)
-                .with_context(|| format!("Failed to copy DLL to {}", dll_dest))?;
-            println!("  {} Copied DLL to {}", "✓".green(), dll_dest);
-        }
     }
     
     // Step 2: Generate C# bindings once (using x64 DLL)
@@ -756,7 +722,56 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
         anyhow::bail!("C# build failed");
     }
 
-    // MSBuild automatically copies DLLs via Content includes in .csproj
+    // Step 4: Copy DLLs to output directories (AFTER C# build creates them)
+    println!("  {} Copying DLLs to output directories...", "→".bright_blue());
+    
+    let bin_dir = std::path::Path::new("platforms/windows/bin");
+    if !bin_dir.exists() {
+        anyhow::bail!("Output directory not found - C# build may have failed");
+    }
+    
+    // Search for .exe files in bin directory to find actual output locations
+    for arch in &archs {
+        let target = format!("{}-pc-windows-msvc", arch);
+        let lib_path = format!("target/{}/{}/{}_core.dll", target, profile, lib_name);
+        let dll_name = format!("{}_core.dll", lib_name);
+        
+        let platform_name = match *arch {
+            "i686" => "x86",
+            "x86_64" => "x64",
+            "aarch64" => "ARM64",
+            _ => arch,
+        };
+        
+        // Search for the platform's output directory
+        let platform_bin = bin_dir.join(platform_name);
+        if platform_bin.exists() && std::path::Path::new(&lib_path).exists() {
+            // Recursively find .exe file
+            fn find_exe_dir(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+                if let Ok(entries) = std::fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("exe") {
+                            return path.parent().map(|p| p.to_path_buf());
+                        } else if path.is_dir() {
+                            if let Some(found) = find_exe_dir(&path) {
+                                return Some(found);
+                            }
+                        }
+                    }
+                }
+                None
+            }
+            
+            if let Some(output_dir) = find_exe_dir(&platform_bin) {
+                let dll_dest = output_dir.join(&dll_name);
+                std::fs::copy(&lib_path, &dll_dest)
+                    .with_context(|| format!("Failed to copy DLL to {}", dll_dest.display()))?;
+                println!("  {} Copied {} to {}", "✓".green(), dll_name, output_dir.display());
+            }
+        }
+    }
+    
     println!("{}", "  ✅ Windows build complete".green());
     Ok(())
 }
