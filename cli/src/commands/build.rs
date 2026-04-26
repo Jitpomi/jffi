@@ -670,19 +670,12 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
         build_args.push("build");
         build_args.push(csproj_file.to_str().unwrap());
         // WinUI 3 requires a specific platform, not AnyCPU
-        build_args.extend(&["-p:Platform=x64"]);
-        build_args.extend(&["-p:RuntimeIdentifier=win-x64"]);
-        // Make it self-contained to include WinUI 3 runtime
-        build_args.extend(&["-p:WindowsAppSDKSelfContained=true"]);
         if release {
             build_args.extend(&["-c", "Release"]);
         }
     } else {
         // MSBuild: project file is the first positional argument (no 'build' subcommand)
         build_args.push(csproj_file.to_str().unwrap());
-        build_args.extend(&["/p:Platform=x64"]);
-        build_args.extend(&["/p:RuntimeIdentifier=win-x64"]);
-        build_args.extend(&["/p:WindowsAppSDKSelfContained=true"]);
         if release {
             build_args.extend(&["/p:Configuration=Release"]);
         }
@@ -716,11 +709,14 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
     if !status.success() {
         anyhow::bail!("C# build failed");
     }
-    
+
     // Copy the FFI DLL to the output directory after build
     println!("  {} Copying FFI DLL to output directory...", "→".bright_blue());
     let config = if release { "Release" } else { "Debug" };
-    let output_dir = format!("platforms/windows/bin/x64/{}/net8.0-windows10.0.26100.0/win-x64", config);
+    let output_dir = crate::platform::windows::output_dir(
+        crate::platform::windows::DEFAULT_PLATFORM,
+        &config,
+    );
     if std::path::Path::new(&output_dir).exists() {
         let dll_source = format!("platforms/windows/{}_core.dll", lib_name);
         let dll_dest = format!("{}/{}_core.dll", output_dir, lib_name);

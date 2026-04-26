@@ -2,6 +2,6 @@
 <Project>
   <PropertyGroup>
     <ActiveDebugProfile>{{name_pascal}} (Package)</ActiveDebugProfile>
-    <_LastSelectedProfileId>Properties\PublishProfiles\win-x64.pubxml</_LastSelectedProfileId>
+    <_LastSelectedProfileId>Properties\PublishProfiles\win-x86.pubxml</_LastSelectedProfileId>
   </PropertyGroup>
 </Project>

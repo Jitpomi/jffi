@@ -55,6 +55,18 @@ impl Platform {
     }
 }
 
+pub mod windows {
+    pub const TARGET_FRAMEWORK: &str = "net8.0-windows10.0.19041.0";
+    pub const DEFAULT_PLATFORM: &str = "x86";
+
+    pub fn output_dir(platform: &str, config: &str) -> String {
+        format!(
+            "platforms/windows/bin/{}/{}/{}",
+            platform, config, TARGET_FRAMEWORK
+        )
+    }
+}
+
 /// Trait for platform-specific project operations
 #[allow(dead_code)]
 pub trait Project {

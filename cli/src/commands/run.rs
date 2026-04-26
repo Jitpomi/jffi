@@ -285,14 +285,15 @@ fn run_macos() -> Result<()> {
 }
 
 fn run_windows() -> Result<()> {
-    // Build first
     println!("  {} Building Windows app...", "→".bright_blue());
     crate::commands::build::build_project(Some("windows".to_string()), false, false, false)?;
 
     println!("  {} Launching Windows app...", "→".bright_blue());
 
     // Find the .csproj file
-    let csproj_path = std::fs::read_dir("platforms/windows")
+    let project_dir = std::env::current_dir()?;
+    let windows_dir = project_dir.join("platforms/windows");
+    let csproj_file = std::fs::read_dir(&windows_dir)
         .ok()
         .and_then(|entries| {
             entries
@@ -302,56 +303,16 @@ fn run_windows() -> Result<()> {
         })
         .context("Could not find .csproj file in platforms/windows")?;
 
-    println!("  {} Found project: {}", "→".bright_blue(), csproj_path.display());
+    println!("  {} Found project: {}", "→".bright_blue(), csproj_file.display());
 
-    // Check if dotnet CLI is available
-    let has_dotnet = Command::new("dotnet")
-        .arg("--version")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-
-    let output = if has_dotnet {
-        println!("  {} Launching via dotnet run (with MSIX deployment)...", "→".bright_blue());
-        Command::new("dotnet")
-            .arg("run")
-            .arg("--project")
-            .arg(&csproj_path)
-            .arg("-p:Platform=x64")
-            .arg("-p:RuntimeIdentifier=win-x64")
-            .output()
-            .context("Failed to launch Windows app via dotnet run")?
-    } else {
-        println!("  {} dotnet not found, falling back to direct .exe launch...", "→".yellow());
-        let project_name = csproj_path
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .context("Could not get project name from .csproj")?;
-        let exe_name = format!("{}.exe", project_name);
-
-        let output_dirs = [
-            format!("platforms/windows/bin/x64/Debug/net8.0-windows10.0.26100.0/win-x64/{}", exe_name),
-            format!("platforms/windows/bin/x64/Release/net8.0-windows10.0.26100.0/win-x64/{}", exe_name),
-            format!("platforms/windows/bin/x64/Debug/{}", exe_name),
-            format!("platforms/windows/bin/x64/Release/{}", exe_name),
-            format!("platforms/windows/bin/{}", exe_name),
-        ];
-
-        let exe_path = output_dirs
-            .iter()
-            .map(|p| std::path::Path::new(p))
-            .find(|p| p.exists())
-            .context(format!(
-                "Could not find {}. Make sure to build first with 'jffi build --platform windows'",
-                exe_name
-            ))?;
-
-        println!("  {} Found executable: {}", "→".bright_blue(), exe_path.display());
-        Command::new(&exe_path)
-            .current_dir(exe_path.parent().context("Could not get executable directory")?)
-            .output()
-            .context("Failed to launch Windows app")?
-    };
+    // Packaged WinUI 3 apps must be launched via dotnet run for proper MSIX deployment
+    println!("  {} Launching via dotnet run (with MSIX deployment)...", "→".bright_blue());
+    let mut cmd = Command::new("dotnet");
+    cmd.arg("run")
+        .arg("--project")
+        .arg(&csproj_file);
+    let output = cmd.output()
+        .context("Failed to launch Windows app via dotnet run")?;
 
     if !output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);

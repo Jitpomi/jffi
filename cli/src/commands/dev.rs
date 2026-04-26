@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use colored::*;
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
-use std::path::Path;
-use std::process::{Child, Command, Stdio};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
@@ -240,55 +240,90 @@ pub fn watch_project(platform: &str) -> Result<()> {
     }
 }
 
-fn find_windows_csproj() -> Result<std::path::PathBuf> {
-    std::fs::read_dir("platforms/windows")
-        .ok()
-        .and_then(|entries| {
-            entries
-                .filter_map(|e| e.ok())
-                .find(|e| e.file_name().to_string_lossy().ends_with(".csproj"))
-                .map(|e| e.path())
+fn find_windows_solution() -> Result<PathBuf> {
+    let windows_dir = std::env::current_dir()?
+        .join("platforms")
+        .join("windows");
+
+    find_file_with_extension(&windows_dir, "slnx")
+        .or_else(|| find_file_with_extension(&windows_dir, "csproj"))
+        .with_context(|| {
+            format!(
+                "Could not find .slnx or .csproj file in {}",
+                windows_dir.display()
+            )
         })
-        .context("Could not find .csproj file in platforms/windows")
+}
+
+fn find_file_with_extension(dir: &Path, extension: &str) -> Option<PathBuf> {
+    std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| path.extension().is_some_and(|ext| ext == extension))
 }
 
 fn open_visual_studio() -> Result<()> {
-    let csproj_path = find_windows_csproj()?;
-    let csproj_str = csproj_path.to_str().unwrap_or("platforms/windows\\hit.csproj");
-    let _ = Command::new("cmd")
-        .args(&["/c", "start", "", csproj_str])
+    let solution_path = find_windows_solution()?;
+
+    Command::new("cmd")
+        .args([
+            "/c",
+            "start",
+            "",
+            solution_path.to_str().context("Invalid path")?,
+        ])
         .spawn()
         .context("Failed to open Visual Studio. Make sure it is installed.")?;
+
     Ok(())
 }
 
 fn copy_windows_ffi_dll() -> Result<()> {
-    let lib_name = std::env::current_dir()?
+    let project_dir = std::env::current_dir()?;
+
+    let lib_name = project_dir
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("core")
-        .replace("-", "_");
-    let dll_source = format!("platforms/windows/{}_ffi.dll", lib_name);
-    if !std::path::Path::new(&dll_source).exists() {
-        return Ok(());
-    }
+        .replace('-', "_");
 
-    let _project_name = find_windows_csproj()?
-        .file_stem()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "hit".to_string());
+    let dll_name = format!("{lib_name}_ffi.dll");
+
+    let dll_source = project_dir
+        .join("platforms")
+        .join("windows")
+        .join(&dll_name);
+
+    if !dll_source.exists() {
+        return Ok(()); // nothing to copy
+    }
 
     let output_dirs = [
-        format!("platforms/windows/bin/x64/Debug/net8.0-windows10.0.26100.0/win-x64/{}_ffi.dll", lib_name),
-        format!("platforms/windows/bin/x64/Debug/net8.0-windows10.0.26100.0/{}_ffi.dll", lib_name),
-        format!("platforms/windows/bin/x64/Debug/{}_ffi.dll", lib_name),
+        project_dir.join(crate::platform::windows::output_dir(
+            crate::platform::windows::DEFAULT_PLATFORM,
+            "Debug",
+        )),
+        project_dir.join(crate::platform::windows::output_dir(
+            crate::platform::windows::DEFAULT_PLATFORM,
+            "Release",
+        )),
     ];
 
-    for dest in &output_dirs {
-        if std::path::Path::new(dest).exists() {
-            let _ = std::fs::copy(&dll_source, dest);
+    for dir in output_dirs {
+        if dir.exists() {
+            let dest = dir.join(&dll_name);
+
+            std::fs::copy(&dll_source, &dest).with_context(|| {
+                format!(
+                    "Failed to copy {} to {}",
+                    dll_source.display(),
+                    dest.display()
+                )
+            })?;
         }
     }
+
     Ok(())
 }
 
@@ -346,26 +381,22 @@ fn touch_xcframework(platform: &str) -> Result<()> {
     } else {
         "platforms/macos"
     };
-    
+
     if let Ok(entries) = std::fs::read_dir(platform_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("xcframework") {
                 // Touch the XCFramework directory and its Info.plist
-                let _ = Command::new("touch")
-                    .arg(&path)
-                    .status();
+                let _ = Command::new("touch").arg(&path).status();
+
                 let info_plist = path.join("Info.plist");
                 if info_plist.exists() {
-                    let _ = Command::new("touch")
-                        .arg(&info_plist)
-                        .status();
+                    let _ = Command::new("touch").arg(&info_plist).status();
                 }
-                return Ok(());
             }
         }
     }
-    
+
     Ok(())
 }
 
