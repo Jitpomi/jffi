@@ -14,14 +14,22 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
+    <!-- REPLACED PART -->
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
         <StackPanel
         VerticalAlignment="Center"
         HorizontalAlignment="Center"
         >
-        <TextBlock x:Name="GreetingText" FontSize="24" FontWeight="SemiBold" TextAlignment="Center"/>
-            <Button x:Name="RefreshButton" Content="Refresh" Click="RefreshButton_Click"/>
+        <TextBlock
+        x:Name="GreetingText"
+        FontSize="24"
+        FontWeight="SemiBold"
+        TextAlignment="Center"/>
+            <Button
+            x:Name="RefreshButton"
+            Content="Refresh"
+            Click="RefreshButton_Click"/>
         </StackPanel>
 
     </Grid>
