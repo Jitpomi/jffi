@@ -69,6 +69,11 @@ pub mod windows {
 
 
 
+/// Shared project trait
+pub trait Project {
+    fn platform(&self) -> Platform;
+}
+
 /// iOS/macOS Xcode project
 pub struct XcodeProject {
     #[allow(dead_code)]
