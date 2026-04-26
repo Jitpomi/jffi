@@ -744,21 +744,7 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
         anyhow::bail!("C# build failed");
     }
 
-    // Step 4: Copy DLL to output directory
-    println!("  {} Copying FFI DLL to output directory...", "→".bright_blue());
-    let config = if release { "Release" } else { "Debug" };
-    let platform_name = crate::platform::windows::DEFAULT_PLATFORM;
-    let output_dir = crate::platform::windows::output_dir(platform_name, &config);
-    if std::path::Path::new(&output_dir).exists() {
-        let dll_source = format!("platforms/windows/Native/{}/{}_core.dll", platform_name, lib_name);
-        let dll_dest = format!("{}/{}_core.dll", output_dir, lib_name);
-        if std::path::Path::new(&dll_source).exists() {
-            std::fs::copy(&dll_source, &dll_dest)
-                .with_context(|| format!("Failed to copy FFI DLL from {} to {}", dll_source, dll_dest))?;
-            println!("  {} Copied {} to output directory", "✓".green(), format!("{}_core.dll", lib_name));
-        }
-    }
-    
+    // MSBuild automatically copies DLLs via Content includes in .csproj
     println!("{}", "  ✅ Windows build complete".green());
     Ok(())
 }

@@ -58,20 +58,6 @@ impl Platform {
 pub mod windows {
     pub const TARGET_FRAMEWORK: &str = "net8.0-windows10.0.19041.0";
     pub const DEFAULT_PLATFORM: &str = "x64";
-
-    pub fn output_dir(platform: &str, config: &str) -> String {
-        // .NET with RuntimeIdentifiers creates: bin/{platform}/{config}/{tfm}/win-{platform}/
-        let rid = match platform {
-            "x86" => "win-x86",
-            "x64" => "win-x64", 
-            "ARM64" => "win-arm64",
-            _ => "win-x64",
-        };
-        format!(
-            "platforms/windows/bin/{}/{}/{}/{}",
-            platform, config, TARGET_FRAMEWORK, rid
-        )
-    }
 }
 
 

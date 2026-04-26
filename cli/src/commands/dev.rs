@@ -333,28 +333,32 @@ fn copy_windows_ffi_dll() -> Result<()> {
         return Ok(()); // nothing to copy
     }
 
-    let output_dirs = [
-        project_dir.join(crate::platform::windows::output_dir(
-            crate::platform::windows::DEFAULT_PLATFORM,
-            "Debug",
-        )),
-        project_dir.join(crate::platform::windows::output_dir(
-            crate::platform::windows::DEFAULT_PLATFORM,
-            "Release",
-        )),
-    ];
-
-    for dir in output_dirs {
-        if dir.exists() {
-            let dest = dir.join(&dll_name);
-
-            std::fs::copy(&dll_source, &dest).with_context(|| {
-                format!(
-                    "Failed to copy {} to {}",
-                    dll_source.display(),
-                    dest.display()
-                )
-            })?;
+    // Find all output directories (MSBuild creates: bin/{platform}/{config}/{tfm}/win-{platform}/)
+    let bin_dir = project_dir.join("platforms").join("windows").join("bin");
+    if bin_dir.exists() {
+        for entry in std::fs::read_dir(&bin_dir)? {
+            let platform_dir = entry?.path();
+            if platform_dir.is_dir() {
+                // Look for Debug/Release subdirs
+                for config_entry in std::fs::read_dir(&platform_dir)? {
+                    let config_dir = config_entry?.path();
+                    if config_dir.is_dir() {
+                        // Look for TFM/win-{platform} subdirs
+                        for tfm_entry in std::fs::read_dir(&config_dir)? {
+                            let tfm_dir = tfm_entry?.path();
+                            if tfm_dir.is_dir() {
+                                for rid_entry in std::fs::read_dir(&tfm_dir)? {
+                                    let rid_dir = rid_entry?.path();
+                                    if rid_dir.is_dir() && rid_dir.file_name().and_then(|n| n.to_str()).map(|n| n.starts_with("win-")).unwrap_or(false) {
+                                        let dest = rid_dir.join(&dll_name);
+                                        std::fs::copy(&dll_source, &dest).ok(); // Ignore errors, directory might not exist yet
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
