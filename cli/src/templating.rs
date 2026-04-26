@@ -253,6 +253,15 @@ uniffi = {{ version = "0.31.1", features = ["cli", "wasm-unstable-single-threade
         );
         fs::write(core_dir.join("Cargo.toml"), cargo_toml)?;
 
+        // Generate uniffi.toml with C# binding configuration
+        let uniffi_toml = format!(
+            r#"[bindings.csharp]
+cdylib_name = "{name_snake}_core"
+"#,
+            name_snake = context.get("name_snake").unwrap_or(&"app".to_string())
+        );
+        fs::write(core_dir.join("uniffi.toml"), uniffi_toml)?;
+
         Ok(())
     }
 

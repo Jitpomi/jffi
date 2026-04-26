@@ -4,6 +4,7 @@ use dialoguer::{theme::ColorfulTheme, Input, MultiSelect};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use uuid;
 
 use crate::templating::TemplateEngine;
 
@@ -317,7 +318,9 @@ impl FfiCore {{
     Ok(())
 }
 
+#[allow(unused_variables)]
 fn create_config_file(dir: &PathBuf, name: &str, platforms: &[&str]) -> Result<()> {
+    let platform_list: Vec<&str> = platforms.to_vec();
     let config = format!(r#"[package]
 name = "{}"
 version = "0.1.0"
@@ -338,16 +341,17 @@ deployment_target = "13.0"
 
 [platforms.windows]
 min_version = "10.0.19041.0"
+package_identity = "com.example.{}"
+publisher = "CN=dev"
+package_guid = "{}"
 
 [platforms.linux]
 gtk_version = "4.0"
 
 [platforms.web]
 target = "es2020"
-"#, name, platforms, name.replace("-", ""), name.replace("-", ""));
-    
+"#, name, platform_list, name.replace("-", ""), name.replace("-", ""), name.replace("-", ""), uuid::Uuid::new_v4().to_string());
     fs::write(dir.join("jffi.toml"), config)?;
-    println!("  {} jffi.toml", "✓".green());
     Ok(())
 }
 

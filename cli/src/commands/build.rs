@@ -99,8 +99,8 @@ pub fn build_platform_with_options(platform: &str, release: bool, device: bool) 
         }
         "macos-arm64" => build_macos("aarch64", release),
         "macos-x64" => build_macos("x86_64", release),
-        "windows" | "windows-x86" => build_windows("i686", release),
-        "windows-x64" => build_windows("x86_64", release),
+        "windows" | "windows-x64" => build_windows("x86_64", release),
+        "windows-x86" => build_windows("i686", release),
         "windows-arm64" => build_windows("aarch64", release),
         "linux" => build_linux(release),
         "web" => build_web(release),
@@ -146,8 +146,8 @@ pub fn build_platform(platform: &str, release: bool) -> Result<()> {
         }
         "macos-arm64" => build_macos("aarch64", release),
         "macos-x64" => build_macos("x86_64", release),
-        "windows" | "windows-x86" => build_windows("i686", release),
-        "windows-x64" => build_windows("x86_64", release),
+        "windows" | "windows-x64" => build_windows("x86_64", release),
+        "windows-x86" => build_windows("i686", release),
         "windows-arm64" => build_windows("aarch64", release),
         "linux" => build_linux(release),
         "web" => build_web(release),
@@ -616,8 +616,6 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
         anyhow::bail!("Rust build failed");
     }
     
-    println!("  {} Generating C# bindings with uniffi-bindgen-cs...", "→".bright_blue());
-    
     // Use library mode to generate bindings directly from the compiled DLL
     // On Windows, Rust builds cdylib as <name>.dll (not lib<name>.dll)
     let lib_name = std::env::current_dir()?
@@ -626,12 +624,18 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
         .unwrap_or("core")
         .replace("-", "_");
     let lib_path = format!("target/{}/{}/{}_core.dll", target, profile, lib_name);
+
+    println!("  {} Generating C# bindings with uniffi-bindgen-cs...", "→".bright_blue());
+    
+    std::fs::create_dir_all("platforms/windows/Generated")?;
     
     let status = Command::new("uniffi-bindgen-cs")
         .arg("--library")
         .arg(&lib_path)
+        .arg("--config")
+        .arg("core/uniffi.toml")
         .arg("--out-dir")
-        .arg("platforms/windows")
+        .arg("platforms/windows/Generated")
         .status()
         .context("Failed to run uniffi-bindgen-cs")?;
     if !status.success() {
@@ -645,7 +649,7 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
         "aarch64" => "ARM64",
         _ => arch,
     };
-    let dll_dir = format!("platforms/windows/{}", platform_name);
+    let dll_dir = format!("platforms/windows/Native/{}", platform_name);
     std::fs::create_dir_all(&dll_dir)?;
     let dll_path = format!("{}/{}", dll_dir, dll_name);
     if std::path::Path::new(&lib_path).exists() {
@@ -723,15 +727,9 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
     // Copy the FFI DLL to the output directory after build
     println!("  {} Copying FFI DLL to output directory...", "→".bright_blue());
     let config = if release { "Release" } else { "Debug" };
-    let platform_name = match arch {
-        "i686" => "x86",
-        "x86_64" => "x64",
-        "aarch64" => "ARM64",
-        _ => arch,
-    };
     let output_dir = crate::platform::windows::output_dir(platform_name, &config);
     if std::path::Path::new(&output_dir).exists() {
-        let dll_source = format!("platforms/windows/{}/{}_core.dll", platform_name, lib_name);
+        let dll_source = format!("platforms/windows/Native/{}/{}_core.dll", platform_name, lib_name);
         let dll_dest = format!("{}/{}_core.dll", output_dir, lib_name);
         if std::path::Path::new(&dll_source).exists() {
             std::fs::copy(&dll_source, &dll_dest)

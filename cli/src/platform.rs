@@ -57,7 +57,7 @@ impl Platform {
 
 pub mod windows {
     pub const TARGET_FRAMEWORK: &str = "net8.0-windows10.0.19041.0";
-    pub const DEFAULT_PLATFORM: &str = "x86";
+    pub const DEFAULT_PLATFORM: &str = "x64";
 
     pub fn output_dir(platform: &str, config: &str) -> String {
         format!(

@@ -8,7 +8,7 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Platforms>
-  <Project Name="{{name_pascal}}" Path="{{name_pascal}}.csproj">
+  <Project Name="{{name_pascal}}" Path="{{name}}.csproj">
     <Configuration Solution="Debug" Project="Debug" />
     <Configuration Solution="Release" Project="Release" />
     <Platform Solution="ARM64" Project="ARM64" />

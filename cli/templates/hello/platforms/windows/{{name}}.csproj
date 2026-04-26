@@ -5,8 +5,10 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>{{name_pascal}}</RootNamespace>
     <Platforms>x86;x64;ARM64</Platforms>
-    <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
-    <PlatformTarget>x86</PlatformTarget>
+    <Platform Condition=" '$(Platform)' == '' ">x64</Platform>
+    <PlatformTarget Condition=" '$(Platform)' == 'x86' ">x86</PlatformTarget>
+    <PlatformTarget Condition=" '$(Platform)' == 'x64' ">x64</PlatformTarget>
+    <PlatformTarget Condition=" '$(Platform)' == 'ARM64' ">ARM64</PlatformTarget>
     <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>
@@ -29,15 +31,15 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.*" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260416003" />
     <Content Include="Assets\**" />
-    <Content Include="x86\{{name}}_core.dll" Condition="'$(Platform)' == 'x86'">
+    <Content Include="Native\x86\{{name}}_core.dll" Condition="'$(Platform)' == 'x86'">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="x64\{{name}}_core.dll" Condition="'$(Platform)' == 'x64'">
+    <Content Include="Native\x64\{{name}}_core.dll" Condition="'$(Platform)' == 'x64'">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="arm64\{{name}}_core.dll" Condition="'$(Platform)' == 'ARM64'">
+    <Content Include="Native\ARM64\{{name}}_core.dll" Condition="'$(Platform)' == 'ARM64'">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
