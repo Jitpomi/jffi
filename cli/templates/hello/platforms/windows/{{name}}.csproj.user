@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project>
-  <PropertyGroup>
-    <ActiveDebugProfile>{{name_pascal}} (Package)</ActiveDebugProfile>
-    <_LastSelectedProfileId>Properties\PublishProfiles\win-x86.pubxml</_LastSelectedProfileId>
-  </PropertyGroup>
-</Project>
