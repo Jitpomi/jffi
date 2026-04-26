@@ -20,7 +20,7 @@
   Version="1.0.0.0"/>
 
 
-  <mp:PhoneIdentity PhoneProductId="{{UUID1}}" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
+  <mp:PhoneIdentity PhoneProductId="{{GUID1}}" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
 
   <Properties>

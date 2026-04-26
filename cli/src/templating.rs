@@ -197,7 +197,7 @@ impl TemplateEngine {
         context.insert("name_snake".to_string(), name.replace("-", "_"));
         context.insert("name_package".to_string(), name.replace("-", ""));
 
-        // Generate UUIDs for Xcode project files
+        // Generate UUIDs for Xcode project files (no hyphens)
         let mut rng = rand::thread_rng();
         for i in 1..=30 {
             let uuid = format!(
@@ -208,6 +208,19 @@ impl TemplateEngine {
                 rng.gen::<u32>()
             );
             context.insert(format!("UUID{}", i), uuid);
+        }
+        
+        // Generate GUIDs for Windows manifests (with hyphens, RFC 4122 format)
+        for i in 1..=10 {
+            let guid = format!(
+                "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
+                rng.gen::<u32>(),
+                rng.gen::<u16>(),
+                rng.gen::<u16>(),
+                rng.gen::<u16>(),
+                rng.gen::<u64>() & 0xFFFFFFFFFFFF // 48 bits
+            );
+            context.insert(format!("GUID{}", i), guid);
         }
 
         // Template manifest variables (can override defaults)
