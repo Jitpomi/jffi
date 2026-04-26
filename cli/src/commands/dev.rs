@@ -320,11 +320,13 @@ fn copy_windows_ffi_dll() -> Result<()> {
         .unwrap_or("core")
         .replace('-', "_");
 
-    let dll_name = format!("{lib_name}_ffi.dll");
+    let dll_name = format!("{lib_name}_core.dll");
 
     let dll_source = project_dir
         .join("platforms")
         .join("windows")
+        .join("Native")
+        .join(crate::platform::windows::DEFAULT_PLATFORM)
         .join(&dll_name);
 
     if !dll_source.exists() {

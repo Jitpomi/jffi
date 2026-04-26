@@ -594,10 +594,27 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
 fn build_windows(arch: &str, release: bool) -> Result<()> {
     // Ensure uniffi-bindgen-cs is installed
     ensure_uniffi_bindgen_cs()?;
-    
+
     let profile = if release { "release" } else { "debug" };
     let target = format!("{}-pc-windows-msvc", arch);
-    
+
+    // Ensure the Rust target is installed
+    let target_installed = Command::new("rustup")
+        .args(["target", "list", "--installed"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).contains(&target))
+        .unwrap_or(false);
+    if !target_installed {
+        println!("  {} Installing Rust target {}...", "→".bright_blue(), target);
+        let status = Command::new("rustup")
+            .args(["target", "add", &target])
+            .status()
+            .context("Failed to install Rust target via rustup")?;
+        if !status.success() {
+            anyhow::bail!("rustup target add {} failed", target);
+        }
+    }
+
     println!("  {} Building Rust library for Windows ({})...", "→".bright_blue(), arch);
     
     let mut args = vec!["build"];
