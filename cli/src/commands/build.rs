@@ -722,54 +722,21 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
         anyhow::bail!("C# build failed");
     }
 
-    // Step 4: Copy DLLs to output directories (AFTER C# build creates them)
-    println!("  {} Copying DLLs to output directories...", "→".bright_blue());
+    // Step 4: Copy DLL to Windows project root (MSBuild packages it into MSIX)
+    println!("  {} Copying DLL to project directory...", "→".bright_blue());
     
-    let bin_dir = std::path::Path::new("platforms/windows/bin");
-    if !bin_dir.exists() {
-        anyhow::bail!("Output directory not found - C# build may have failed");
-    }
+    // For WinUI 3 MSIX apps, we only need the DLL for the current platform
+    // MSBuild will package it into the MSIX and deploy it
+    let target = "x86_64-pc-windows-msvc"; // Default to x64
+    let lib_path = format!("target/{}/{}/{}_core.dll", target, profile, lib_name);
+    let dll_dest = format!("platforms/windows/{}_core.dll", lib_name);
     
-    // Search for .exe files in bin directory to find actual output locations
-    for arch in &archs {
-        let target = format!("{}-pc-windows-msvc", arch);
-        let lib_path = format!("target/{}/{}/{}_core.dll", target, profile, lib_name);
-        let dll_name = format!("{}_core.dll", lib_name);
-        
-        let platform_name = match *arch {
-            "i686" => "x86",
-            "x86_64" => "x64",
-            "aarch64" => "ARM64",
-            _ => arch,
-        };
-        
-        // Search for the platform's output directory
-        let platform_bin = bin_dir.join(platform_name);
-        if platform_bin.exists() && std::path::Path::new(&lib_path).exists() {
-            // Recursively find .exe file
-            fn find_exe_dir(dir: &std::path::Path) -> Option<std::path::PathBuf> {
-                if let Ok(entries) = std::fs::read_dir(dir) {
-                    for entry in entries.flatten() {
-                        let path = entry.path();
-                        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("exe") {
-                            return path.parent().map(|p| p.to_path_buf());
-                        } else if path.is_dir() {
-                            if let Some(found) = find_exe_dir(&path) {
-                                return Some(found);
-                            }
-                        }
-                    }
-                }
-                None
-            }
-            
-            if let Some(output_dir) = find_exe_dir(&platform_bin) {
-                let dll_dest = output_dir.join(&dll_name);
-                std::fs::copy(&lib_path, &dll_dest)
-                    .with_context(|| format!("Failed to copy DLL to {}", dll_dest.display()))?;
-                println!("  {} Copied {} to {}", "✓".green(), dll_name, output_dir.display());
-            }
-        }
+    if std::path::Path::new(&lib_path).exists() {
+        std::fs::copy(&lib_path, &dll_dest)
+            .with_context(|| format!("Failed to copy DLL to {}", dll_dest))?;
+        println!("  {} Copied DLL to platforms/windows/", "✓".green());
+    } else {
+        anyhow::bail!("Rust DLL not found at {}", lib_path);
     }
     
     println!("{}", "  ✅ Windows build complete".green());

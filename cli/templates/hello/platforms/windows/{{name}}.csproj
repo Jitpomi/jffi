@@ -42,10 +42,10 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.0-preview2" />
   </ItemGroup>
 
-  <!--
-    Native DLLs are copied directly to bin output by jffi build command.
-    No MSBuild copying needed - the DLLs are already in the right place.
-  -->
+  <!-- Copy native DLL to output directory after build -->
+  <Target Name="CopyNativeDLL" AfterTargets="Build">
+    <Copy SourceFiles="{{name}}_core.dll" DestinationFolder="$(OutputPath)" />
+  </Target>
 
   <!--
     Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
