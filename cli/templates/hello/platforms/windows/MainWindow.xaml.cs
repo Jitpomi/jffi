@@ -32,9 +32,9 @@ namespace {{name_pascal}}
             GreetingText.Text = _core.Greeting();
         }
 
-        private void myButton_Click(object sender, RoutedEventArgs e)
+        private void RefreshButton_Click(object sender, RoutedEventArgs e)
         {
-            Greeting();
+            GreetingText.Text = _core.Greeting();
         }
     }
 }
