@@ -659,7 +659,21 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
         anyhow::bail!("uniffi-bindgen-cs failed to generate C# bindings");
     }
     
-    // Step 3: Build C# project once (for x64 by default)
+    // Step 3: Copy DLL to Windows project root (BEFORE C# build - PostBuild target needs it)
+    println!("  {} Copying DLL to project directory...", "→".bright_blue());
+    let target = "x86_64-pc-windows-msvc"; // Default to x64
+    let lib_path = format!("target/{}/{}/{}_core.dll", target, profile, lib_name);
+    let dll_dest = format!("platforms/windows/{}_core.dll", lib_name);
+    
+    if std::path::Path::new(&lib_path).exists() {
+        std::fs::copy(&lib_path, &dll_dest)
+            .with_context(|| format!("Failed to copy DLL to {}", dll_dest))?;
+        println!("  {} Copied DLL to platforms/windows/", "✓".green());
+    } else {
+        anyhow::bail!("Rust DLL not found at {}", lib_path);
+    }
+    
+    // Step 4: Build C# project once (for x64 by default)
     println!("  {} Building C# project with MSBuild...", "→".bright_blue());
     
     let csproj_file = std::fs::read_dir("platforms/windows")
@@ -720,23 +734,6 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
     
     if !status.success() {
         anyhow::bail!("C# build failed");
-    }
-
-    // Step 4: Copy DLL to Windows project root (MSBuild packages it into MSIX)
-    println!("  {} Copying DLL to project directory...", "→".bright_blue());
-    
-    // For WinUI 3 MSIX apps, we only need the DLL for the current platform
-    // MSBuild will package it into the MSIX and deploy it
-    let target = "x86_64-pc-windows-msvc"; // Default to x64
-    let lib_path = format!("target/{}/{}/{}_core.dll", target, profile, lib_name);
-    let dll_dest = format!("platforms/windows/{}_core.dll", lib_name);
-    
-    if std::path::Path::new(&lib_path).exists() {
-        std::fs::copy(&lib_path, &dll_dest)
-            .with_context(|| format!("Failed to copy DLL to {}", dll_dest))?;
-        println!("  {} Copied DLL to platforms/windows/", "✓".green());
-    } else {
-        anyhow::bail!("Rust DLL not found at {}", lib_path);
     }
     
     println!("{}", "  ✅ Windows build complete".green());
