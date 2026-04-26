@@ -38,8 +38,8 @@
     <ProjectCapability Include="Msix" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.1761-preview" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.0-preview2" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250124002" />
   </ItemGroup>
 
   <!-- Copy native DLL to output directory after build -->
