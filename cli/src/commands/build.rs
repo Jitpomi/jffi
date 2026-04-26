@@ -681,7 +681,21 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
         anyhow::bail!("uniffi-bindgen-cs failed to generate C# bindings");
     }
     
-    // Step 3: Build C# project once (for x64 by default)
+    // Step 3: Verify DLLs exist before building C# project
+    for arch in &archs {
+        let platform_name = match *arch {
+            "i686" => "x86",
+            "x86_64" => "x64",
+            "aarch64" => "ARM64",
+            _ => arch,
+        };
+        let dll_path = format!("platforms/windows/Native/{}/{}_core.dll", platform_name, lib_name);
+        if !std::path::Path::new(&dll_path).exists() {
+            anyhow::bail!("DLL not found at {}. Build may have failed.", dll_path);
+        }
+    }
+    
+    // Step 4: Build C# project once (for x64 by default)
     println!("  {} Building C# project with MSBuild...", "→".bright_blue());
     
     let csproj_file = std::fs::read_dir("platforms/windows")
