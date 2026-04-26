@@ -42,18 +42,10 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.0-preview2" />
   </ItemGroup>
 
-  <!-- Copy native DLL based on platform -->
-  <ItemGroup>
-    <Content Include="Native\x86\{{name}}_core.dll" Condition="'$(Platform)' == 'x86'">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Native\x64\{{name}}_core.dll" Condition="'$(Platform)' == 'x64'">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Native\ARM64\{{name}}_core.dll" Condition="'$(Platform)' == 'ARM64'">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
+  <!--
+    Native DLLs are copied directly to bin output by jffi build command.
+    No MSBuild copying needed - the DLLs are already in the right place.
+  -->
 
   <!--
     Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution

@@ -633,7 +633,7 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
             anyhow::bail!("Rust build failed for {}", arch);
         }
         
-        // Copy DLL to Native folder
+        // Copy DLL directly to bin output directory
         let lib_name = std::env::current_dir()?
             .file_name()
             .and_then(|n| n.to_str())
@@ -647,12 +647,24 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
             "aarch64" => "ARM64",
             _ => arch,
         };
-        let dll_dir = format!("platforms/windows/Native/{}", platform_name);
-        std::fs::create_dir_all(&dll_dir)?;
-        let dll_path = format!("{}/{}", dll_dir, dll_name);
+        
+        // Copy to bin output directory for each configuration
+        let config = if release { "Release" } else { "Debug" };
+        let rid = match *arch {
+            "i686" => "win-x86",
+            "x86_64" => "win-x64",
+            "aarch64" => "win-arm64",
+            _ => "win-x64",
+        };
+        let output_dir = format!("platforms/windows/bin/{}/{}/net8.0-windows10.0.19041.0/{}", 
+                                 platform_name, config, rid);
+        std::fs::create_dir_all(&output_dir)?;
+        let dll_dest = format!("{}/{}", output_dir, dll_name);
+        
         if std::path::Path::new(&lib_path).exists() {
-            std::fs::copy(&lib_path, &dll_path)
-                .with_context(|| format!("Failed to copy DLL to {}", dll_path))?;
+            std::fs::copy(&lib_path, &dll_dest)
+                .with_context(|| format!("Failed to copy DLL to {}", dll_dest))?;
+            println!("  {} Copied DLL to {}", "✓".green(), dll_dest);
         }
     }
     
@@ -681,21 +693,7 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
         anyhow::bail!("uniffi-bindgen-cs failed to generate C# bindings");
     }
     
-    // Step 3: Verify DLLs exist before building C# project
-    for arch in &archs {
-        let platform_name = match *arch {
-            "i686" => "x86",
-            "x86_64" => "x64",
-            "aarch64" => "ARM64",
-            _ => arch,
-        };
-        let dll_path = format!("platforms/windows/Native/{}/{}_core.dll", platform_name, lib_name);
-        if !std::path::Path::new(&dll_path).exists() {
-            anyhow::bail!("DLL not found at {}. Build may have failed.", dll_path);
-        }
-    }
-    
-    // Step 4: Build C# project once (for x64 by default)
+    // Step 3: Build C# project once (for x64 by default)
     println!("  {} Building C# project with MSBuild...", "→".bright_blue());
     
     let csproj_file = std::fs::read_dir("platforms/windows")
