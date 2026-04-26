@@ -322,11 +322,12 @@ fn copy_windows_ffi_dll() -> Result<()> {
 
     let dll_name = format!("{lib_name}_core.dll");
 
+    // Get DLL from Rust target directory (x64 for hot reload)
+    let target = "x86_64-pc-windows-msvc";
     let dll_source = project_dir
-        .join("platforms")
-        .join("windows")
-        .join("Native")
-        .join(crate::platform::windows::DEFAULT_PLATFORM)
+        .join("target")
+        .join(target)
+        .join("debug")
         .join(&dll_name);
 
     if !dll_source.exists() {
