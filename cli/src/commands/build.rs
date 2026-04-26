@@ -100,9 +100,6 @@ pub fn build_platform_with_options(platform: &str, release: bool, device: bool) 
         "macos-arm64" => build_macos("aarch64", release),
         "macos-x64" => build_macos("x86_64", release),
         "windows" => build_windows_all_archs(release),
-        "windows-x64" => build_windows("x86_64", release),
-        "windows-x86" => build_windows("i686", release),
-        "windows-arm64" => build_windows("aarch64", release),
         "linux" => build_linux(release),
         "web" => build_web(release),
         _ => anyhow::bail!("Unknown platform: {}", platform),
@@ -148,9 +145,6 @@ pub fn build_platform(platform: &str, release: bool) -> Result<()> {
         "macos-arm64" => build_macos("aarch64", release),
         "macos-x64" => build_macos("x86_64", release),
         "windows" => build_windows_all_archs(release),
-        "windows-x64" => build_windows("x86_64", release),
-        "windows-x86" => build_windows("i686", release),
-        "windows-arm64" => build_windows("aarch64", release),
         "linux" => build_linux(release),
         "web" => build_web(release),
         _ => anyhow::bail!("Unknown platform: {}", platform),
@@ -754,174 +748,6 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
     println!("  {} Copying FFI DLL to output directory...", "→".bright_blue());
     let config = if release { "Release" } else { "Debug" };
     let platform_name = crate::platform::windows::DEFAULT_PLATFORM;
-    let output_dir = crate::platform::windows::output_dir(platform_name, &config);
-    if std::path::Path::new(&output_dir).exists() {
-        let dll_source = format!("platforms/windows/Native/{}/{}_core.dll", platform_name, lib_name);
-        let dll_dest = format!("{}/{}_core.dll", output_dir, lib_name);
-        if std::path::Path::new(&dll_source).exists() {
-            std::fs::copy(&dll_source, &dll_dest)
-                .with_context(|| format!("Failed to copy FFI DLL from {} to {}", dll_source, dll_dest))?;
-            println!("  {} Copied {} to output directory", "✓".green(), format!("{}_core.dll", lib_name));
-        }
-    }
-    
-    println!("{}", "  ✅ Windows build complete".green());
-    Ok(())
-}
-
-fn build_windows(arch: &str, release: bool) -> Result<()> {
-    // Ensure uniffi-bindgen-cs is installed
-    ensure_uniffi_bindgen_cs()?;
-
-    let profile = if release { "release" } else { "debug" };
-    let target = format!("{}-pc-windows-msvc", arch);
-
-    // Ensure the Rust target is installed
-    let target_installed = Command::new("rustup")
-        .args(["target", "list", "--installed"])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).contains(&target))
-        .unwrap_or(false);
-    if !target_installed {
-        println!("  {} Installing Rust target {}...", "→".bright_blue(), target);
-        let status = Command::new("rustup")
-            .args(["target", "add", &target])
-            .status()
-            .context("Failed to install Rust target via rustup")?;
-        if !status.success() {
-            anyhow::bail!("rustup target add {} failed", target);
-        }
-    }
-
-    println!("  {} Building Rust library for Windows ({})...", "→".bright_blue(), arch);
-    
-    let mut args = vec!["build"];
-    if release {
-        args.push("--release");
-    }
-    args.extend(&["--target", &target, "--manifest-path", "core/Cargo.toml"]);
-    
-    let status = Command::new("cargo")
-        .env("CARGO_TARGET_DIR", "target")
-        .args(&args)
-        .status()
-        .context("Failed to build Rust library")?;
-    
-    if !status.success() {
-        anyhow::bail!("Rust build failed");
-    }
-    
-    // Use library mode to generate bindings directly from the compiled DLL
-    // On Windows, Rust builds cdylib as <name>.dll (not lib<name>.dll)
-    let lib_name = std::env::current_dir()?
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("core")
-        .replace("-", "_");
-    let lib_path = format!("target/{}/{}/{}_core.dll", target, profile, lib_name);
-
-    println!("  {} Generating C# bindings with uniffi-bindgen-cs...", "→".bright_blue());
-    
-    std::fs::create_dir_all("platforms/windows/Generated")?;
-    
-    let status = Command::new("uniffi-bindgen-cs")
-        .arg("--library")
-        .arg(&lib_path)
-        .arg("--config")
-        .arg("core/uniffi.toml")
-        .arg("--out-dir")
-        .arg("platforms/windows/Generated")
-        .status()
-        .context("Failed to run uniffi-bindgen-cs")?;
-    if !status.success() {
-        anyhow::bail!("uniffi-bindgen-cs failed to generate C# bindings");
-    }
-    
-    let dll_name = format!("{}_core.dll", lib_name);
-    let platform_name = match arch {
-        "i686" => "x86",
-        "x86_64" => "x64",
-        "aarch64" => "ARM64",
-        _ => arch,
-    };
-    let dll_dir = format!("platforms/windows/Native/{}", platform_name);
-    std::fs::create_dir_all(&dll_dir)?;
-    let dll_path = format!("{}/{}", dll_dir, dll_name);
-    if std::path::Path::new(&lib_path).exists() {
-        std::fs::copy(&lib_path, &dll_path)
-            .with_context(|| format!("Failed to copy DLL to {}", dll_path))?;
-    }
-    
-    println!("  {} Building C# project with MSBuild...", "→".bright_blue());
-    
-    // Find the .csproj file
-    let csproj_file = std::fs::read_dir("platforms/windows")
-        .context("Failed to read platforms/windows directory")?
-        .filter_map(|e| e.ok())
-        .find(|e| {
-            let name = e.file_name();
-            let name_str = name.to_string_lossy();
-            name_str.ends_with(".csproj")
-        })
-        .map(|e| e.path())
-        .context("Could not find .csproj file")?;
-    
-    // Prefer `dotnet build` (works with WinUI 3 projects).
-    // If tools aren't on PATH, try common install locations / VS discovery.
-    let dotnet_cmd = find_dotnet();
-    let msbuild_cmd = find_msbuild();
-    let build_cmd: &str = if dotnet_cmd.is_some() { "dotnet" } else { "msbuild" };
-    
-    let mut build_args: Vec<String> = Vec::new();
-    if build_cmd == "dotnet" {
-        build_args.push("build".to_string());
-        build_args.push(csproj_file.to_string_lossy().into_owned());
-        // WinUI 3 requires a specific platform, not AnyCPU
-        build_args.push(format!("-p:Platform={}", crate::platform::windows::DEFAULT_PLATFORM));
-        if release {
-            build_args.extend(["-c".to_string(), "Release".to_string()]);
-        }
-    } else {
-        // MSBuild: project file is the first positional argument (no 'build' subcommand)
-        build_args.push(csproj_file.to_string_lossy().into_owned());
-        build_args.push(format!("/p:Platform={}", crate::platform::windows::DEFAULT_PLATFORM));
-        if release {
-            build_args.extend(["/p:Configuration=Release".to_string()]);
-        }
-    }
-    
-    let mut cmd = if build_cmd == "dotnet" {
-        Command::new(dotnet_cmd.as_deref().unwrap_or("dotnet"))
-    } else {
-        Command::new(msbuild_cmd.as_deref().unwrap_or("msbuild"))
-    };
-
-    let status = cmd
-        .args(&build_args)
-        .status()
-        .with_context(|| {
-            let dotnet_hint = if dotnet_cmd.is_some() {
-                "dotnet was found but failed to run."
-            } else {
-                "dotnet was not found (checked PATH and `C:\\Program Files\\dotnet\\dotnet.exe`). Install .NET 8 SDK from https://dotnet.microsoft.com/download"
-            };
-            let msbuild_hint = if msbuild_cmd.is_some() {
-                "msbuild was found but failed to run. Note: MSBuild requires the .NET SDK to resolve Microsoft.NET.Sdk-style projects."
-            } else {
-                "msbuild was not found (checked PATH and Visual Studio via vswhere)."
-            };
-            format!(
-                "Failed to build Windows app. {dotnet_hint} {msbuild_hint} Install the .NET SDK (recommended) or Visual Studio Build Tools."
-            )
-        })?;
-    
-    if !status.success() {
-        anyhow::bail!("C# build failed");
-    }
-
-    // Copy the FFI DLL to the output directory after build
-    println!("  {} Copying FFI DLL to output directory...", "→".bright_blue());
-    let config = if release { "Release" } else { "Debug" };
     let output_dir = crate::platform::windows::output_dir(platform_name, &config);
     if std::path::Path::new(&output_dir).exists() {
         let dll_source = format!("platforms/windows/Native/{}/{}_core.dll", platform_name, lib_name);
