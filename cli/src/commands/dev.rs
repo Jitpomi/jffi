@@ -265,16 +265,48 @@ fn find_file_with_extension(dir: &Path, extension: &str) -> Option<PathBuf> {
 
 fn open_visual_studio() -> Result<()> {
     let solution_path = find_windows_solution()?;
+    let solution_path_str = solution_path.to_str().context("Invalid path")?;
 
-    Command::new("cmd")
-        .args([
-            "/c",
-            "start",
-            "",
-            solution_path.to_str().context("Invalid path")?,
-        ])
+    // Try to find devenv.exe in known VS 2022 install locations
+    let devenv_paths = [
+        r"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\devenv.exe",
+        r"C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\devenv.exe",
+        r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\devenv.exe",
+        r"C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\Common7\IDE\devenv.exe",
+        r"C:\Program Files (x86)\Microsoft Visual Studio\2022\Professional\Common7\IDE\devenv.exe",
+        r"C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\devenv.exe",
+    ];
+
+    for path in &devenv_paths {
+        if Path::new(path).exists() {
+            Command::new(path)
+                .arg(solution_path_str)
+                .spawn()
+                .context("Failed to launch devenv.exe")?;
+            return Ok(());
+        }
+    }
+
+    // Fallback: try devenv.exe on PATH (e.g. via Developer Command Prompt)
+    if Command::new("devenv.exe")
+        .arg(solution_path_str)
         .spawn()
-        .context("Failed to open Visual Studio. Make sure it is installed.")?;
+        .is_ok()
+    {
+        return Ok(());
+    }
+
+    // Last resort: use explorer to open via file association
+    Command::new("explorer")
+        .arg(solution_path_str)
+        .spawn()
+        .with_context(|| {
+            format!(
+                "Failed to open Visual Studio. Make sure Visual Studio 2022 is installed. \
+                 You can also open the project manually at: {}",
+                solution_path_str,
+            )
+        })?;
 
     Ok(())
 }
