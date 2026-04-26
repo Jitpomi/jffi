@@ -67,14 +67,7 @@ pub mod windows {
     }
 }
 
-/// Trait for platform-specific project operations
-#[allow(dead_code)]
-pub trait Project {
-    fn platform(&self) -> Platform;
-    fn exists(&self) -> bool {
-        self.platform().project_dir().exists()
-    }
-}
+
 
 /// iOS/macOS Xcode project
 pub struct XcodeProject {

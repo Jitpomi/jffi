@@ -8,8 +8,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     Title="{{greeting}}"
-    Width="600"
-    Height="400">
+    >
 
     <Window.SystemBackdrop>
         <MicaBackdrop />
@@ -20,6 +19,7 @@
         <StackPanel
         VerticalAlignment="Center"
         HorizontalAlignment="Center"
+        >
         <TextBlock x:Name="GreetingText" FontSize="24" FontWeight="SemiBold" TextAlignment="Center"/>
             <Button x:Name="RefreshButton" Content="Refresh" Click="RefreshButton_Click"/>
         </StackPanel>
