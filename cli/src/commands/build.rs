@@ -101,6 +101,7 @@ pub fn build_platform_with_options(platform: &str, release: bool, device: bool) 
         "macos-x64" => build_macos("x86_64", release),
         "windows" | "windows-x64" => build_windows("x86_64", release),
         "windows-x86" => build_windows("i686", release),
+        "windows-arm64" => build_windows("aarch64", release),
         "linux" => build_linux(release),
         "web" => build_web(release),
         _ => anyhow::bail!("Unknown platform: {}", platform),
@@ -147,6 +148,7 @@ pub fn build_platform(platform: &str, release: bool) -> Result<()> {
         "macos-x64" => build_macos("x86_64", release),
         "windows" | "windows-x64" => build_windows("x86_64", release),
         "windows-x86" => build_windows("i686", release),
+        "windows-arm64" => build_windows("aarch64", release),
         "linux" => build_linux(release),
         "web" => build_web(release),
         _ => anyhow::bail!("Unknown platform: {}", platform),
@@ -665,19 +667,21 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
     let msbuild_cmd = find_msbuild();
     let build_cmd: &str = if dotnet_cmd.is_some() { "dotnet" } else { "msbuild" };
     
-    let mut build_args: Vec<&str> = Vec::new();
+    let mut build_args: Vec<String> = Vec::new();
     if build_cmd == "dotnet" {
-        build_args.push("build");
-        build_args.push(csproj_file.to_str().unwrap());
+        build_args.push("build".to_string());
+        build_args.push(csproj_file.to_string_lossy().into_owned());
         // WinUI 3 requires a specific platform, not AnyCPU
+        build_args.push(format!("-p:Platform={}", crate::platform::windows::DEFAULT_PLATFORM));
         if release {
-            build_args.extend(&["-c", "Release"]);
+            build_args.extend(["-c".to_string(), "Release".to_string()]);
         }
     } else {
         // MSBuild: project file is the first positional argument (no 'build' subcommand)
-        build_args.push(csproj_file.to_str().unwrap());
+        build_args.push(csproj_file.to_string_lossy().into_owned());
+        build_args.push(format!("/p:Platform={}", crate::platform::windows::DEFAULT_PLATFORM));
         if release {
-            build_args.extend(&["/p:Configuration=Release"]);
+            build_args.extend(["/p:Configuration=Release".to_string()]);
         }
     }
     

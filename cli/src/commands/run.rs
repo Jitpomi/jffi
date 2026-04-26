@@ -310,7 +310,8 @@ fn run_windows() -> Result<()> {
     let mut cmd = Command::new("dotnet");
     cmd.arg("run")
         .arg("--project")
-        .arg(&csproj_file);
+        .arg(&csproj_file)
+        .arg(format!("-p:Platform={}", crate::platform::windows::DEFAULT_PLATFORM));
     let output = cmd.output()
         .context("Failed to launch Windows app via dotnet run")?;
 
