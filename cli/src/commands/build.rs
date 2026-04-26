@@ -836,6 +836,14 @@ fn ensure_uniffi_bindgen_cs() -> Result<()> {
             "https://github.com/NordSecurity/uniffi-bindgen-cs".to_string()
         });
 
+        // TODO: CRITICAL VERSION MISMATCH
+        // We use UniFFI 0.31.1 (in templating.rs) but uniffi-bindgen-cs v0.10.0+v0.29.4
+        // This is likely to fail or produce incompatible bindings
+        // SOLUTION: Find or create a uniffi-bindgen-cs fork that supports UniFFI 0.31.1
+        // For now, users can override with:
+        //   JFFI_UNIFFI_BINDGEN_CS_GIT=<fork-url>
+        //   JFFI_UNIFFI_BINDGEN_CS_TAG=<compatible-version>
+        
         // Prefer an explicit tag for repeatable installs; users can override to a fork/branch
         // that matches their UniFFI version.
         let tag = std::env::var("JFFI_UNIFFI_BINDGEN_CS_TAG").unwrap_or_else(|_| "v0.10.0+v0.29.4".to_string());

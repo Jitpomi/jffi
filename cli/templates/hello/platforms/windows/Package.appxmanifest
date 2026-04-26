@@ -7,14 +7,20 @@
   xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
   IgnorableNamespaces="uap rescap">
 
-
+  <!--
+    TODO: Template variable substitution not yet implemented
+    Replace the following placeholders with values from jffi.toml:
+    - {{package_identity}} → [platforms.windows] package_identity (e.g., "com.example.myapp")
+    - {{publisher}} → [platforms.windows] publisher (e.g., "CN=dev")
+    - {{package_guid}} → [platforms.windows] package_guid (e.g., "12345678-1234-1234-1234-123456789abc")
+  -->
   <Identity
-  Name="{{name}}"
-  Publisher="CN={{publisher_name}}"
+  Name="{{package_identity}}"
+  Publisher="{{publisher}}"
   Version="1.0.0.0"/>
 
 
-  <mp:PhoneIdentity PhoneProductId="{{name}}" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
+  <mp:PhoneIdentity PhoneProductId="{{package_identity}}" PhonePublisherId="{{package_guid}}"/>
 
 
   <Properties>

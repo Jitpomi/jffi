@@ -215,6 +215,36 @@ impl TemplateEngine {
             context.insert(key.clone(), value.clone());
         }
 
+        // TODO: Read jffi.toml for platform-specific values
+        // ISSUE: jffi.toml is created AFTER template generation in new.rs
+        // This causes a timing problem - the file doesn't exist when we need it
+        // SOLUTION: Either:
+        //   1. Pass Windows identity values as parameters to generate()
+        //   2. Use a two-pass template system (generate, then patch)
+        //   3. Hardcode defaults and let users edit Package.appxmanifest manually
+        //
+        // For now, Package.appxmanifest will have literal {{package_identity}} etc.
+        // which will need to be manually replaced or handled by a post-generation step
+        /*
+        if let Ok(config_content) = std::fs::read_to_string("jffi.toml") {
+            // Parse Windows platform settings
+            if let Some(windows_section) = config_content.split("[platforms.windows]").nth(1) {
+                let windows_lines: Vec<&str> = windows_section
+                    .lines()
+                    .take_while(|line| !line.starts_with('['))
+                    .collect();
+                
+                for line in windows_lines {
+                    if let Some((key, value)) = line.split_once('=') {
+                        let key = key.trim();
+                        let value = value.trim().trim_matches('"');
+                        context.insert(key.to_string(), value.to_string());
+                    }
+                }
+            }
+        }
+        */
+
         context
     }
 

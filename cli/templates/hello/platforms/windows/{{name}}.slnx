@@ -1,13 +1,12 @@
 <Solution>
   <Configurations>
-    <Platform Name="ARM64" />
-    <Platform Name="x64" Default="true" />
-    <Platform Name="x86" />
+    <Configuration Name="Debug" Default="true" />
+    <Configuration Name="Release" />
   </Configurations>
-  <Project Path="{{name}}.csproj">
-    <Platform Solution="*|ARM64" Project="ARM64" />
-    <Platform Solution="*|x64" Project="x64" />
-    <Platform Solution="*|x86" Project="x86" />
-    <Deploy />
-  </Project>
+  <Platforms>
+    <Platform Name="x64" Default="true" />
+    <Platform Name="ARM64" />
+    <Platform Name="x86" />
+  </Platforms>
+  <Project Path="{{name}}.csproj" />
 </Solution>
