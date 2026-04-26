@@ -12,7 +12,7 @@ using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
-//using uniffi.{{name_snake}}_core;
+using uniffi.{{name_snake}}_core;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -24,15 +24,17 @@ namespace {{name_pascal}}
     /// </summary>
     public sealed partial class MainWindow : Window
     {
+        private readonly Core _core = new Core();
+
         public MainWindow()
         {
             InitializeComponent();
-//            GreetingText.Text = _core.Greeting();
-       }
+            GreetingText.Text = _core.Greeting();
+        }
 
         private void RefreshButton_Click(object sender, RoutedEventArgs e)
         {
-            GreetingText.Text = "Hello Sara"; //_core.Greeting();
+            GreetingText.Text = _core.Greeting();
         }
     }
 }

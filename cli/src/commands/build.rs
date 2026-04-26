@@ -99,7 +99,17 @@ pub fn build_platform_with_options(platform: &str, release: bool, device: bool) 
         }
         "macos-arm64" => build_macos("aarch64", release),
         "macos-x64" => build_macos("x86_64", release),
-        "windows" | "windows-x64" => build_windows("x86_64", release),
+        "windows" => {
+            // Build for all Windows architectures
+            println!("  {} Building for x86...", "→".bright_blue());
+            build_windows("i686", release)?;
+            println!("  {} Building for x64...", "→".bright_blue());
+            build_windows("x86_64", release)?;
+            println!("  {} Building for ARM64...", "→".bright_blue());
+            build_windows("aarch64", release)?;
+            Ok(())
+        },
+        "windows-x64" => build_windows("x86_64", release),
         "windows-x86" => build_windows("i686", release),
         "windows-arm64" => build_windows("aarch64", release),
         "linux" => build_linux(release),
