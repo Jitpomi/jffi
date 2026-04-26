@@ -147,7 +147,8 @@ pub fn build_platform(platform: &str, release: bool) -> Result<()> {
         }
         "macos-arm64" => build_macos("aarch64", release),
         "macos-x64" => build_macos("x86_64", release),
-        "windows" | "windows-x64" => build_windows("x86_64", release),
+        "windows" => build_windows_all_archs(release),
+        "windows-x64" => build_windows("x86_64", release),
         "windows-x86" => build_windows("i686", release),
         "windows-arm64" => build_windows("aarch64", release),
         "linux" => build_linux(release),
