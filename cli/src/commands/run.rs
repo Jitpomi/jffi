@@ -288,46 +288,17 @@ fn run_windows() -> Result<()> {
     println!("  {} Building Windows app...", "→".bright_blue());
     crate::commands::build::build_project(Some("windows".to_string()), false, false, false)?;
 
-    println!("  {} Launching Windows app...", "→".bright_blue());
-
-    // Find the .csproj file
-    let project_dir = std::env::current_dir()?;
-    let windows_dir = project_dir.join("platforms/windows");
-    let csproj_file = std::fs::read_dir(&windows_dir)
-        .ok()
-        .and_then(|entries| {
-            entries
-                .filter_map(|e| e.ok())
-                .find(|e| e.file_name().to_string_lossy().ends_with(".csproj"))
-                .map(|e| e.path())
-        })
-        .context("Could not find .csproj file in platforms/windows")?;
-
-    println!("  {} Found project: {}", "→".bright_blue(), csproj_file.display());
-
-    // Packaged WinUI 3 apps must be launched via dotnet run for proper MSIX deployment
-    println!("  {} Launching via dotnet run (with MSIX deployment)...", "→".bright_blue());
-    let mut cmd = Command::new("dotnet");
-    cmd.arg("run")
-        .arg("--project")
-        .arg(&csproj_file)
-        .arg(format!("-p:Platform={}", crate::platform::windows::DEFAULT_PLATFORM));
-    let output = cmd.output()
-        .context("Failed to launch Windows app via dotnet run")?;
-
-    if !output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        if !stdout.trim().is_empty() {
-            eprintln!("  {} stdout: {}", "→".bright_red(), stdout);
-        }
-        if !stderr.trim().is_empty() {
-            eprintln!("  {} stderr: {}", "→".bright_red(), stderr);
-        }
-        anyhow::bail!("App exited with code: {:?}", output.status.code());
-    }
-
-    println!("{}", "  ✅ App launched!".green());
+    println!();
+    println!("{}", "  ✅ Build complete!".green());
+    println!();
+    println!("{}", "  To run your WinUI 3 app:".bright_cyan());
+    println!("{}", "  1. Open platforms/windows/*.sln in Visual Studio".bright_white());
+    println!("{}", "  2. Set platform to x64 (top toolbar)".bright_white());
+    println!("{}", "  3. Press F5 to run".bright_white());
+    println!();
+    println!("{}", "  Note: WinUI 3 MSIX apps require Visual Studio for proper deployment.".yellow());
+    println!("{}", "  'dotnet run' doesn't support MSIX packaging with Windows App SDK.".yellow());
+    
     Ok(())
 }
 
