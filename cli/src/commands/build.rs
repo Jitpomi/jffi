@@ -634,17 +634,23 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
         .arg("platforms/windows")
         .status()
         .context("Failed to run uniffi-bindgen-cs")?;
-    
     if !status.success() {
-        anyhow::bail!("C# bindings generation failed");
+        anyhow::bail!("uniffi-bindgen-cs failed to generate C# bindings");
     }
     
-    // Copy the .dll to platforms/windows for the build
-    let lib_path = format!("target/{}/{}/{}_core.dll", target, profile, lib_name);
     let dll_name = format!("{}_core.dll", lib_name);
+    let platform_name = match arch {
+        "i686" => "x86",
+        "x86_64" => "x64",
+        "aarch64" => "ARM64",
+        _ => arch,
+    };
+    let dll_dir = format!("platforms/windows/{}", platform_name);
+    std::fs::create_dir_all(&dll_dir)?;
+    let dll_path = format!("{}/{}", dll_dir, dll_name);
     if std::path::Path::new(&lib_path).exists() {
-        std::fs::copy(&lib_path, format!("platforms/windows/{}", dll_name))
-            .context("Failed to copy DLL to platforms/windows")?;
+        std::fs::copy(&lib_path, &dll_path)
+            .with_context(|| format!("Failed to copy DLL to {}", dll_path))?;
     }
     
     println!("  {} Building C# project with MSBuild...", "→".bright_blue());
@@ -717,16 +723,19 @@ fn build_windows(arch: &str, release: bool) -> Result<()> {
     // Copy the FFI DLL to the output directory after build
     println!("  {} Copying FFI DLL to output directory...", "→".bright_blue());
     let config = if release { "Release" } else { "Debug" };
-    let output_dir = crate::platform::windows::output_dir(
-        crate::platform::windows::DEFAULT_PLATFORM,
-        &config,
-    );
+    let platform_name = match arch {
+        "i686" => "x86",
+        "x86_64" => "x64",
+        "aarch64" => "ARM64",
+        _ => arch,
+    };
+    let output_dir = crate::platform::windows::output_dir(platform_name, &config);
     if std::path::Path::new(&output_dir).exists() {
-        let dll_source = format!("platforms/windows/{}_core.dll", lib_name);
+        let dll_source = format!("platforms/windows/{}/{}_core.dll", platform_name, lib_name);
         let dll_dest = format!("{}/{}_core.dll", output_dir, lib_name);
         if std::path::Path::new(&dll_source).exists() {
             std::fs::copy(&dll_source, &dll_dest)
-                .context("Failed to copy FFI DLL to output directory")?;
+                .with_context(|| format!("Failed to copy FFI DLL from {} to {}", dll_source, dll_dest))?;
             println!("  {} Copied {} to output directory", "✓".green(), format!("{}_core.dll", lib_name));
         }
     }
