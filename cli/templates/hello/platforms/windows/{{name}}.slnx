@@ -1,13 +1,19 @@
 <Solution>
   <Configurations>
+    <Configuration Name="Debug" />
+    <Configuration Name="Release" />
+  </Configurations>
+  <Platforms>
     <Platform Name="ARM64" />
     <Platform Name="x64" />
     <Platform Name="x86" />
-  </Configurations>
-  <Project Path="{{name_pascal}}.csproj">
-    <Platform Solution="*|ARM64" Project="ARM64" />
-    <Platform Solution="*|x64" Project="x64" />
-    <Platform Solution="*|x86" Project="x86" />
+  </Platforms>
+  <Project Name="{{name_pascal}}" Path="{{name_pascal}}.csproj">
+    <Configuration Solution="Debug" Project="Debug" />
+    <Configuration Solution="Release" Project="Release" />
+    <Platform Solution="ARM64" Project="ARM64" />
+    <Platform Solution="x64" Project="x64" />
+    <Platform Solution="x86" Project="x86" />
     <Deploy />
   </Project>
 </Solution>

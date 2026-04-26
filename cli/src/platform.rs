@@ -69,11 +69,6 @@ pub mod windows {
 
 
 
-/// Shared project trait
-pub trait Project {
-    fn platform(&self) -> Platform;
-}
-
 /// iOS/macOS Xcode project
 pub struct XcodeProject {
     #[allow(dead_code)]
@@ -143,11 +138,6 @@ impl XcodeProject {
     }
 }
 
-impl Project for XcodeProject {
-    fn platform(&self) -> Platform {
-        self.platform
-    }
-}
 
 /// Android project
 pub struct AndroidProject {
@@ -196,11 +186,7 @@ impl AndroidProject {
     }
 }
 
-impl Project for AndroidProject {
-    fn platform(&self) -> Platform {
-        Platform::Android
-    }
-}
+
 
 /// iOS Simulator utilities
 pub struct IOSSimulator;
