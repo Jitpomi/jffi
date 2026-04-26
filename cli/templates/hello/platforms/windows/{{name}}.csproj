@@ -12,14 +12,8 @@
     <WinUISDKReferences>false</WinUISDKReferences>
     <EnableMsixTooling>true</EnableMsixTooling>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
-
-  <ItemGroup>
-    <None Remove="App.xaml" />
-    <None Remove="MainWindow.xaml" />
-    <ApplicationDefinition Remove="App.xaml" />
-    <Page Remove="MainWindow.xaml" />
-  </ItemGroup>
 
   <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />
@@ -36,11 +30,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.1761-preview" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.0-preview2" />
-    <Manifest Include="$(ApplicationManifest)" />
-        <Content Include="Assets\**" />
-        <Content Include="*_ffi.dll">
-          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </Content>
+    <Content Include="Assets\**" />
+    <Content Include="*_ffi.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <!--

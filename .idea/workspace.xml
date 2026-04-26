@@ -11,20 +11,7 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="feat: unify all platform templates to hello pattern&#10; &#10;- Remove todo/counter template options (marked as coming soon)&#10;- Simplify all platform UIs (iOS, macOS, Android, Windows, Linux, Web)&#10;  to use only core.greeting() with refresh button&#10;- Block todo/counter selection from CLI and interactive UI&#10;- All platforms now generate consistent hello world app">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/App.xaml" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/App.xaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/App.xaml.cs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/App.xaml.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/MainWindow.xaml" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/MainWindow.xaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/MainWindow.xaml.cs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/MainWindow.xaml.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Package.appxmanifest" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Package.appxmanifest" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Properties/PublishProfiles/win-arm64.pubxml" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Properties/PublishProfiles/win-arm64.pubxml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Properties/PublishProfiles/win-x64.pubxml" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Properties/PublishProfiles/win-x64.pubxml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Properties/PublishProfiles/win-x86.pubxml" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Properties/PublishProfiles/win-x86.pubxml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Properties/launchSettings.json" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Properties/launchSettings.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/{{name}}.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/{{name}}.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/{{name}}.csproj.user" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/{{name}}.slnx" afterDir="false" />
-    </list>
+    <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="feat: windows" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -50,12 +37,12 @@
     &quot;assignee&quot;: &quot;jermsam&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings">{
-  &quot;selectedUrlAndAccountId&quot;: {
-    &quot;url&quot;: &quot;https://github.com/Jitpomi/jffi.git&quot;,
-    &quot;accountId&quot;: &quot;fc3814d6-dc96-42a1-93ae-a490baf16f66&quot;
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/Jitpomi/jffi.git",
+    "accountId": "f256be56-25a6-43c3-bf6d-9c612ff4e667"
   }
-}</component>
+}]]></component>
   <component name="MacroExpansionManager">
     <option name="directoryName" value="XdLqV3Ye" />
   </component>
@@ -135,7 +122,7 @@
       <workItem from="1775399602549" duration="35206000" />
       <workItem from="1776574893845" duration="369000" />
       <workItem from="1776575270900" duration="16172000" />
-      <workItem from="1777146781648" duration="4557000" />
+      <workItem from="1777146781648" duration="6019000" />
     </task>
     <task id="LOCAL-00001" summary="feat: unify all platform templates to hello pattern&#10; &#10;- Remove todo/counter template options (marked as coming soon)&#10;- Simplify all platform UIs (iOS, macOS, Android, Windows, Linux, Web)&#10;  to use only core.greeting() with refresh button&#10;- Block todo/counter selection from CLI and interactive UI&#10;- All platforms now generate consistent hello world app">
       <option name="closed" value="true" />
@@ -161,7 +148,15 @@
       <option name="project" value="LOCAL" />
       <updated>1776933597695</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="feat: windows">
+      <option name="closed" value="true" />
+      <created>1777156170340</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1777156170340</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -180,6 +175,7 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="feat: unify all platform templates to hello pattern&#10; &#10;- Remove todo/counter template options (marked as coming soon)&#10;- Simplify all platform UIs (iOS, macOS, Android, Windows, Linux, Web)&#10;  to use only core.greeting() with refresh button&#10;- Block todo/counter selection from CLI and interactive UI&#10;- All platforms now generate consistent hello world app" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat: unify all platform templates to hello pattern&#10; &#10;- Remove todo/counter template options (marked as coming soon)&#10;- Simplify all platform UIs (iOS, macOS, Android, Windows, Linux, Web)&#10;  to use only core.greeting() with refresh button&#10;- Block todo/counter selection from CLI and interactive UI&#10;- All platforms now generate consistent hello world app" />
+    <MESSAGE value="feat: windows" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: windows" />
   </component>
 </project>
