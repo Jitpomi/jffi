@@ -165,12 +165,16 @@ impl TemplateEngine {
                 }
                 
                 // Parse [variables.platform] sections (platform-specific overrides)
+                eprintln!("DEBUG: Parsing manifest, looking for platform-specific variables...");
                 for (key, value) in root.iter() {
+                    eprintln!("DEBUG: Found top-level key: {}", key);
                     if key.starts_with("variables.") && key != "variables" {
+                        eprintln!("DEBUG: Found platform-specific section: {}", key);
                         if let toml::Value::Table(platform_vars) = value {
                             for (var_key, var_value) in platform_vars {
                                 if let toml::Value::String(s) = var_value {
                                     let platform_key = format!("{}:{}", key, var_key);
+                                    eprintln!("DEBUG: Storing platform variable: {} = {}", platform_key, s);
                                     manifest.variables.insert(platform_key, s.clone());
                                 }
                             }
@@ -307,10 +311,13 @@ impl TemplateEngine {
         // These were stored as "variables.windows:uniffi_version" during manifest loading
         if let Some(platform_name) = platform {
             let platform_prefix = format!("variables.{}:", platform_name);
+            eprintln!("DEBUG: Looking for platform overrides with prefix: {}", platform_prefix);
+            eprintln!("DEBUG: All manifest variables: {:?}", manifest.variables);
             for (key, value) in &manifest.variables {
                 if key.starts_with(&platform_prefix) {
                     // Extract the actual variable name (after the ":")
                     if let Some(var_name) = key.split(':').nth(1) {
+                        eprintln!("DEBUG: Applying platform override: {} = {}", var_name, value);
                         context.insert(var_name.to_string(), value.clone());
                     }
                 }
