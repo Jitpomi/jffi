@@ -330,23 +330,51 @@ fn run_windows() -> Result<()> {
         }
     }
     
-    // Use dotnet to deploy and run (handles Windows App SDK runtime properly)
+    // Deploy the app package (registers it with Windows)
     println!();
-    let status = Command::new("dotnet")
+    println!("  {} Deploying app package...", "→".bright_blue());
+    let deploy_status = Command::new("dotnet")
         .args(&[
             "build",
             csproj.to_str().unwrap(),
-            "/t:Run",
+            "/t:Deploy",
             &format!("/p:Platform={}", active_platform),
             "/p:Configuration=Debug",
-            "/verbosity:quiet",
+            "/p:AppxPackageSigningEnabled=false",
+            "/verbosity:minimal",
         ])
         .current_dir(&windows_dir)
         .status()
-        .context("Failed to deploy and run app")?;
+        .context("Failed to deploy app")?;
     
-    if !status.success() {
-        anyhow::bail!("App deployment/launch failed");
+    if !deploy_status.success() {
+        anyhow::bail!("App deployment failed");
+    }
+    
+    // Now launch the deployed app using PowerShell
+    println!("  {} Launching deployed app...", "→".bright_blue());
+    
+    // Get the package family name from the manifest
+    let current_dir = std::env::current_dir()?;
+    let project_name = current_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("app");
+    
+    // Launch using PowerShell to start the registered app
+    let ps_script = format!(
+        "Get-AppxPackage -Name '*{}*' | ForEach-Object {{ Start-Process \"shell:AppsFolder\\$($_.PackageFamilyName)!App\" }}",
+        project_name
+    );
+    
+    let launch_status = Command::new("powershell")
+        .args(&["-Command", &ps_script])
+        .status()
+        .context("Failed to launch app")?;
+    
+    if !launch_status.success() {
+        println!();
+        println!("{}", "  ⚠️  Could not auto-launch. You can launch manually from Start Menu.".yellow());
     }
     
     println!();
