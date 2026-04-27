@@ -127,8 +127,11 @@ fn copy_dir_with_render(
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let path = entry.path();
-        let file_name = path.file_name().unwrap_or_default();
-        let dest_path = dst.join(file_name);
+        let file_name = path.file_name().unwrap_or_default().to_string_lossy();
+        
+        // Render template variables in filename/directory name
+        let rendered_name = render_template(&file_name, context);
+        let dest_path = dst.join(rendered_name);
         
         if path.is_dir() {
             copy_dir_with_render(&path, &dest_path, context)?;
