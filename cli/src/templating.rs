@@ -157,18 +157,13 @@ impl TemplateEngine {
                 
                 // Parse [variables] section
                 if let Some(toml::Value::Table(vars_table)) = root.get("variables") {
-                    eprintln!("DEBUG: Parsing [variables] section...");
                     for (key, value) in vars_table {
-                        eprintln!("DEBUG: Found variables.{} = {:?}", key, value);
-                        
                         // Check if this is a nested table (platform-specific)
                         if let toml::Value::Table(platform_vars) = value {
                             // This is [variables.platform]
-                            eprintln!("DEBUG: Found platform-specific section: variables.{}", key);
                             for (var_key, var_value) in platform_vars {
                                 if let toml::Value::String(s) = var_value {
                                     let platform_key = format!("variables.{}:{}", key, var_key);
-                                    eprintln!("DEBUG: Storing platform variable: {} = {}", platform_key, s);
                                     manifest.variables.insert(platform_key, s.clone());
                                 }
                             }
@@ -314,13 +309,10 @@ impl TemplateEngine {
         // These were stored as "variables.windows:uniffi_version" during manifest loading
         if let Some(platform_name) = platform {
             let platform_prefix = format!("variables.{}:", platform_name);
-            eprintln!("DEBUG: Looking for platform overrides with prefix: {}", platform_prefix);
-            eprintln!("DEBUG: All manifest variables: {:?}", manifest.variables);
             for (key, value) in &manifest.variables {
                 if key.starts_with(&platform_prefix) {
                     // Extract the actual variable name (after the ":")
                     if let Some(var_name) = key.split(':').nth(1) {
-                        eprintln!("DEBUG: Applying platform override: {} = {}", var_name, value);
                         context.insert(var_name.to_string(), value.clone());
                     }
                 }
