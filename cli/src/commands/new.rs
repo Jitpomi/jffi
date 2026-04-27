@@ -4,7 +4,6 @@ use dialoguer::{theme::ColorfulTheme, Input, MultiSelect};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use uuid;
 
 use crate::templating::TemplateEngine;
 
@@ -318,7 +317,6 @@ impl FfiCore {{
     Ok(())
 }
 
-#[allow(unused_variables)]
 fn create_config_file(dir: &PathBuf, name: &str, platforms: &[&str]) -> Result<()> {
     let platform_list: Vec<&str> = platforms.to_vec();
     let config = format!(r#"[package]
@@ -341,16 +339,13 @@ deployment_target = "13.0"
 
 [platforms.windows]
 min_version = "10.0.19041.0"
-package_identity = "com.example.{}"
-publisher = "CN=dev"
-package_guid = "{}"
 
 [platforms.linux]
 gtk_version = "4.0"
 
 [platforms.web]
 target = "es2020"
-"#, name, platform_list, name.replace("-", ""), name.replace("-", ""), name.replace("-", ""), uuid::Uuid::new_v4().to_string());
+"#, name, platform_list, name.replace("-", ""), name.replace("-", ""));
     fs::write(dir.join("jffi.toml"), config)?;
     Ok(())
 }
@@ -430,8 +425,6 @@ Edit your business logic in `core/src/lib.rs`. The FFI bindings will be automati
 2. Expose via `#[uniffi::export]`
 3. Rebuild: `jffi build --platform <platform>`
 4. Update UI in `platforms/<platform>/`
-
-Built with [JFFI](https://github.com/yourusername/jffi)
 "#, name, 
     platforms.iter().map(|p| format!("- {}", p)).collect::<Vec<_>>().join("\n"),
     platforms[0], platforms[0], platforms[0]);

@@ -1,9 +1,9 @@
 {
   "profiles": {
-    "{{name}} (Package)": {
+    "{{name_pascal}} (Package)": {
       "commandName": "MsixPackage"
     },
-    "{{name}} (Unpackaged)": {
+    "{{name_pascal}} (Unpackaged)": {
       "commandName": "Project"
     }
   }

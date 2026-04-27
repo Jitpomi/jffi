@@ -19,7 +19,7 @@ impl Platform {
             "ios" => Some(Self::Ios),
             "macos" | "macos-arm64" | "macos-x64" => Some(Self::Macos),
             "android" => Some(Self::Android),
-            "windows" | "windows-x64" | "windows-x86" => Some(Self::Windows),
+            "windows" => Some(Self::Windows),
             "linux" => Some(Self::Linux),
             "web" => Some(Self::Web),
             _ => None,
@@ -37,34 +37,10 @@ impl Platform {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn project_dir(&self) -> PathBuf {
-        PathBuf::from(format!("platforms/{}", self.as_str()))
-    }
-
-    #[allow(dead_code)]
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::Ios => "iOS",
-            Self::Macos => "macOS",
-            Self::Android => "Android",
-            Self::Windows => "Windows",
-            Self::Linux => "Linux",
-            Self::Web => "Web",
-        }
-    }
 }
-
-pub mod windows {
-    pub const DEFAULT_PLATFORM: &str = "x64";
-}
-
-
 
 /// iOS/macOS Xcode project
 pub struct XcodeProject {
-    #[allow(dead_code)]
-    pub platform: Platform,
     pub project_path: PathBuf,
     pub scheme: String,
 }
@@ -95,7 +71,6 @@ impl XcodeProject {
             .to_string();
 
         Ok(Self {
-            platform,
             project_path,
             scheme,
         })
@@ -133,8 +108,6 @@ impl XcodeProject {
 
 /// Android project
 pub struct AndroidProject {
-    #[allow(dead_code)]
-    pub platform: Platform,
     pub project_path: PathBuf,
 }
 
@@ -145,7 +118,6 @@ impl AndroidProject {
             anyhow::bail!("Android project not found at platforms/android");
         }
         Ok(Self {
-            platform: Platform::Android,
             project_path: path,
         })
     }

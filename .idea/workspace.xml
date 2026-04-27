@@ -11,7 +11,42 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="feat: windows" />
+    <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="feat: windows">
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/.gitattributes" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/README.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/App.xaml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/App.xaml.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/Assets/LockScreenLogo.scale-200.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/Assets/SplashScreen.scale-200.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/Assets/Square150x150Logo.scale-200.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/Assets/Square44x44Logo.scale-200.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/Assets/Square44x44Logo.targetsize-24_altform-unplated.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/Assets/StoreLogo.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/Assets/Wide310x150Logo.scale-200.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/MainWindow.xaml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/MainWindow.xaml.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/Package.appxmanifest" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/Properties/launchSettings.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/app.manifest" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/{{name}}.csproj" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/{{name}}.slnx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/platform.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/platform.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/App.xaml" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/App.xaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/App.xaml.cs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/App.xaml.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Generated/.gitkeep" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/Generated/.gitkeep" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/MainWindow.xaml" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/MainWindow.xaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/MainWindow.xaml.cs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/MainWindow.xaml.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Package.appxmanifest" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Package.appxmanifest" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Properties/PublishProfiles/win-arm64.pubxml" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/Properties/PublishProfiles/win-arm64.pubxml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Properties/PublishProfiles/win-x64.pubxml" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/Properties/PublishProfiles/win-x64.pubxml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Properties/PublishProfiles/win-x86.pubxml" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows_backup/Properties/PublishProfiles/win-x86.pubxml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Properties/launchSettings.json" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Properties/launchSettings.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/app.manifest" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/app.manifest" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/{{name}}.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/{{name}}.csproj" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/{{name}}.slnx" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/{{name}}.slnx" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -73,7 +108,7 @@
     "git-widget-placeholder": "android-hello-template",
     "javascript.preferred.runtime.type.id": "node",
     "junie.onboarding.icon.badge.shown": "true",
-    "last_opened_file_path": "/Users/samsonssali/WebstormProjects/jffi",
+    "last_opened_file_path": "/Users/samsonssali/WebstormProjects/jffi/cli/templates/hello/platforms/windows",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -97,6 +132,9 @@
     <option name="suspendCountdown" value="0" />
   </component>
   <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/cli/templates/hello/platforms/windows" />
+    </key>
     <key name="MoveFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/cli/templates/hello/platforms/windows/Assets" />
     </key>
@@ -124,7 +162,7 @@
       <workItem from="1775399602549" duration="35206000" />
       <workItem from="1776574893845" duration="369000" />
       <workItem from="1776575270900" duration="16172000" />
-      <workItem from="1777146781648" duration="28768000" />
+      <workItem from="1777146781648" duration="30915000" />
     </task>
     <task id="LOCAL-00001" summary="feat: unify all platform templates to hello pattern&#10; &#10;- Remove todo/counter template options (marked as coming soon)&#10;- Simplify all platform UIs (iOS, macOS, Android, Windows, Linux, Web)&#10;  to use only core.greeting() with refresh button&#10;- Block todo/counter selection from CLI and interactive UI&#10;- All platforms now generate consistent hello world app">
       <option name="closed" value="true" />

@@ -77,8 +77,6 @@ enum Commands {
         platform: String,
     },
     
-    /// List available platforms
-    Platforms,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -99,9 +97,6 @@ fn main() -> anyhow::Result<()> {
         }
         Commands::Add { platform } => {
             commands::add::add_platform(&platform)?;
-        }
-        Commands::Platforms => {
-            commands::platforms::list_platforms();
         }
     }
     

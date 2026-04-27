@@ -5,6 +5,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// UniFFI version used in generated projects
+const UNIFFI_VERSION: &str = "0.31.1";
+
 /// Template manifest configuration
 #[derive(Debug, Deserialize, Default)]
 pub struct TemplateManifest {
@@ -199,7 +202,7 @@ impl TemplateEngine {
 
         // Generate UUIDs for Xcode project files (no hyphens)
         let mut rng = rand::thread_rng();
-        for i in 1..=30 {
+        for i in 1..=15 {
             let uuid = format!(
                 "{:08X}{:08X}{:08X}{:08X}",
                 rng.gen::<u32>(),
@@ -211,7 +214,7 @@ impl TemplateEngine {
         }
         
         // Generate GUIDs for Windows manifests (with hyphens, RFC 4122 format)
-        for i in 1..=10 {
+        for i in 1..=5 {
             let guid = format!(
                 "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
                 rng.gen::<u32>(),
@@ -227,36 +230,6 @@ impl TemplateEngine {
         for (key, value) in &manifest.variables {
             context.insert(key.clone(), value.clone());
         }
-
-        // TODO: Read jffi.toml for platform-specific values
-        // ISSUE: jffi.toml is created AFTER template generation in new.rs
-        // This causes a timing problem - the file doesn't exist when we need it
-        // SOLUTION: Either:
-        //   1. Pass Windows identity values as parameters to generate()
-        //   2. Use a two-pass template system (generate, then patch)
-        //   3. Hardcode defaults and let users edit Package.appxmanifest manually
-        //
-        // For now, Package.appxmanifest will have literal {{package_identity}} etc.
-        // which will need to be manually replaced or handled by a post-generation step
-        /*
-        if let Ok(config_content) = std::fs::read_to_string("jffi.toml") {
-            // Parse Windows platform settings
-            if let Some(windows_section) = config_content.split("[platforms.windows]").nth(1) {
-                let windows_lines: Vec<&str> = windows_section
-                    .lines()
-                    .take_while(|line| !line.starts_with('['))
-                    .collect();
-                
-                for line in windows_lines {
-                    if let Some((key, value)) = line.split_once('=') {
-                        let key = key.trim();
-                        let value = value.trim().trim_matches('"');
-                        context.insert(key.to_string(), value.to_string());
-                    }
-                }
-            }
-        }
-        */
 
         context
     }
@@ -280,6 +253,7 @@ impl TemplateEngine {
         }
 
         // Generate Cargo.toml for core
+        let uniffi_version = context.get("uniffi_version").map(|s| s.as_str()).unwrap_or(UNIFFI_VERSION);
         let cargo_toml = format!(
             r#"[package]
 name = "{}-core"
@@ -290,9 +264,10 @@ edition = "2021"
 crate-type = ["cdylib", "staticlib", "lib"]
 
 [dependencies]
-uniffi = {{ version = "0.31.1", features = ["cli", "wasm-unstable-single-threaded"] }}
+uniffi = {{ version = "{}", features = ["cli", "wasm-unstable-single-threaded"] }}
 "#,
-            context.get("name_snake").unwrap_or(&"app".to_string())
+            context.get("name_snake").unwrap_or(&"app".to_string()),
+            uniffi_version
         );
         fs::write(core_dir.join("Cargo.toml"), cargo_toml)?;
 
@@ -415,5 +390,28 @@ mod tests {
         let result = engine.render_template(template, &context);
         
         assert_eq!(result, "Hello myapp, Hello!");
+    }
+
+    #[test]
+    fn test_uniffi_version_default() {
+        let mut context = HashMap::new();
+        context.insert("name_snake".to_string(), "test_app".to_string());
+        
+        // Simulate Cargo.toml generation without uniffi_version override
+        let uniffi_version = context.get("uniffi_version").map(|s| s.as_str()).unwrap_or(UNIFFI_VERSION);
+        
+        assert_eq!(uniffi_version, "0.31.1");
+    }
+
+    #[test]
+    fn test_uniffi_version_override() {
+        let mut context = HashMap::new();
+        context.insert("name_snake".to_string(), "test_app".to_string());
+        context.insert("uniffi_version".to_string(), "0.32.0".to_string());
+        
+        // Simulate Cargo.toml generation with uniffi_version override
+        let uniffi_version = context.get("uniffi_version").map(|s| s.as_str()).unwrap_or(UNIFFI_VERSION);
+        
+        assert_eq!(uniffi_version, "0.32.0");
     }
 }

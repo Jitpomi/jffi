@@ -673,7 +673,7 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
         anyhow::bail!("Rust DLL not found at {}", lib_path);
     }
     
-    // Step 4: Build C# project once (for x64 by default)
+    // Step 4: Build C# project for all platforms
     println!("  {} Building C# project with MSBuild...", "→".bright_blue());
     
     let csproj_file = std::fs::read_dir("platforms/windows")
@@ -691,49 +691,54 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
     let msbuild_cmd = find_msbuild();
     let build_cmd: &str = if dotnet_cmd.is_some() { "dotnet" } else { "msbuild" };
     
-    let mut build_args: Vec<String> = Vec::new();
-    if build_cmd == "dotnet" {
-        build_args.push("build".to_string());
-        build_args.push(csproj_file.to_string_lossy().into_owned());
-        build_args.push(format!("-p:Platform={}", crate::platform::windows::DEFAULT_PLATFORM));
-        if release {
-            build_args.extend(["-c".to_string(), "Release".to_string()]);
+    let platforms = ["x86", "x64", "ARM64"];
+    for platform in &platforms {
+        println!("  {} Building for {}...", "→".bright_blue(), platform);
+        
+        let mut build_args: Vec<String> = Vec::new();
+        if build_cmd == "dotnet" {
+            build_args.push("build".to_string());
+            build_args.push(csproj_file.to_string_lossy().into_owned());
+            build_args.push(format!("-p:Platform={}", platform));
+            if release {
+                build_args.extend(["-c".to_string(), "Release".to_string()]);
+            }
+        } else {
+            build_args.push(csproj_file.to_string_lossy().into_owned());
+            build_args.push(format!("/p:Platform={}", platform));
+            if release {
+                build_args.extend(["/p:Configuration=Release".to_string()]);
+            }
         }
-    } else {
-        build_args.push(csproj_file.to_string_lossy().into_owned());
-        build_args.push(format!("/p:Platform={}", crate::platform::windows::DEFAULT_PLATFORM));
-        if release {
-            build_args.extend(["/p:Configuration=Release".to_string()]);
-        }
-    }
-    
-    let mut cmd = if build_cmd == "dotnet" {
-        Command::new(dotnet_cmd.as_deref().unwrap_or("dotnet"))
-    } else {
-        Command::new(msbuild_cmd.as_deref().unwrap_or("msbuild"))
-    };
+        
+        let mut cmd = if build_cmd == "dotnet" {
+            Command::new(dotnet_cmd.as_deref().unwrap_or("dotnet"))
+        } else {
+            Command::new(msbuild_cmd.as_deref().unwrap_or("msbuild"))
+        };
 
-    let status = cmd
-        .args(&build_args)
-        .status()
-        .with_context(|| {
-            let dotnet_hint = if dotnet_cmd.is_some() {
-                "dotnet was found but failed to run."
-            } else {
-                "dotnet was not found (checked PATH and `C:\\Program Files\\dotnet\\dotnet.exe`). Install .NET 8 SDK from https://dotnet.microsoft.com/download"
-            };
-            let msbuild_hint = if msbuild_cmd.is_some() {
-                "msbuild was found but failed to run. Note: MSBuild requires the .NET SDK to resolve Microsoft.NET.Sdk-style projects."
-            } else {
-                "msbuild was not found (checked PATH and Visual Studio via vswhere)."
-            };
-            format!(
-                "Failed to build Windows app. {dotnet_hint} {msbuild_hint} Install the .NET SDK (recommended) or Visual Studio Build Tools."
-            )
-        })?;
-    
-    if !status.success() {
-        anyhow::bail!("C# build failed");
+        let status = cmd
+            .args(&build_args)
+            .status()
+            .with_context(|| {
+                let dotnet_hint = if dotnet_cmd.is_some() {
+                    "dotnet was found but failed to run."
+                } else {
+                    "dotnet was not found (checked PATH and `C:\\Program Files\\dotnet\\dotnet.exe`). Install .NET 8 SDK from https://dotnet.microsoft.com/download"
+                };
+                let msbuild_hint = if msbuild_cmd.is_some() {
+                    "msbuild was found but failed to run. Note: MSBuild requires the .NET SDK to resolve Microsoft.NET.Sdk-style projects."
+                } else {
+                    "msbuild was not found (checked PATH and Visual Studio via vswhere)."
+                };
+                format!(
+                    "Failed to build Windows app. {dotnet_hint} {msbuild_hint} Install the .NET SDK (recommended) or Visual Studio Build Tools."
+                )
+            })?;
+        
+        if !status.success() {
+            anyhow::bail!("C# build failed for platform {}", platform);
+        }
     }
     
     println!("{}", "  ✅ Windows build complete".green());
@@ -818,9 +823,10 @@ fn ensure_uniffi_bindgen_cs() -> Result<()> {
         });
 
         // TODO: CRITICAL VERSION MISMATCH
-        // We use UniFFI 0.31.1 (in templating.rs) but uniffi-bindgen-cs v0.10.0+v0.29.4
+        // We use UniFFI version from templating::UNIFFI_VERSION (currently 0.31.1)
+        // but uniffi-bindgen-cs v0.10.0+v0.29.4 may not be compatible
         // This is likely to fail or produce incompatible bindings
-        // SOLUTION: Find or create a uniffi-bindgen-cs fork that supports UniFFI 0.31.1
+        // SOLUTION: Find or create a uniffi-bindgen-cs fork that supports the current UniFFI version
         // For now, users can override with:
         //   JFFI_UNIFFI_BINDGEN_CS_GIT=<fork-url>
         //   JFFI_UNIFFI_BINDGEN_CS_TAG=<compatible-version>
