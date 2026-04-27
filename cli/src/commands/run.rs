@@ -306,79 +306,62 @@ fn run_windows() -> Result<()> {
 
     println!();
     println!("{}", "  ✅ Build complete!".green());
-    println!("  {} Deploying and launching app...", "→".bright_blue());
+    println!();
     
-    // Find the .csproj file
+    // WinUI 3 MSIX apps require Visual Studio for proper deployment and runtime initialization
+    // Opening in Visual Studio is the most reliable way to run
+    println!("{}", "  🚀 Opening in Visual Studio...".bright_cyan());
+    
     let windows_dir = std::env::current_dir()?.join("platforms/windows");
-    let csproj = std::fs::read_dir(&windows_dir)?
+    
+    // Find solution or project file
+    let solution_file = std::fs::read_dir(&windows_dir)?
         .filter_map(|e| e.ok())
-        .find(|e| e.path().extension().and_then(|s| s.to_str()) == Some("csproj"))
+        .find(|e| {
+            if let Some(ext) = e.path().extension() {
+                if let Some(ext_str) = ext.to_str() {
+                    return ext_str == "slnx" || ext_str == "sln" || ext_str == "csproj";
+                }
+            }
+            false
+        })
         .map(|e| e.path())
-        .context("Could not find .csproj file")?;
+        .context("Could not find .slnx, .sln, or .csproj file")?;
     
-    // Detect which platform was built
-    let bin_dir = windows_dir.join("bin");
-    let platforms = ["x64", "x86", "ARM64"];
-    let mut active_platform = "x64";
+    // Try to open in Visual Studio
+    let open_result = if cfg!(target_os = "windows") {
+        Command::new("cmd")
+            .args(&["/C", "start", "", solution_file.to_str().unwrap()])
+            .status()
+    } else {
+        Command::new("open")
+            .arg(&solution_file)
+            .status()
+    };
     
-    for platform in &platforms {
-        let search_dir = bin_dir.join(platform).join("Debug");
-        if search_dir.exists() {
-            active_platform = platform;
-            println!("  {} Deploying {} build", "→".bright_blue(), platform);
-            break;
+    match open_result {
+        Ok(status) if status.success() => {
+            println!();
+            println!("{}", "  ✅ Visual Studio opened!".green());
+            println!();
+            println!("{}", "  To run your app:".bright_white());
+            println!("{}", "    1. Set platform to x64 (top toolbar)".bright_white());
+            println!("{}", "    2. Press F5 to deploy and run".bright_white());
+            println!();
+            println!("{}", "  💡 Tip: Visual Studio handles MSIX deployment and Windows App SDK runtime.".yellow());
+        }
+        _ => {
+            println!();
+            println!("{}", "  ⚠️  Could not auto-open Visual Studio.".yellow());
+            println!();
+            println!("{}", "  To run your app:".bright_white());
+            println!("{}", format!("    1. Open: {}", solution_file.display()).bright_white());
+            println!("{}", "    2. Set platform to x64".bright_white());
+            println!("{}", "    3. Press F5 to run".bright_white());
         }
     }
     
-    // Deploy the app package (registers it with Windows)
     println!();
-    println!("  {} Deploying app package...", "→".bright_blue());
-    let deploy_status = Command::new("dotnet")
-        .args(&[
-            "build",
-            csproj.to_str().unwrap(),
-            "/t:Deploy",
-            &format!("/p:Platform={}", active_platform),
-            "/p:Configuration=Debug",
-            "/p:AppxPackageSigningEnabled=false",
-            "/verbosity:minimal",
-        ])
-        .current_dir(&windows_dir)
-        .status()
-        .context("Failed to deploy app")?;
-    
-    if !deploy_status.success() {
-        anyhow::bail!("App deployment failed");
-    }
-    
-    // Now launch the deployed app using PowerShell
-    println!("  {} Launching deployed app...", "→".bright_blue());
-    
-    // Get the package family name from the manifest
-    let current_dir = std::env::current_dir()?;
-    let project_name = current_dir
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("app");
-    
-    // Launch using PowerShell to start the registered app
-    let ps_script = format!(
-        "Get-AppxPackage -Name '*{}*' | ForEach-Object {{ Start-Process \"shell:AppsFolder\\$($_.PackageFamilyName)!App\" }}",
-        project_name
-    );
-    
-    let launch_status = Command::new("powershell")
-        .args(&["-Command", &ps_script])
-        .status()
-        .context("Failed to launch app")?;
-    
-    if !launch_status.success() {
-        println!();
-        println!("{}", "  ⚠️  Could not auto-launch. You can launch manually from Start Menu.".yellow());
-    }
-    
-    println!();
-    println!("{}", "  ✅ App finished!".green());
     
     Ok(())
 }
