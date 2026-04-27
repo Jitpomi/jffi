@@ -19,15 +19,6 @@ pub struct TemplateManifest {
     pub platforms: PlatformConfig,
     #[serde(default)]
     pub metadata: TemplateMetadata,
-    // Platform-specific variable overrides: [variables.ios], [variables.windows], etc.
-    #[serde(flatten)]
-    pub platform_variables: HashMap<String, PlatformVariables>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct PlatformVariables {
-    #[serde(flatten)]
-    pub vars: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -138,14 +129,33 @@ impl TemplateEngine {
         let manifest_path = template_path.join("manifest.toml");
 
         if manifest_path.exists() {
-            let content = fs::read_to_string(&manifest_path)
-                .with_context(|| format!("Failed to read manifest: {:?}", manifest_path))?;
-            let mut manifest: TemplateManifest = toml::from_str(&content)
-                .with_context(|| format!("Failed to parse manifest: {:?}", manifest_path))?;
+            let contents = fs::read_to_string(&manifest_path)
+                .context("Failed to read manifest.toml")?;
             
-            // Ensure template name is set
-            if manifest.template.name.is_empty() {
-                manifest.template.name.clone_from(&folder_name.to_string());
+            let mut manifest: TemplateManifest = toml::from_str(&contents)
+                .context("Failed to parse manifest.toml")?;
+            
+            // Parse platform-specific variables (e.g., [variables.windows])
+            // TOML treats these as separate tables, so we need to extract them manually
+            let toml_value: toml::Value = toml::from_str(&contents)
+                .context("Failed to parse manifest as TOML value")?;
+            
+            if let Some(toml::Value::Table(root)) = Some(toml_value) {
+                // Look for tables like "variables.windows", "variables.ios", etc.
+                for (key, value) in root.iter() {
+                    if key.starts_with("variables.") && key != "variables" {
+                        if let toml::Value::Table(platform_vars) = value {
+                            // Merge platform-specific variables into base variables
+                            // We'll handle the override logic in build_context
+                            for (var_key, var_value) in platform_vars {
+                                if let toml::Value::String(s) = var_value {
+                                    let platform_key = format!("{}:{}", key, var_key);
+                                    manifest.variables.insert(platform_key, s.clone());
+                                }
+                            }
+                        }
+                    }
+                }
             }
             
             Ok(manifest)
@@ -161,7 +171,6 @@ impl TemplateEngine {
                 variables: HashMap::new(),
                 platforms: PlatformConfig::default(),
                 metadata: TemplateMetadata::default(),
-                platform_variables: HashMap::new(),
             })
         }
     }
@@ -239,16 +248,24 @@ impl TemplateEngine {
         }
 
         // Template manifest variables (can override defaults)
+        // First, add base variables
         for (key, value) in &manifest.variables {
-            context.insert(key.clone(), value.clone());
+            // Skip platform-specific keys (they're in format "variables.platform:key")
+            if !key.contains(':') {
+                context.insert(key.clone(), value.clone());
+            }
         }
 
         // Platform-specific variable overrides (e.g., [variables.windows])
+        // These were stored as "variables.windows:uniffi_version" during manifest loading
         if let Some(platform_name) = platform {
-            let platform_key = format!("variables.{}", platform_name);
-            if let Some(platform_vars) = manifest.platform_variables.get(&platform_key) {
-                for (key, value) in &platform_vars.vars {
-                    context.insert(key.clone(), value.clone());
+            let platform_prefix = format!("variables.{}:", platform_name);
+            for (key, value) in &manifest.variables {
+                if key.starts_with(&platform_prefix) {
+                    // Extract the actual variable name (after the ":")
+                    if let Some(var_name) = key.split(':').nth(1) {
+                        context.insert(var_name.to_string(), value.clone());
+                    }
                 }
             }
         }
