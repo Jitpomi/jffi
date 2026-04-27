@@ -155,29 +155,26 @@ impl TemplateEngine {
                     }
                 }
                 
-                // Parse [variables] section (base variables only)
+                // Parse [variables] section
                 if let Some(toml::Value::Table(vars_table)) = root.get("variables") {
+                    eprintln!("DEBUG: Parsing [variables] section...");
                     for (key, value) in vars_table {
-                        if let toml::Value::String(s) = value {
-                            manifest.variables.insert(key.clone(), s.clone());
-                        }
-                    }
-                }
-                
-                // Parse [variables.platform] sections (platform-specific overrides)
-                eprintln!("DEBUG: Parsing manifest, looking for platform-specific variables...");
-                for (key, value) in root.iter() {
-                    eprintln!("DEBUG: Found top-level key: {}", key);
-                    if key.starts_with("variables.") && key != "variables" {
-                        eprintln!("DEBUG: Found platform-specific section: {}", key);
+                        eprintln!("DEBUG: Found variables.{} = {:?}", key, value);
+                        
+                        // Check if this is a nested table (platform-specific)
                         if let toml::Value::Table(platform_vars) = value {
+                            // This is [variables.platform]
+                            eprintln!("DEBUG: Found platform-specific section: variables.{}", key);
                             for (var_key, var_value) in platform_vars {
                                 if let toml::Value::String(s) = var_value {
-                                    let platform_key = format!("{}:{}", key, var_key);
+                                    let platform_key = format!("variables.{}:{}", key, var_key);
                                     eprintln!("DEBUG: Storing platform variable: {} = {}", platform_key, s);
                                     manifest.variables.insert(platform_key, s.clone());
                                 }
                             }
+                        } else if let toml::Value::String(s) = value {
+                            // This is a base variable
+                            manifest.variables.insert(key.clone(), s.clone());
                         }
                     }
                 }
