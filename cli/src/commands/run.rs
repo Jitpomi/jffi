@@ -306,105 +306,53 @@ fn run_windows() -> Result<()> {
 
     println!();
     println!("{}", "  ✅ Build complete!".green());
-    println!("  {} Launching app...", "→".bright_blue());
+    println!("  {} Deploying and launching app...", "→".bright_blue());
     
-    // Find the built executable
-    // Build creates: platforms/windows/bin/{platform}/Debug/net8.0-windows10.0.19041.0/win-{platform}/{app}.exe
+    // Find the .csproj file
     let windows_dir = std::env::current_dir()?.join("platforms/windows");
-    let bin_dir = windows_dir.join("bin");
+    let csproj = std::fs::read_dir(&windows_dir)?
+        .filter_map(|e| e.ok())
+        .find(|e| e.path().extension().and_then(|s| s.to_str()) == Some("csproj"))
+        .map(|e| e.path())
+        .context("Could not find .csproj file")?;
     
-    // Try to find the executable in any platform directory (prefer x64, then x86, then ARM64)
+    // Detect which platform was built
+    let bin_dir = windows_dir.join("bin");
     let platforms = ["x64", "x86", "ARM64"];
-    let mut exe_path = None;
+    let mut active_platform = "x64";
     
     for platform in &platforms {
         let search_dir = bin_dir.join(platform).join("Debug");
-        if let Some(found) = find_exe_in_dir(&search_dir) {
-            exe_path = Some(found);
-            println!("  {} Found {} build", "→".bright_blue(), platform);
+        if search_dir.exists() {
+            active_platform = platform;
+            println!("  {} Deploying {} build", "→".bright_blue(), platform);
             break;
         }
     }
     
-    let exe_path = exe_path.context(
-        "Could not find built executable. Make sure the build succeeded.\n\
-         Expected location: platforms/windows/bin/{x64|x86|ARM64}/Debug/net8.0-windows10.0.19041.0/win-{platform}/*.exe"
-    )?;
-    
-    println!("  {} Running: {}", "→".bright_blue(), exe_path.display());
+    // Use dotnet to deploy and run (handles Windows App SDK runtime properly)
     println!();
+    let status = Command::new("dotnet")
+        .args(&[
+            "build",
+            csproj.to_str().unwrap(),
+            "/t:Run",
+            &format!("/p:Platform={}", active_platform),
+            "/p:Configuration=Debug",
+            "/verbosity:quiet",
+        ])
+        .current_dir(&windows_dir)
+        .status()
+        .context("Failed to deploy and run app")?;
     
-    // Launch the executable directly and capture output
-    let output = Command::new(&exe_path)
-        .current_dir(exe_path.parent().unwrap())
-        .output()
-        .context("Failed to launch app")?;
-    
-    // Show stdout and stderr
-    if !output.stdout.is_empty() {
-        println!("{}", String::from_utf8_lossy(&output.stdout));
-    }
-    if !output.stderr.is_empty() {
-        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-    }
-    
-    if !output.status.success() {
-        anyhow::bail!("App exited with error code: {:?}", output.status.code());
+    if !status.success() {
+        anyhow::bail!("App deployment/launch failed");
     }
     
     println!();
     println!("{}", "  ✅ App finished!".green());
     
     Ok(())
-}
-
-fn find_exe_in_dir(dir: &std::path::Path) -> Option<std::path::PathBuf> {
-    if !dir.exists() {
-        return None;
-    }
-    
-    // First, try to find in AppX subdirectory (packaged version with proper runtime)
-    let appx_dir = dir.join("AppX");
-    if appx_dir.exists() {
-        if let Some(found) = find_exe_in_appx(&appx_dir) {
-            return Some(found);
-        }
-    }
-    
-    // Fallback: recursively search for .exe files
-    for entry in std::fs::read_dir(dir).ok()? {
-        let entry = entry.ok()?;
-        let path = entry.path();
-        
-        if path.is_dir() && path.file_name()?.to_str()? != "AppX" {
-            if let Some(found) = find_exe_in_dir(&path) {
-                return Some(found);
-            }
-        } else if path.extension().and_then(|s| s.to_str()) == Some("exe") {
-            // Skip known system files
-            let filename = path.file_name()?.to_str()?;
-            if !filename.starts_with("createdump") && !filename.starts_with("Microsoft.") {
-                return Some(path);
-            }
-        }
-    }
-    
-    None
-}
-
-fn find_exe_in_appx(dir: &std::path::Path) -> Option<std::path::PathBuf> {
-    for entry in std::fs::read_dir(dir).ok()? {
-        let entry = entry.ok()?;
-        let path = entry.path();
-        
-        if path.extension().and_then(|s| s.to_str()) == Some("exe") {
-            let filename = path.file_name()?.to_str()?;
-            if !filename.starts_with("createdump") && !filename.starts_with("Microsoft.") {
-                return Some(path);
-            }
-        }
-    }
-    None
 }
 
 fn run_linux() -> Result<()> {
