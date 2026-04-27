@@ -363,12 +363,20 @@ fn find_exe_in_dir(dir: &std::path::Path) -> Option<std::path::PathBuf> {
         return None;
     }
     
-    // Recursively search for .exe files
+    // First, try to find in AppX subdirectory (packaged version with proper runtime)
+    let appx_dir = dir.join("AppX");
+    if appx_dir.exists() {
+        if let Some(found) = find_exe_in_appx(&appx_dir) {
+            return Some(found);
+        }
+    }
+    
+    // Fallback: recursively search for .exe files
     for entry in std::fs::read_dir(dir).ok()? {
         let entry = entry.ok()?;
         let path = entry.path();
         
-        if path.is_dir() {
+        if path.is_dir() && path.file_name()?.to_str()? != "AppX" {
             if let Some(found) = find_exe_in_dir(&path) {
                 return Some(found);
             }
@@ -381,6 +389,21 @@ fn find_exe_in_dir(dir: &std::path::Path) -> Option<std::path::PathBuf> {
         }
     }
     
+    None
+}
+
+fn find_exe_in_appx(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    for entry in std::fs::read_dir(dir).ok()? {
+        let entry = entry.ok()?;
+        let path = entry.path();
+        
+        if path.extension().and_then(|s| s.to_str()) == Some("exe") {
+            let filename = path.file_name()?.to_str()?;
+            if !filename.starts_with("createdump") && !filename.starts_with("Microsoft.") {
+                return Some(path);
+            }
+        }
+    }
     None
 }
 
