@@ -132,21 +132,42 @@ impl TemplateEngine {
             let contents = fs::read_to_string(&manifest_path)
                 .context("Failed to read manifest.toml")?;
             
-            let mut manifest: TemplateManifest = toml::from_str(&contents)
-                .context("Failed to parse manifest.toml")?;
-            
-            // Parse platform-specific variables (e.g., [variables.windows])
-            // TOML treats these as separate tables, so we need to extract them manually
+            // Parse as raw TOML value first to handle nested tables
             let toml_value: toml::Value = toml::from_str(&contents)
                 .context("Failed to parse manifest as TOML value")?;
             
-            if let Some(toml::Value::Table(root)) = Some(toml_value) {
-                // Look for tables like "variables.windows", "variables.ios", etc.
+            let mut manifest = TemplateManifest::default();
+            
+            if let toml::Value::Table(root) = toml_value {
+                // Parse [template] section
+                if let Some(toml::Value::Table(template_table)) = root.get("template") {
+                    if let Some(toml::Value::String(name)) = template_table.get("name") {
+                        manifest.template.name = name.clone();
+                    }
+                    if let Some(toml::Value::String(desc)) = template_table.get("description") {
+                        manifest.template.description = desc.clone();
+                    }
+                    if let Some(toml::Value::String(author)) = template_table.get("author") {
+                        manifest.template.author = author.clone();
+                    }
+                    if let Some(toml::Value::String(version)) = template_table.get("version") {
+                        manifest.template.version = version.clone();
+                    }
+                }
+                
+                // Parse [variables] section (base variables only)
+                if let Some(toml::Value::Table(vars_table)) = root.get("variables") {
+                    for (key, value) in vars_table {
+                        if let toml::Value::String(s) = value {
+                            manifest.variables.insert(key.clone(), s.clone());
+                        }
+                    }
+                }
+                
+                // Parse [variables.platform] sections (platform-specific overrides)
                 for (key, value) in root.iter() {
                     if key.starts_with("variables.") && key != "variables" {
                         if let toml::Value::Table(platform_vars) = value {
-                            // Merge platform-specific variables into base variables
-                            // We'll handle the override logic in build_context
                             for (var_key, var_value) in platform_vars {
                                 if let toml::Value::String(s) = var_value {
                                     let platform_key = format!("{}:{}", key, var_key);
@@ -154,6 +175,32 @@ impl TemplateEngine {
                                 }
                             }
                         }
+                    }
+                }
+                
+                // Parse [platforms] section
+                if let Some(toml::Value::Table(platforms_table)) = root.get("platforms") {
+                    if let Some(toml::Value::Array(supported)) = platforms_table.get("supported") {
+                        manifest.platforms.supported = supported
+                            .iter()
+                            .filter_map(|v| {
+                                if let toml::Value::String(s) = v {
+                                    Some(s.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                    }
+                }
+                
+                // Parse [metadata] section
+                if let Some(toml::Value::Table(metadata_table)) = root.get("metadata") {
+                    if let Some(toml::Value::String(status)) = metadata_table.get("status") {
+                        manifest.metadata.status = status.clone();
+                    }
+                    if let Some(toml::Value::String(message)) = metadata_table.get("message") {
+                        manifest.metadata.message = message.clone();
                     }
                 }
             }
