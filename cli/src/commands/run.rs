@@ -284,8 +284,45 @@ fn run_macos() -> Result<()> {
     Ok(())
 }
 
-fn run_windows() -> Result<()> {
+fn launch_windows_app() -> Result<()> {
     use std::process::Command;
+
+    let windows_dir = std::env::current_dir()?.join("platforms/windows");
+
+    // Deploy and launch the MSIX package via PowerShell
+    let status = Command::new("powershell")
+        .args([
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            r#"
+            $ErrorActionPreference = 'Stop'
+
+            $manifest = Get-ChildItem -Recurse -Filter Package.appxmanifest | Select-Object -First 1
+            if (-not $manifest) { throw 'Package.appxmanifest not found' }
+
+            $packageDir = Split-Path $manifest.FullName
+            Add-AppxPackage -Register $manifest.FullName -ForceApplicationShutdown
+
+            $xml = [xml](Get-Content $manifest.FullName)
+            $identity = $xml.Package.Identity.Name
+            $appId = $xml.Package.Applications.Application.Id
+            $aumid = "$identity!$appId"
+
+            Start-Process "shell:AppsFolder\$aumid"
+            "#
+        ])
+        .current_dir(&windows_dir)
+        .status()?;
+
+    if !status.success() {
+        anyhow::bail!("Failed to deploy/launch Windows app");
+    }
+
+    Ok(())
+}
+
+fn run_windows() -> Result<()> {
     
     // Check if this is first build or rebuild
     let bin_dir = std::env::current_dir()?.join("platforms/windows/bin");
@@ -306,62 +343,12 @@ fn run_windows() -> Result<()> {
 
     println!();
     println!("{}", "  ✅ Build complete!".green());
-    println!();
+    println!("{}", "  🚀 Deploying and launching Windows app...".bright_cyan());
     
-    // WinUI 3 MSIX apps require Visual Studio for proper deployment and runtime initialization
-    // Opening in Visual Studio is the most reliable way to run
-    println!("{}", "  🚀 Opening in Visual Studio...".bright_cyan());
-    
-    let windows_dir = std::env::current_dir()?.join("platforms/windows");
-    
-    // Find solution or project file
-    let solution_file = std::fs::read_dir(&windows_dir)?
-        .filter_map(|e| e.ok())
-        .find(|e| {
-            if let Some(ext) = e.path().extension() {
-                if let Some(ext_str) = ext.to_str() {
-                    return ext_str == "slnx" || ext_str == "sln" || ext_str == "csproj";
-                }
-            }
-            false
-        })
-        .map(|e| e.path())
-        .context("Could not find .slnx, .sln, or .csproj file")?;
-    
-    // Try to open in Visual Studio
-    let open_result = if cfg!(target_os = "windows") {
-        Command::new("cmd")
-            .args(&["/C", "start", "", solution_file.to_str().unwrap()])
-            .status()
-    } else {
-        Command::new("open")
-            .arg(&solution_file)
-            .status()
-    };
-    
-    match open_result {
-        Ok(status) if status.success() => {
-            println!();
-            println!("{}", "  ✅ Visual Studio opened!".green());
-            println!();
-            println!("{}", "  To run your app:".bright_white());
-            println!("{}", "    1. Set platform to x64 (top toolbar)".bright_white());
-            println!("{}", "    2. Press F5 to deploy and run".bright_white());
-            println!();
-            println!("{}", "  💡 Tip: Visual Studio handles MSIX deployment and Windows App SDK runtime.".yellow());
-        }
-        _ => {
-            println!();
-            println!("{}", "  ⚠️  Could not auto-open Visual Studio.".yellow());
-            println!();
-            println!("{}", "  To run your app:".bright_white());
-            println!("{}", format!("    1. Open: {}", solution_file.display()).bright_white());
-            println!("{}", "    2. Set platform to x64".bright_white());
-            println!("{}", "    3. Press F5 to run".bright_white());
-        }
-    }
+    launch_windows_app()?;
     
     println!();
+    println!("{}", "  ✅ App launched!".green());
     
     Ok(())
 }
