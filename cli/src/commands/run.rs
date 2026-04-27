@@ -285,21 +285,48 @@ fn run_macos() -> Result<()> {
 }
 
 fn run_windows() -> Result<()> {
+    use std::process::Command;
+    
     println!("  {} Building Windows app...", "→".bright_blue());
     crate::commands::build::build_project(Some("windows".to_string()), false, false, false)?;
 
     println!();
     println!("{}", "  ✅ Build complete!".green());
+    println!("  {} Launching app...", "→".bright_blue());
+    
+    // Find the .csproj or .slnx file
+    let windows_dir = std::env::current_dir()?.join("platforms/windows");
+    let project_file = find_file_with_extension(&windows_dir, "csproj")
+        .or_else(|| find_file_with_extension(&windows_dir, "slnx"))
+        .context("Could not find .csproj or .slnx file")?;
+    
+    // Launch using dotnet run (unpackaged mode - faster for development)
+    let status = Command::new("dotnet")
+        .args(&["run", "--project", project_file.to_str().unwrap(), "--no-build"])
+        .current_dir(&windows_dir)
+        .status()
+        .context("Failed to launch app with dotnet run")?;
+    
+    if !status.success() {
+        anyhow::bail!("App launch failed");
+    }
+    
     println!();
-    println!("{}", "  To run your WinUI 3 app:".bright_cyan());
-    println!("{}", "  1. Open platforms/windows/*.sln in Visual Studio".bright_white());
-    println!("{}", "  2. Set platform to x64 (top toolbar)".bright_white());
-    println!("{}", "  3. Press F5 to run".bright_white());
-    println!();
-    println!("{}", "  Note: WinUI 3 MSIX apps require Visual Studio for proper deployment.".yellow());
-    println!("{}", "  'dotnet run' doesn't support MSIX packaging with Windows App SDK.".yellow());
+    println!("{}", "  ✅ App launched!".green());
     
     Ok(())
+}
+
+fn find_file_with_extension(dir: &std::path::Path, ext: &str) -> Option<std::path::PathBuf> {
+    std::fs::read_dir(dir).ok()?
+        .filter_map(|e| e.ok())
+        .find(|e| {
+            e.path().extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s == ext)
+                .unwrap_or(false)
+        })
+        .map(|e| e.path())
 }
 
 fn run_linux() -> Result<()> {
