@@ -319,11 +319,21 @@ fn launch_windows_app() -> Result<()> {
             Write-Host "Found manifest: $($manifest.FullName)"
             Add-AppxPackage -Register $manifest.FullName -ForceApplicationShutdown
 
+            # Get the Application ID from manifest
             $xml = [xml](Get-Content $manifest.FullName)
-            $identity = $xml.Package.Identity.Name
             $appId = $xml.Package.Applications.Application.Id
-            $aumid = "$identity!$appId"
+            
+            # Get PackageFamilyName from the registered package (not from manifest GUID)
+            $identity = $xml.Package.Identity.Name
+            $package = Get-AppxPackage -Name $identity
+            if (-not $package) {
+                throw "Package not found after registration. Identity: $identity"
+            }
+            
+            $packageFamilyName = $package.PackageFamilyName
+            $aumid = "$packageFamilyName!$appId"
 
+            Write-Host "Package Family Name: $packageFamilyName"
             Write-Host "Launching: $aumid"
             Start-Process "shell:AppsFolder\$aumid"
             "#
