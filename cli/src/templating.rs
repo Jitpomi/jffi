@@ -246,8 +246,14 @@ impl TemplateEngine {
         name: &str,
         platforms: &[&str],
     ) -> Result<()> {
-        // Generate core with base context (no platform-specific overrides)
-        let core_context = self.build_context(name, &template.manifest, None);
+        // If Windows is included, use Windows-specific context for core (for UniFFI version)
+        // Otherwise use base context
+        let core_platform = if platforms.contains(&"windows") {
+            Some("windows")
+        } else {
+            None
+        };
+        let core_context = self.build_context(name, &template.manifest, core_platform);
         self.generate_core(template, project_dir, &core_context)?;
 
         // Generate platforms with platform-specific contexts
