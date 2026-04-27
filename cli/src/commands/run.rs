@@ -13,7 +13,7 @@ pub fn run_project(platform_str: &str, device: bool) -> Result<()> {
     println!();
     
     // Build first
-    crate::commands::build::build_project(Some(platform_str.to_string()), false, false, device)?;
+    crate::commands::build::build_project(Some(platform_str.to_string()), false, false, device, false)?;
     
     println!();
     println!("{}", format!("▶️  Launching {}...", target_desc).bright_cyan().bold());
@@ -357,7 +357,7 @@ fn run_windows() -> Result<()> {
     if is_first_build {
         // First build: build all architectures and C# project
         println!("  {} Building Windows app (all architectures)...", "→".bright_blue());
-        crate::commands::build::build_project(Some("windows".to_string()), false, false, false)?;
+        crate::commands::build::build_project(Some("windows".to_string()), false, false, false, false)?;
     } else {
         // Rebuild: only build Rust for active architecture (faster)
         println!("  {} Rebuilding Rust core...", "→".bright_blue());
@@ -402,7 +402,7 @@ fn run_linux() -> Result<()> {
     
     // Build the Rust FFI library
     println!("  {} Building Rust FFI library...", "→".bright_blue());
-    crate::commands::build::build_project(Some("linux".to_string()), false, false, false)?;
+    crate::commands::build::build_project(Some("linux".to_string()), false, false, false, false)?;
     
     // Copy the .so file to platforms/linux with the correct name
     let lib_path = std::fs::read_dir("target/debug")
@@ -443,7 +443,7 @@ fn run_linux() -> Result<()> {
 fn run_web() -> Result<()> {
     // Build the WASM first
     println!("  {} Building Rust FFI library...", "→".bright_blue());
-    crate::commands::build::build_project(Some("web".to_string()), false, false, false)?;
+    crate::commands::build::build_project(Some("web".to_string()), false, false, false, false)?;
     
     // Check if npm is installed
     let npm_check = Command::new("npm")

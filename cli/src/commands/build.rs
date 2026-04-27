@@ -64,13 +64,13 @@ fn ensure_rust_targets(targets: &[&str]) -> Result<()> {
     Ok(())
 }
 
-pub fn build_project(platform: Option<String>, all: bool, release: bool, device: bool) -> Result<()> {
+pub fn build_project(platform: Option<String>, all: bool, release: bool, device: bool, deploy: bool) -> Result<()> {
     validate_project_structure()?;
     
     if all {
         build_all_platforms(release)?;
     } else if let Some(platform) = platform {
-        build_platform_with_options(&platform, release, device)?;
+        build_platform_with_options(&platform, release, device, deploy)?;
     } else {
         anyhow::bail!("Specify --platform <platform> or --all");
     }
@@ -78,7 +78,7 @@ pub fn build_project(platform: Option<String>, all: bool, release: bool, device:
     Ok(())
 }
 
-pub fn build_platform_with_options(platform: &str, release: bool, device: bool) -> Result<()> {
+pub fn build_platform_with_options(platform: &str, release: bool, device: bool, deploy: bool) -> Result<()> {
     validate_project_structure()?;
     
     println!("{}", format!("🔨 Building for {}...", platform).bright_green().bold());
@@ -99,7 +99,13 @@ pub fn build_platform_with_options(platform: &str, release: bool, device: bool) 
         }
         "macos-arm64" => build_macos("aarch64", release),
         "macos-x64" => build_macos("x86_64", release),
-        "windows" => build_windows_all_archs(release),
+        "windows" => {
+            if deploy {
+                build_windows_all_archs(release)
+            } else {
+                build_windows_host_arch(release)
+            }
+        },
         "linux" => build_linux(release),
         "web" => build_web(release),
         _ => anyhow::bail!("Unknown platform: {}", platform),
@@ -587,15 +593,57 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
     Ok(())
 }
 
+fn build_windows_host_arch(release: bool) -> Result<()> {
+    // Build only for the host architecture (faster for development)
+    ensure_uniffi_bindgen_cs()?;
+    
+    // Detect host architecture
+    let host_arch = if let Ok(arch) = std::env::var("PROCESSOR_ARCHITECTURE") {
+        match arch.as_str() {
+            "AMD64" => "x86_64",
+            "x86" => "i686",
+            "ARM64" => "aarch64",
+            _ => "x86_64",
+        }
+    } else {
+        "x86_64"
+    };
+    
+    let host_platform = match host_arch {
+        "x86_64" => "x64",
+        "i686" => "x86",
+        "aarch64" => "ARM64",
+        _ => "x64",
+    };
+    
+    println!("  {} Detected host architecture: {}", "→".bright_blue(), host_platform);
+    
+    let archs = [host_arch];
+    let platforms = [host_platform];
+    let profile = if release { "release" } else { "debug" };
+    
+    build_windows_archs(&archs, &platforms, release, profile)?;
+    
+    Ok(())
+}
+
 fn build_windows_all_archs(release: bool) -> Result<()> {
-    // Ensure uniffi-bindgen-cs is installed
+    // Build for all architectures (for deployment/distribution)
     ensure_uniffi_bindgen_cs()?;
     
     let archs = ["i686", "x86_64", "aarch64"];
+    let platforms = ["x86", "x64", "ARM64"];
     let profile = if release { "release" } else { "debug" };
     
-    // Step 1: Build Rust libraries for all architectures
-    for arch in &archs {
+    build_windows_archs(&archs, &platforms, release, profile)?;
+    
+    Ok(())
+}
+
+fn build_windows_archs(archs: &[&str], platforms: &[&str], release: bool, profile: &str) -> Result<()> {
+    
+    // Step 1: Build Rust libraries for specified architectures
+    for arch in archs.iter() {
         let target = format!("{}-pc-windows-msvc", arch);
         
         // Ensure the Rust target is installed
@@ -673,7 +721,7 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
         anyhow::bail!("Rust DLL not found at {}", lib_path);
     }
     
-    // Step 4: Build C# project for all platforms
+    // Step 4: Build C# project for specified platforms
     println!("  {} Building C# project with MSBuild...", "→".bright_blue());
     
     let csproj_file = std::fs::read_dir("platforms/windows")
@@ -691,8 +739,7 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
     let msbuild_cmd = find_msbuild();
     let build_cmd: &str = if dotnet_cmd.is_some() { "dotnet" } else { "msbuild" };
     
-    let platforms = ["x86", "x64", "ARM64"];
-    for platform in &platforms {
+    for platform in platforms.iter() {
         println!("  {} Building for {}...", "→".bright_blue(), platform);
         
         let mut build_args: Vec<String> = Vec::new();

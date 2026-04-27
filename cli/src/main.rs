@@ -51,6 +51,10 @@ enum Commands {
         /// Build for physical device (iOS only)
         #[arg(short, long)]
         device: bool,
+        
+        /// Build for deployment (all architectures for Windows, otherwise same as default)
+        #[arg(long)]
+        deploy: bool,
     },
     
     /// Run the app on specific platform
@@ -86,8 +90,8 @@ fn main() -> anyhow::Result<()> {
         Commands::New { name, platforms, template, path } => {
             commands::new::create_project(&name, platforms.as_deref(), template.as_deref(), path)?;
         }
-        Commands::Build { platform, all, release, device } => {
-            commands::build::build_project(platform, all, release, device)?;
+        Commands::Build { platform, all, release, device, deploy } => {
+            commands::build::build_project(platform, all, release, device, deploy)?;
         }
         Commands::Run { platform, device } => {
             commands::run::run_project(&platform, device)?;
