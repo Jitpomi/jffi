@@ -24,6 +24,8 @@ namespace {{name}}
     /// </summary>
     public sealed partial class MainWindow : Window
     {
+        private Core _core;
+
         public MainWindow()
         {
             InitializeComponent();
