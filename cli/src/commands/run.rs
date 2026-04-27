@@ -290,6 +290,7 @@ fn launch_windows_app() -> Result<()> {
     let windows_dir = std::env::current_dir()?.join("platforms/windows");
 
     // Deploy and launch the MSIX package via PowerShell
+    // Detects host architecture and deploys only the matching build
     let status = Command::new("powershell")
         .args([
             "-ExecutionPolicy",
@@ -298,9 +299,22 @@ fn launch_windows_app() -> Result<()> {
             r#"
             $ErrorActionPreference = 'Stop'
 
-            # Look for AppxManifest.xml in bin output (not Package.appxmanifest in source)
-            $manifest = Get-ChildItem -Path bin -Recurse -Filter AppxManifest.xml | Select-Object -First 1
-            if (-not $manifest) { throw 'AppxManifest.xml not found in bin output' }
+            # Detect host architecture
+            $arch = $env:PROCESSOR_ARCHITECTURE
+            $platformDir = switch ($arch) {
+                'AMD64' { 'x64' }
+                'x86'   { 'x86' }
+                'ARM64' { 'ARM64' }
+                default { 'x64' }
+            }
+
+            Write-Host "Detected architecture: $arch → $platformDir"
+
+            # Look for AppxManifest.xml in the matching platform directory
+            $manifest = Get-ChildItem -Path "bin\$platformDir" -Recurse -Filter AppxManifest.xml | Select-Object -First 1
+            if (-not $manifest) { 
+                throw "AppxManifest.xml not found for $platformDir. Build the project first with: jffi build --platform windows" 
+            }
 
             Write-Host "Found manifest: $($manifest.FullName)"
             Add-AppxPackage -Register $manifest.FullName -ForceApplicationShutdown
