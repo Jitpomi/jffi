@@ -298,10 +298,11 @@ fn launch_windows_app() -> Result<()> {
             r#"
             $ErrorActionPreference = 'Stop'
 
-            $manifest = Get-ChildItem -Recurse -Filter Package.appxmanifest | Select-Object -First 1
-            if (-not $manifest) { throw 'Package.appxmanifest not found' }
+            # Look for AppxManifest.xml in bin output (not Package.appxmanifest in source)
+            $manifest = Get-ChildItem -Path bin -Recurse -Filter AppxManifest.xml | Select-Object -First 1
+            if (-not $manifest) { throw 'AppxManifest.xml not found in bin output' }
 
-            $packageDir = Split-Path $manifest.FullName
+            Write-Host "Found manifest: $($manifest.FullName)"
             Add-AppxPackage -Register $manifest.FullName -ForceApplicationShutdown
 
             $xml = [xml](Get-Content $manifest.FullName)
@@ -309,6 +310,7 @@ fn launch_windows_app() -> Result<()> {
             $appId = $xml.Package.Applications.Application.Id
             $aumid = "$identity!$appId"
 
+            Write-Host "Launching: $aumid"
             Start-Process "shell:AppsFolder\$aumid"
             "#
         ])
