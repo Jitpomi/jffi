@@ -11,10 +11,7 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="feat: windows">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/{{name}}.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/cli/templates/hello/platforms/windows/{{name}}.csproj" afterDir="false" />
-    </list>
+    <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="feat: windows" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -130,7 +127,7 @@
       <workItem from="1775399602549" duration="35206000" />
       <workItem from="1776574893845" duration="369000" />
       <workItem from="1776575270900" duration="16172000" />
-      <workItem from="1777146781648" duration="33654000" />
+      <workItem from="1777146781648" duration="34314000" />
     </task>
     <task id="LOCAL-00001" summary="feat: unify all platform templates to hello pattern&#10; &#10;- Remove todo/counter template options (marked as coming soon)&#10;- Simplify all platform UIs (iOS, macOS, Android, Windows, Linux, Web)&#10;  to use only core.greeting() with refresh button&#10;- Block todo/counter selection from CLI and interactive UI&#10;- All platforms now generate consistent hello world app">
       <option name="closed" value="true" />

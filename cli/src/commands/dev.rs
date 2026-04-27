@@ -189,7 +189,14 @@ pub fn watch_project(platform: &str) -> Result<()> {
                         
                         println!("{}", "  🔄 Rust changes detected, rebuilding...".yellow());
                         
-                        match crate::commands::build::build_platform(platform, false) {
+                        // For Windows, only build the active platform architecture
+                        let build_result = if platform == "windows" {
+                            rebuild_windows_rust_only()
+                        } else {
+                            crate::commands::build::build_platform(platform, false)
+                        };
+                        
+                        match build_result {
                             Ok(_) => {
                                 println!();
                                 if platform == "linux" {
@@ -311,6 +318,64 @@ fn open_visual_studio() -> Result<()> {
     Ok(())
 }
 
+fn rebuild_windows_rust_only() -> Result<()> {
+    use std::process::Command;
+    
+    // Detect which platform is active
+    let target = detect_active_windows_platform().unwrap_or("x86_64-pc-windows-msvc");
+    
+    let platform_name = match target {
+        "x86_64-pc-windows-msvc" => "x64",
+        "i686-pc-windows-msvc" => "x86",
+        "aarch64-pc-windows-msvc" => "ARM64",
+        _ => "x64",
+    };
+    
+    println!("  {} Building Rust for {} only...", "→".bright_blue(), platform_name);
+    
+    // Build only the detected target
+    let status = Command::new("cargo")
+        .args(&["build", "--target", target, "--manifest-path", "core/Cargo.toml"])
+        .status()
+        .context("Failed to run cargo build")?;
+    
+    if !status.success() {
+        anyhow::bail!("Rust build failed");
+    }
+    
+    Ok(())
+}
+
+fn detect_active_windows_platform() -> Option<&'static str> {
+    // Check which platform directory was most recently modified in bin/
+    let bin_dir = std::env::current_dir().ok()?.join("platforms/windows/bin");
+    if !bin_dir.exists() {
+        return None;
+    }
+
+    let mut most_recent: Option<(std::time::SystemTime, &'static str)> = None;
+    
+    // Map platform folder names to Rust targets
+    let platform_map = [
+        ("x64", "x86_64-pc-windows-msvc"),
+        ("x86", "i686-pc-windows-msvc"),
+        ("ARM64", "aarch64-pc-windows-msvc"),
+    ];
+
+    for (platform_name, rust_target) in &platform_map {
+        let platform_dir = bin_dir.join(platform_name);
+        if let Ok(metadata) = platform_dir.metadata() {
+            if let Ok(modified) = metadata.modified() {
+                if most_recent.is_none() || most_recent.as_ref().map(|(t, _)| modified > *t).unwrap_or(false) {
+                    most_recent = Some((modified, rust_target));
+                }
+            }
+        }
+    }
+
+    most_recent.map(|(_, target)| target)
+}
+
 fn copy_windows_ffi_dll() -> Result<()> {
     let project_dir = std::env::current_dir()?;
 
@@ -322,8 +387,8 @@ fn copy_windows_ffi_dll() -> Result<()> {
 
     let dll_name = format!("{lib_name}_core.dll");
 
-    // Get DLL from Rust target directory (x64 for hot reload)
-    let target = "x86_64-pc-windows-msvc";
+    // Detect which platform was last built by checking bin/ directories
+    let target = detect_active_windows_platform().unwrap_or("x86_64-pc-windows-msvc");
     let dll_source = project_dir
         .join("target")
         .join(target)
