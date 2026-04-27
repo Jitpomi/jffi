@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// UniFFI version used in generated projects
+/// UniFFI version used in generated projects (default for iOS, macOS, Android, Linux, Web)
+/// Windows template overrides to 0.29.4 for uniffi-bindgen-cs compatibility
 const UNIFFI_VERSION: &str = "0.31.1";
 
 /// Template manifest configuration
@@ -18,6 +19,15 @@ pub struct TemplateManifest {
     pub platforms: PlatformConfig,
     #[serde(default)]
     pub metadata: TemplateMetadata,
+    // Platform-specific variable overrides: [variables.ios], [variables.windows], etc.
+    #[serde(flatten)]
+    pub platform_variables: HashMap<String, PlatformVariables>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PlatformVariables {
+    #[serde(flatten)]
+    pub vars: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -151,6 +161,7 @@ impl TemplateEngine {
                 variables: HashMap::new(),
                 platforms: PlatformConfig::default(),
                 metadata: TemplateMetadata::default(),
+                platform_variables: HashMap::new(),
             })
         }
     }
@@ -175,15 +186,15 @@ impl TemplateEngine {
         name: &str,
         platforms: &[&str],
     ) -> Result<()> {
-        let context = self.build_context(name, &template.manifest);
+        // Generate core with base context (no platform-specific overrides)
+        let core_context = self.build_context(name, &template.manifest, None);
+        self.generate_core(template, project_dir, &core_context)?;
 
-        // Generate core
-        self.generate_core(template, project_dir, &context)?;
-
-        // Generate platforms
+        // Generate platforms with platform-specific contexts
         for platform in platforms {
             if template.manifest.platforms.supported.contains(&platform.to_string()) {
-                self.generate_platform(template, project_dir, platform, &context)?;
+                let platform_context = self.build_context(name, &template.manifest, Some(platform));
+                self.generate_platform(template, project_dir, platform, &platform_context)?;
             }
         }
 
@@ -191,7 +202,8 @@ impl TemplateEngine {
     }
 
     /// Build variable context for substitution
-    fn build_context(&self, name: &str, manifest: &TemplateManifest) -> HashMap<String, String> {
+    /// If platform is provided, merges platform-specific variable overrides
+    fn build_context(&self, name: &str, manifest: &TemplateManifest, platform: Option<&str>) -> HashMap<String, String> {
         let mut context = HashMap::new();
 
         // Standard variables
@@ -229,6 +241,16 @@ impl TemplateEngine {
         // Template manifest variables (can override defaults)
         for (key, value) in &manifest.variables {
             context.insert(key.clone(), value.clone());
+        }
+
+        // Platform-specific variable overrides (e.g., [variables.windows])
+        if let Some(platform_name) = platform {
+            let platform_key = format!("variables.{}", platform_name);
+            if let Some(platform_vars) = manifest.platform_variables.get(&platform_key) {
+                for (key, value) in &platform_vars.vars {
+                    context.insert(key.clone(), value.clone());
+                }
+            }
         }
 
         context

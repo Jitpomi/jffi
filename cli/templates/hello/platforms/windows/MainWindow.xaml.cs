@@ -13,7 +13,7 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
 using static System.Formats.Asn1.AsnWriter;
-
+using uniffi.{{name}}_core;
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
 
@@ -27,12 +27,20 @@ namespace {{name}}
         public MainWindow()
         {
             InitializeComponent();
-            GreetingText.Text = "Hello, World!";
+                       try
+            {
+                _core = new Core();
+                GreetingText.Text = _core.Greeting();
+            }
+            catch (Exception ex)
+            {
+                GreetingText.Text = ex.ToString();
+            }
         }
 
         private void RefreshButton_Click(object sender, RoutedEventArgs e)
         {
-            GreetingText.Text =  "Hey!";
+            GreetingText.Text = _core.Greeting();
         }
     }
 }
