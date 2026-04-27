@@ -287,8 +287,22 @@ fn run_macos() -> Result<()> {
 fn run_windows() -> Result<()> {
     use std::process::Command;
     
-    println!("  {} Building Windows app...", "→".bright_blue());
-    crate::commands::build::build_project(Some("windows".to_string()), false, false, false)?;
+    // Check if this is first build or rebuild
+    let bin_dir = std::env::current_dir()?.join("platforms/windows/bin");
+    let is_first_build = !bin_dir.exists() || std::fs::read_dir(&bin_dir)?.next().is_none();
+    
+    if is_first_build {
+        // First build: build all architectures and C# project
+        println!("  {} Building Windows app (all architectures)...", "→".bright_blue());
+        crate::commands::build::build_project(Some("windows".to_string()), false, false, false)?;
+    } else {
+        // Rebuild: only build Rust for active architecture (faster)
+        println!("  {} Rebuilding Rust core...", "→".bright_blue());
+        crate::commands::dev::rebuild_windows_rust_only()?;
+        
+        // Copy updated DLL
+        let _ = crate::commands::dev::copy_windows_ffi_dll();
+    }
 
     println!();
     println!("{}", "  ✅ Build complete!".green());
@@ -318,15 +332,24 @@ fn run_windows() -> Result<()> {
     )?;
     
     println!("  {} Running: {}", "→".bright_blue(), exe_path.display());
+    println!();
     
-    // Launch the executable directly
-    let status = Command::new(&exe_path)
+    // Launch the executable directly and capture output
+    let output = Command::new(&exe_path)
         .current_dir(exe_path.parent().unwrap())
-        .status()
+        .output()
         .context("Failed to launch app")?;
     
-    if !status.success() {
-        anyhow::bail!("App exited with error");
+    // Show stdout and stderr
+    if !output.stdout.is_empty() {
+        println!("{}", String::from_utf8_lossy(&output.stdout));
+    }
+    if !output.stderr.is_empty() {
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+    }
+    
+    if !output.status.success() {
+        anyhow::bail!("App exited with error code: {:?}", output.status.code());
     }
     
     println!();

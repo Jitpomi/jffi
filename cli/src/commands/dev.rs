@@ -318,7 +318,7 @@ fn open_visual_studio() -> Result<()> {
     Ok(())
 }
 
-fn rebuild_windows_rust_only() -> Result<()> {
+pub fn rebuild_windows_rust_only() -> Result<()> {
     use std::process::Command;
     
     // Detect which platform is active
@@ -346,7 +346,7 @@ fn rebuild_windows_rust_only() -> Result<()> {
     Ok(())
 }
 
-fn detect_active_windows_platform() -> Option<&'static str> {
+pub fn detect_active_windows_platform() -> Option<&'static str> {
     // Check which platform directory was most recently modified in bin/
     let bin_dir = std::env::current_dir().ok()?.join("platforms/windows/bin");
     if !bin_dir.exists() {
@@ -376,7 +376,7 @@ fn detect_active_windows_platform() -> Option<&'static str> {
     most_recent.map(|(_, target)| target)
 }
 
-fn copy_windows_ffi_dll() -> Result<()> {
+pub fn copy_windows_ffi_dll() -> Result<()> {
     let project_dir = std::env::current_dir()?;
 
     let lib_name = project_dir
