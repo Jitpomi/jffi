@@ -321,7 +321,10 @@ fn open_visual_studio() -> Result<()> {
 pub fn rebuild_windows_rust_only() -> Result<()> {
     use std::process::Command;
     
-    // Detect which platform is active
+    // Detect which platform is active (or use host architecture as default)
+    let bin_dir = std::env::current_dir()?.join("platforms/windows/bin");
+    let is_first_build = !bin_dir.exists();
+    
     let target = detect_active_windows_platform().unwrap_or("x86_64-pc-windows-msvc");
     
     let platform_name = match target {
@@ -331,6 +334,9 @@ pub fn rebuild_windows_rust_only() -> Result<()> {
         _ => "x64",
     };
     
+    if is_first_build {
+        println!("  {} Detected host architecture: {}", "→".bright_blue(), platform_name);
+    }
     println!("  {} Building Rust for {} only...", "→".bright_blue(), platform_name);
     
     // Build only the detected target
@@ -346,11 +352,26 @@ pub fn rebuild_windows_rust_only() -> Result<()> {
     Ok(())
 }
 
+pub fn detect_host_windows_architecture() -> &'static str {
+    // Detect the host CPU architecture using environment variable
+    if let Ok(arch) = std::env::var("PROCESSOR_ARCHITECTURE") {
+        match arch.as_str() {
+            "AMD64" => "x86_64-pc-windows-msvc",
+            "x86" => "i686-pc-windows-msvc",
+            "ARM64" => "aarch64-pc-windows-msvc",
+            _ => "x86_64-pc-windows-msvc", // Default to x64
+        }
+    } else {
+        "x86_64-pc-windows-msvc" // Default to x64 if env var not found
+    }
+}
+
 pub fn detect_active_windows_platform() -> Option<&'static str> {
     // Check which platform directory was most recently modified in bin/
     let bin_dir = std::env::current_dir().ok()?.join("platforms/windows/bin");
     if !bin_dir.exists() {
-        return None;
+        // No builds yet - use host architecture as default
+        return Some(detect_host_windows_architecture());
     }
 
     let mut most_recent: Option<(std::time::SystemTime, &'static str)> = None;
@@ -373,7 +394,8 @@ pub fn detect_active_windows_platform() -> Option<&'static str> {
         }
     }
 
-    most_recent.map(|(_, target)| target)
+    // If no builds found, use host architecture
+    most_recent.map(|(_, target)| target).or(Some(detect_host_windows_architecture()))
 }
 
 pub fn copy_windows_ffi_dll() -> Result<()> {
