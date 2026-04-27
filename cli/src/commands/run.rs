@@ -294,39 +294,71 @@ fn run_windows() -> Result<()> {
     println!("{}", "  ✅ Build complete!".green());
     println!("  {} Launching app...", "→".bright_blue());
     
-    // Find the .csproj or .slnx file
+    // Find the built executable
+    // Build creates: platforms/windows/bin/{platform}/Debug/net8.0-windows10.0.19041.0/win-{platform}/{app}.exe
     let windows_dir = std::env::current_dir()?.join("platforms/windows");
-    let project_file = find_file_with_extension(&windows_dir, "csproj")
-        .or_else(|| find_file_with_extension(&windows_dir, "slnx"))
-        .context("Could not find .csproj or .slnx file")?;
+    let bin_dir = windows_dir.join("bin");
     
-    // Launch using dotnet run (unpackaged mode - faster for development)
-    let status = Command::new("dotnet")
-        .args(&["run", "--project", project_file.to_str().unwrap(), "--no-build"])
-        .current_dir(&windows_dir)
+    // Try to find the executable in any platform directory (prefer x64, then x86, then ARM64)
+    let platforms = ["x64", "x86", "ARM64"];
+    let mut exe_path = None;
+    
+    for platform in &platforms {
+        let search_dir = bin_dir.join(platform).join("Debug");
+        if let Some(found) = find_exe_in_dir(&search_dir) {
+            exe_path = Some(found);
+            println!("  {} Found {} build", "→".bright_blue(), platform);
+            break;
+        }
+    }
+    
+    let exe_path = exe_path.context(
+        "Could not find built executable. Make sure the build succeeded.\n\
+         Expected location: platforms/windows/bin/{x64|x86|ARM64}/Debug/net8.0-windows10.0.19041.0/win-{platform}/*.exe"
+    )?;
+    
+    println!("  {} Running: {}", "→".bright_blue(), exe_path.display());
+    
+    // Launch the executable directly
+    let status = Command::new(&exe_path)
+        .current_dir(exe_path.parent().unwrap())
         .status()
-        .context("Failed to launch app with dotnet run")?;
+        .context("Failed to launch app")?;
     
     if !status.success() {
-        anyhow::bail!("App launch failed");
+        anyhow::bail!("App exited with error");
     }
     
     println!();
-    println!("{}", "  ✅ App launched!".green());
+    println!("{}", "  ✅ App finished!".green());
     
     Ok(())
 }
 
-fn find_file_with_extension(dir: &std::path::Path, ext: &str) -> Option<std::path::PathBuf> {
-    std::fs::read_dir(dir).ok()?
-        .filter_map(|e| e.ok())
-        .find(|e| {
-            e.path().extension()
-                .and_then(|s| s.to_str())
-                .map(|s| s == ext)
-                .unwrap_or(false)
-        })
-        .map(|e| e.path())
+fn find_exe_in_dir(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    if !dir.exists() {
+        return None;
+    }
+    
+    // Recursively search for .exe files
+    for entry in std::fs::read_dir(dir).ok()? {
+        let entry = entry.ok()?;
+        let path = entry.path();
+        
+        if path.is_dir() {
+            if let Some(found) = find_exe_in_dir(&path) {
+                return Some(found);
+            }
+        } else if path.extension().and_then(|s| s.to_str()) == Some("exe") {
+            // Skip known system files
+            let filename = path.file_name()?.to_str()?;
+            if !filename.starts_with("createdump") && !filename.starts_with("Microsoft.") {
+                return Some(path);
+            }
+        }
+    }
+    
+    None
 }
 
 fn run_linux() -> Result<()> {
