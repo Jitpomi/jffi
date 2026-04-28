@@ -80,9 +80,10 @@ pub fn add_platform(platform: &str) -> Result<()> {
     context.insert("greeting".to_string(), "Hello from JFFI".to_string());
     
     // Generate UUIDs for Xcode project files (no hyphens)
+    // macOS template needs up to UUID29
     use rand::Rng;
     let mut rng = rand::thread_rng();
-    for i in 1..=15 {
+    for i in 1..=30 {
         let uuid = format!(
             "{:08X}{:08X}{:08X}{:08X}",
             rng.gen::<u32>(),

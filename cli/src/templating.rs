@@ -271,8 +271,9 @@ impl TemplateEngine {
         context.insert("name_package".to_string(), name.replace("-", ""));
 
         // Generate UUIDs for Xcode project files (no hyphens)
+        // macOS template needs up to UUID29
         let mut rng = rand::thread_rng();
-        for i in 1..=15 {
+        for i in 1..=30 {
             let uuid = format!(
                 "{:08X}{:08X}{:08X}{:08X}",
                 rng.gen::<u32>(),
