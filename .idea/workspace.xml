@@ -11,7 +11,7 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="Auto-detect host architecture for Windows builds - only build all with --deploy&#10;&#10;Major optimization for Windows development workflow:&#10;&#10;Before:&#10;- jffi build --platform windows: builds x86, x64, ARM64 (slow)&#10;- jffi dev: detects active platform from bin/ folder&#10;- First build always builds all 3 architectures&#10;&#10;After:&#10;- jffi build --platform windows: builds only host architecture (3x faster)&#10;- jffi build --platform windows --deploy: builds all architectures&#10;- jffi dev: uses host architecture as default for first build&#10;- jffi run: uses host architecture (fast)&#10;&#10;Implementation:&#10;- Added --deploy flag to build command&#10;- detect_host_windows_architecture() reads PROCESSOR_ARCHITECTURE&#10;- build_windows_host_arch() builds only detected architecture&#10;- build_windows_all_archs() builds all (for deployment)&#10;- build_windows_archs() shared implementation&#10;- detect_active_windows_platform() falls back to host arch&#10;&#10;Benefits:&#10;- Much faster development builds (1 arch instead of 3)&#10;- Correct architecture by default (no more ARM64 on x64 machines)&#10;- Explicit --deploy flag for distribution builds&#10;- Consistent with dev command behavior&#10;- Works on x64, x86, and ARM64 Windows machines&#10;&#10;Example usage:&#10;- Development: jffi build --platform windows (builds x64 only on x64 machine)&#10;- Deployment: jffi build --platform windows --deploy (builds all 3)&#10;- Hot reload: jffi dev --platform windows (auto-detects x64)&#10;- Run: jffi run --platform windows (auto-detects x64)" />
+    <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="Fix jffi add to handle binary files (Android images, etc.)&#10;&#10;Critical fix: jffi add crashed on platforms with binary files&#10;&#10;Problem:&#10;- jffi add android failed with 'stream did not contain valid UTF-8'&#10;- copy_dir_with_render() used fs::read_to_string() on ALL files&#10;- Android templates have binary files (PNG images, etc.)&#10;- Reading binary as UTF-8 text causes error&#10;&#10;Root cause:&#10;- jffi new had proper binary file handling (try text, fallback to copy)&#10;- jffi add was missing this fallback logic&#10;- Only worked for platforms with text-only files (iOS, macOS, Windows)&#10;&#10;Solution:&#10;- Match jffi new's implementation&#10;- Try fs::read_to_string() first (for template rendering)&#10;- On UTF-8 error, fall back to fs::copy() (binary files)&#10;- Binary files copied as-is without template rendering&#10;&#10;Now works for all platforms:&#10;✅ iOS (text files only)&#10;✅ macOS (text files only)  &#10;✅ Windows (text files only)&#10;✅ Android (has PNG images, gradle binaries, etc.)&#10;✅ Web (may have binary assets)&#10;✅ Linux (may have binary assets)" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -37,12 +37,12 @@
     &quot;assignee&quot;: &quot;jermsam&quot;
   }
 }</component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/Jitpomi/jffi.git",
-    "accountId": "f256be56-25a6-43c3-bf6d-9c612ff4e667"
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/Jitpomi/jffi.git&quot;,
+    &quot;accountId&quot;: &quot;f256be56-25a6-43c3-bf6d-9c612ff4e667&quot;
   }
-}]]></component>
+}</component>
   <component name="MacroExpansionManager">
     <option name="directoryName" value="XdLqV3Ye" />
   </component>
@@ -58,37 +58,37 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.MCP Project settings loaded": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.rust.reset.selective.auto.import": "true",
-    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "SHELLCHECK.PATH": "/Users/samsonssali/Library/Application Support/JetBrains/RustRover2025.3/plugins/Shell Script/shellcheck",
-    "codeWithMe.voiceChat.enabledByDefault": "false",
-    "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
-    "git-widget-placeholder": "android-hello-template",
-    "javascript.preferred.runtime.type.id": "node",
-    "junie.onboarding.icon.badge.shown": "true",
-    "last_opened_file_path": "/Users/samsonssali/WebstormProjects/jffi/cli/templates/hello/platforms/windows",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "org.rust.cargo.project.model.PROJECT_DISCOVERY": "true",
-    "org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon": "",
-    "org.rust.first.attach.projects": "true",
-    "settings.editor.selected.configurable": "preferences.pluginManager",
-    "to.speed.mode.migration.done": "true",
-    "two.files.diff.last.used.file": "/Users/samsonssali/MyFirstWinUIApp/MyFirstWinUIApp.csproj",
-    "two.files.diff.last.used.folder": "/Users/samsonssali/MyFirstWinUIApp",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.rust.reset.selective.auto.import&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;SHELLCHECK.PATH&quot;: &quot;/Users/samsonssali/Library/Application Support/JetBrains/RustRover2025.3/plugins/Shell Script/shellcheck&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
+    &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;android-hello-template&quot;,
+    &quot;javascript.preferred.runtime.type.id&quot;: &quot;node&quot;,
+    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/samsonssali/WebstormProjects/jffi/cli/templates/hello/platforms/windows&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;org.rust.cargo.project.model.PROJECT_DISCOVERY&quot;: &quot;true&quot;,
+    &quot;org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon&quot;: &quot;&quot;,
+    &quot;org.rust.first.attach.projects&quot;: &quot;true&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;,
+    &quot;two.files.diff.last.used.file&quot;: &quot;/Users/samsonssali/MyFirstWinUIApp/MyFirstWinUIApp.csproj&quot;,
+    &quot;two.files.diff.last.used.folder&quot;: &quot;/Users/samsonssali/MyFirstWinUIApp&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RecapSpentCounter">
     <option name="endsOfQuotaMs" value="1776114027164" />
     <option name="spentUsd" value="0.0689985" />
@@ -128,6 +128,7 @@
       <workItem from="1776574893845" duration="369000" />
       <workItem from="1776575270900" duration="16172000" />
       <workItem from="1777146781648" duration="45268000" />
+      <workItem from="1777342160544" duration="445000" />
     </task>
     <task id="LOCAL-00001" summary="feat: unify all platform templates to hello pattern&#10; &#10;- Remove todo/counter template options (marked as coming soon)&#10;- Simplify all platform UIs (iOS, macOS, Android, Windows, Linux, Web)&#10;  to use only core.greeting() with refresh button&#10;- Block todo/counter selection from CLI and interactive UI&#10;- All platforms now generate consistent hello world app">
       <option name="closed" value="true" />
@@ -209,7 +210,15 @@
       <option name="project" value="LOCAL" />
       <updated>1777299246192</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="Fix jffi add to handle binary files (Android images, etc.)&#10;&#10;Critical fix: jffi add crashed on platforms with binary files&#10;&#10;Problem:&#10;- jffi add android failed with 'stream did not contain valid UTF-8'&#10;- copy_dir_with_render() used fs::read_to_string() on ALL files&#10;- Android templates have binary files (PNG images, etc.)&#10;- Reading binary as UTF-8 text causes error&#10;&#10;Root cause:&#10;- jffi new had proper binary file handling (try text, fallback to copy)&#10;- jffi add was missing this fallback logic&#10;- Only worked for platforms with text-only files (iOS, macOS, Windows)&#10;&#10;Solution:&#10;- Match jffi new's implementation&#10;- Try fs::read_to_string() first (for template rendering)&#10;- On UTF-8 error, fall back to fs::copy() (binary files)&#10;- Binary files copied as-is without template rendering&#10;&#10;Now works for all platforms:&#10;✅ iOS (text files only)&#10;✅ macOS (text files only)  &#10;✅ Windows (text files only)&#10;✅ Android (has PNG images, gradle binaries, etc.)&#10;✅ Web (may have binary assets)&#10;✅ Linux (may have binary assets)">
+      <option name="closed" value="true" />
+      <created>1777351690077</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1777351690077</updated>
+    </task>
+    <option name="localTasksCounter" value="12" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -232,6 +241,7 @@
     <MESSAGE value="feat: windows launch_windows_app" />
     <MESSAGE value="Auto-detect host architecture for Windows dev hot reload&#10;&#10;Smart default for first build:&#10;&#10;Before:&#10;- First hot reload would pick random architecture&#10;- Or default to x64 regardless of host CPU&#10;- ARM64 users would get wrong build&#10;&#10;After:&#10;- Detects host CPU via PROCESSOR_ARCHITECTURE env var&#10;- Uses host architecture as default for first build&#10;- Subsequent builds use most recently built platform&#10;- Shows 'Detected host architecture: x64' on first build&#10;&#10;Implementation:&#10;- detect_host_windows_architecture() - reads env var&#10;- Maps AMD64→x64, x86→x86, ARM64→ARM64&#10;- detect_active_windows_platform() falls back to host arch&#10;- Works for both jffi dev and jffi run&#10;&#10;Benefits:&#10;- Faster first build (only 1 arch instead of 3)&#10;- Correct architecture by default&#10;- Works on x64, x86, and ARM64 Windows machines&#10;- Consistent with run command behavior&#10;&#10;Example output (first build):&#10;'→ Detected host architecture: x64'&#10;'→ Building Rust for x64 only...'&#10;&#10;Example output (subsequent builds):&#10;'→ Building Rust for x64 only...' (uses last built)" />
     <MESSAGE value="Auto-detect host architecture for Windows builds - only build all with --deploy&#10;&#10;Major optimization for Windows development workflow:&#10;&#10;Before:&#10;- jffi build --platform windows: builds x86, x64, ARM64 (slow)&#10;- jffi dev: detects active platform from bin/ folder&#10;- First build always builds all 3 architectures&#10;&#10;After:&#10;- jffi build --platform windows: builds only host architecture (3x faster)&#10;- jffi build --platform windows --deploy: builds all architectures&#10;- jffi dev: uses host architecture as default for first build&#10;- jffi run: uses host architecture (fast)&#10;&#10;Implementation:&#10;- Added --deploy flag to build command&#10;- detect_host_windows_architecture() reads PROCESSOR_ARCHITECTURE&#10;- build_windows_host_arch() builds only detected architecture&#10;- build_windows_all_archs() builds all (for deployment)&#10;- build_windows_archs() shared implementation&#10;- detect_active_windows_platform() falls back to host arch&#10;&#10;Benefits:&#10;- Much faster development builds (1 arch instead of 3)&#10;- Correct architecture by default (no more ARM64 on x64 machines)&#10;- Explicit --deploy flag for distribution builds&#10;- Consistent with dev command behavior&#10;- Works on x64, x86, and ARM64 Windows machines&#10;&#10;Example usage:&#10;- Development: jffi build --platform windows (builds x64 only on x64 machine)&#10;- Deployment: jffi build --platform windows --deploy (builds all 3)&#10;- Hot reload: jffi dev --platform windows (auto-detects x64)&#10;- Run: jffi run --platform windows (auto-detects x64)" />
-    <option name="LAST_COMMIT_MESSAGE" value="Auto-detect host architecture for Windows builds - only build all with --deploy&#10;&#10;Major optimization for Windows development workflow:&#10;&#10;Before:&#10;- jffi build --platform windows: builds x86, x64, ARM64 (slow)&#10;- jffi dev: detects active platform from bin/ folder&#10;- First build always builds all 3 architectures&#10;&#10;After:&#10;- jffi build --platform windows: builds only host architecture (3x faster)&#10;- jffi build --platform windows --deploy: builds all architectures&#10;- jffi dev: uses host architecture as default for first build&#10;- jffi run: uses host architecture (fast)&#10;&#10;Implementation:&#10;- Added --deploy flag to build command&#10;- detect_host_windows_architecture() reads PROCESSOR_ARCHITECTURE&#10;- build_windows_host_arch() builds only detected architecture&#10;- build_windows_all_archs() builds all (for deployment)&#10;- build_windows_archs() shared implementation&#10;- detect_active_windows_platform() falls back to host arch&#10;&#10;Benefits:&#10;- Much faster development builds (1 arch instead of 3)&#10;- Correct architecture by default (no more ARM64 on x64 machines)&#10;- Explicit --deploy flag for distribution builds&#10;- Consistent with dev command behavior&#10;- Works on x64, x86, and ARM64 Windows machines&#10;&#10;Example usage:&#10;- Development: jffi build --platform windows (builds x64 only on x64 machine)&#10;- Deployment: jffi build --platform windows --deploy (builds all 3)&#10;- Hot reload: jffi dev --platform windows (auto-detects x64)&#10;- Run: jffi run --platform windows (auto-detects x64)" />
+    <MESSAGE value="Fix jffi add to handle binary files (Android images, etc.)&#10;&#10;Critical fix: jffi add crashed on platforms with binary files&#10;&#10;Problem:&#10;- jffi add android failed with 'stream did not contain valid UTF-8'&#10;- copy_dir_with_render() used fs::read_to_string() on ALL files&#10;- Android templates have binary files (PNG images, etc.)&#10;- Reading binary as UTF-8 text causes error&#10;&#10;Root cause:&#10;- jffi new had proper binary file handling (try text, fallback to copy)&#10;- jffi add was missing this fallback logic&#10;- Only worked for platforms with text-only files (iOS, macOS, Windows)&#10;&#10;Solution:&#10;- Match jffi new's implementation&#10;- Try fs::read_to_string() first (for template rendering)&#10;- On UTF-8 error, fall back to fs::copy() (binary files)&#10;- Binary files copied as-is without template rendering&#10;&#10;Now works for all platforms:&#10;✅ iOS (text files only)&#10;✅ macOS (text files only)  &#10;✅ Windows (text files only)&#10;✅ Android (has PNG images, gradle binaries, etc.)&#10;✅ Web (may have binary assets)&#10;✅ Linux (may have binary assets)" />
+    <option name="LAST_COMMIT_MESSAGE" value="Fix jffi add to handle binary files (Android images, etc.)&#10;&#10;Critical fix: jffi add crashed on platforms with binary files&#10;&#10;Problem:&#10;- jffi add android failed with 'stream did not contain valid UTF-8'&#10;- copy_dir_with_render() used fs::read_to_string() on ALL files&#10;- Android templates have binary files (PNG images, etc.)&#10;- Reading binary as UTF-8 text causes error&#10;&#10;Root cause:&#10;- jffi new had proper binary file handling (try text, fallback to copy)&#10;- jffi add was missing this fallback logic&#10;- Only worked for platforms with text-only files (iOS, macOS, Windows)&#10;&#10;Solution:&#10;- Match jffi new's implementation&#10;- Try fs::read_to_string() first (for template rendering)&#10;- On UTF-8 error, fall back to fs::copy() (binary files)&#10;- Binary files copied as-is without template rendering&#10;&#10;Now works for all platforms:&#10;✅ iOS (text files only)&#10;✅ macOS (text files only)  &#10;✅ Windows (text files only)&#10;✅ Android (has PNG images, gradle binaries, etc.)&#10;✅ Web (may have binary assets)&#10;✅ Linux (may have binary assets)" />
   </component>
 </project>
