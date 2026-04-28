@@ -79,6 +79,33 @@ pub fn add_platform(platform: &str) -> Result<()> {
     context.insert("name_package".to_string(), name.replace("-", ""));
     context.insert("greeting".to_string(), "Hello from JFFI".to_string());
     
+    // Generate UUIDs for Xcode project files (no hyphens)
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    for i in 1..=15 {
+        let uuid = format!(
+            "{:08X}{:08X}{:08X}{:08X}",
+            rng.gen::<u32>(),
+            rng.gen::<u32>(),
+            rng.gen::<u32>(),
+            rng.gen::<u32>()
+        );
+        context.insert(format!("UUID{}", i), uuid);
+    }
+    
+    // Generate GUIDs for Windows manifests (with hyphens, RFC 4122 format)
+    for i in 1..=5 {
+        let guid = format!(
+            "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
+            rng.gen::<u32>(),
+            rng.gen::<u16>(),
+            rng.gen::<u16>(),
+            rng.gen::<u16>(),
+            rng.gen::<u64>() & 0xFFFFFFFFFFFF
+        );
+        context.insert(format!("GUID{}", i), guid);
+    }
+    
     // Add template variables from manifest
     for (key, value) in &template.manifest.variables {
         context.insert(key.clone(), value.clone());
