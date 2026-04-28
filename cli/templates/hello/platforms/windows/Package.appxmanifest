@@ -9,11 +9,11 @@
   IgnorableNamespaces="uap rescap systemai">
 
   <Identity
-    Name="afd3520f-8c1c-4856-823d-0d0dc8f47391"
+    Name="{{GUID1}}"
     Publisher="CN=dev"
     Version="1.0.0.0" />
 
-  <mp:PhoneIdentity PhoneProductId="afd3520f-8c1c-4856-823d-0d0dc8f47391" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
+  <mp:PhoneIdentity PhoneProductId="{{GUID1}}" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
     <DisplayName>{{name}}</DisplayName>
