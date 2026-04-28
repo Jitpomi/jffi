@@ -164,9 +164,17 @@ fn copy_dir_with_render(
         if path.is_dir() {
             copy_dir_with_render(&path, &dest_path, context)?;
         } else {
-            let content = fs::read_to_string(&path)?;
-            let rendered = render_template(&content, context);
-            fs::write(&dest_path, rendered)?;
+            // Try to read as text for templating, fall back to binary copy
+            match fs::read_to_string(&path) {
+                Ok(content) => {
+                    let rendered = render_template(&content, context);
+                    fs::write(&dest_path, rendered)?;
+                }
+                Err(_) => {
+                    // Binary file (image, etc.) - copy without modification
+                    fs::copy(&path, &dest_path)?;
+                }
+            }
         }
     }
     
