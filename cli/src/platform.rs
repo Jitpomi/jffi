@@ -77,6 +77,17 @@ impl XcodeProject {
     }
 
     pub fn build(&self, destination: &str) -> Result<()> {
+        // Clean build folder to ensure XCFramework is properly embedded
+        let _ = Command::new("xcodebuild")
+            .args(&[
+                "-project",
+                self.project_path.to_str().unwrap(),
+                "-scheme",
+                &self.scheme,
+                "clean",
+            ])
+            .status();
+        
         let status = Command::new("xcodebuild")
             .args(&[
                 "-project",
