@@ -11,7 +11,11 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="Fix jffi add to handle binary files (Android images, etc.)&#10;&#10;Critical fix: jffi add crashed on platforms with binary files&#10;&#10;Problem:&#10;- jffi add android failed with 'stream did not contain valid UTF-8'&#10;- copy_dir_with_render() used fs::read_to_string() on ALL files&#10;- Android templates have binary files (PNG images, etc.)&#10;- Reading binary as UTF-8 text causes error&#10;&#10;Root cause:&#10;- jffi new had proper binary file handling (try text, fallback to copy)&#10;- jffi add was missing this fallback logic&#10;- Only worked for platforms with text-only files (iOS, macOS, Windows)&#10;&#10;Solution:&#10;- Match jffi new's implementation&#10;- Try fs::read_to_string() first (for template rendering)&#10;- On UTF-8 error, fall back to fs::copy() (binary files)&#10;- Binary files copied as-is without template rendering&#10;&#10;Now works for all platforms:&#10;✅ iOS (text files only)&#10;✅ macOS (text files only)  &#10;✅ Windows (text files only)&#10;✅ Android (has PNG images, gradle binaries, etc.)&#10;✅ Web (may have binary assets)&#10;✅ Linux (may have binary assets)" />
+    <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="Fix jffi add to handle binary files (Android images, etc.)&#10;&#10;Critical fix: jffi add crashed on platforms with binary files&#10;&#10;Problem:&#10;- jffi add android failed with 'stream did not contain valid UTF-8'&#10;- copy_dir_with_render() used fs::read_to_string() on ALL files&#10;- Android templates have binary files (PNG images, etc.)&#10;- Reading binary as UTF-8 text causes error&#10;&#10;Root cause:&#10;- jffi new had proper binary file handling (try text, fallback to copy)&#10;- jffi add was missing this fallback logic&#10;- Only worked for platforms with text-only files (iOS, macOS, Windows)&#10;&#10;Solution:&#10;- Match jffi new's implementation&#10;- Try fs::read_to_string() first (for template rendering)&#10;- On UTF-8 error, fall back to fs::copy() (binary files)&#10;- Binary files copied as-is without template rendering&#10;&#10;Now works for all platforms:&#10;✅ iOS (text files only)&#10;✅ macOS (text files only)  &#10;✅ Windows (text files only)&#10;✅ Android (has PNG images, gradle binaries, etc.)&#10;✅ Web (may have binary assets)&#10;✅ Linux (may have binary assets)">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/commands/build.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/commands/build.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/commands/run.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/commands/run.rs" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -128,7 +132,7 @@
       <workItem from="1776574893845" duration="369000" />
       <workItem from="1776575270900" duration="16172000" />
       <workItem from="1777146781648" duration="45268000" />
-      <workItem from="1777342160544" duration="445000" />
+      <workItem from="1777342160544" duration="17132000" />
     </task>
     <task id="LOCAL-00001" summary="feat: unify all platform templates to hello pattern&#10; &#10;- Remove todo/counter template options (marked as coming soon)&#10;- Simplify all platform UIs (iOS, macOS, Android, Windows, Linux, Web)&#10;  to use only core.greeting() with refresh button&#10;- Block todo/counter selection from CLI and interactive UI&#10;- All platforms now generate consistent hello world app">
       <option name="closed" value="true" />

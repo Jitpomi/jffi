@@ -249,7 +249,25 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
     let sim_x86_lib = format!("target/x86_64-apple-ios/{}/lib{}.a", profile, lib_name);
     let sim_universal_lib = format!("target/ios-simulator-universal/lib{}.a", lib_name);
     
-    std::fs::create_dir_all("target/ios-simulator-universal")?;
+    // Ensure clean directory for lipo output (prevents "can't move temporary file" errors)
+    let universal_dir = std::path::Path::new("target/ios-simulator-universal");
+    
+    // Force cleanup with retry - handles locked files from previous builds
+    for attempt in 0..3 {
+        if universal_dir.exists() {
+            if let Err(e) = std::fs::remove_dir_all(universal_dir) {
+                if attempt < 2 {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    continue;
+                } else {
+                    eprintln!("  {} Warning: Could not clean ios-simulator-universal directory: {}", "⚠".yellow(), e);
+                }
+            }
+        }
+        break;
+    }
+    
+    std::fs::create_dir_all(universal_dir)?;
     
     let lipo_status = Command::new("lipo")
         .args(&[

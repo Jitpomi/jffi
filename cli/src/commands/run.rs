@@ -87,12 +87,27 @@ fn run_ios() -> Result<()> {
     // Give simulator time to boot
     std::thread::sleep(std::time::Duration::from_secs(3));
     
-    sim.install_app(&app_path)?;
-    sim.open_app()?; // Bring to foreground
-    
-    // Get bundle ID and launch
+    // Get bundle ID
     let bundle_id = format!("com.example.{}", app_name.replace("-", ""));
-    sim.launch_app(&bundle_id)?;
+    
+    // Install and launch with retry logic
+    for attempt in 0..3 {
+        sim.install_app(&app_path)?;
+        sim.open_app()?; // Bring to foreground
+        
+        match sim.launch_app(&bundle_id) {
+            Ok(_) => break,
+            Err(e) if attempt < 2 => {
+                eprintln!("  ⚠ Launch failed (attempt {}/3): {}", attempt + 1, e);
+                eprintln!("  → Cleaning up and retrying...");
+                let _ = Command::new("xcrun")
+                    .args(&["simctl", "uninstall", "booted", &bundle_id])
+                    .status();
+                std::thread::sleep(std::time::Duration::from_secs(2));
+            }
+            Err(e) => return Err(e),
+        }
+    }
     
     println!();
     println!("{}", "  ✅ App launched in simulator!".green());
