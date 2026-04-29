@@ -87,8 +87,8 @@ fn run_ios() -> Result<()> {
     // Give simulator time to boot
     std::thread::sleep(std::time::Duration::from_secs(3));
     
-    // Get bundle ID
-    let bundle_id = format!("com.example.{}", app_name.replace("-", ""));
+    // Get bundle ID (lowercase to match Info.plist)
+    let bundle_id = format!("com.example.{}", app_name.replace("-", "").to_lowercase());
     
     // Install and launch with retry logic
     for attempt in 0..3 {
