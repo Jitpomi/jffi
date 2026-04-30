@@ -21,7 +21,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    HelloApp()
+                    {{name_pascal}}App()
                 }
             }
         }
@@ -29,7 +29,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun HelloApp(initialGreeting: String = "Loading...") {
+fun {{name_pascal}}App(initialGreeting: String = "Loading...") {
     var greeting by remember { mutableStateOf(initialGreeting) }
     var core: Core? by remember { mutableStateOf(null) }
     
@@ -64,11 +64,11 @@ fun HelloApp(initialGreeting: String = "Loading...") {
 }
 
 @Preview(
-    name = "Hello Screen",
+    name = "{{name_pascal}} Screen",
     showBackground = true,
     backgroundColor = 0xFFF5F5F5
 )
 @Composable
-fun HelloAppPreview() {
-    HelloApp(initialGreeting = "{{greeting}}")
+fun {{name_pascal}}AppPreview() {
+    {{name_pascal}}App(initialGreeting = "{{greeting}}")
 }
