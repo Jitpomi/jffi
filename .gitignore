@@ -12,3 +12,4 @@ ios-app/DerivedData/
 
 # Test directory with build artifacts
 test/
+t/
