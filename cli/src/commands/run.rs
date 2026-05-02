@@ -441,14 +441,18 @@ fn run_linux() -> Result<()> {
     // Launch the Python app
     println!("  {} Launching app...", "→".bright_blue());
     
-    let status = Command::new("python3")
+    let mut child = Command::new("python3")
         .arg("main.py")
         .current_dir("platforms/linux")
-        .status()
+        .env("GSK_RENDERER", "cairo")
+        .env("GDK_DEBUG", "gl-disable")
+        .spawn()
         .context("Failed to launch app")?;
     
+    let status = child.wait().context("App process error")?;
+    
     if !status.success() {
-        anyhow::bail!("App failed to run");
+        anyhow::bail!("App failed to run. If using remote X11, ensure XQuartz is running and SSH -X is enabled.");
     }
     
     println!("{}", "  ✅ App launched!".green());

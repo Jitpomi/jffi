@@ -488,6 +488,8 @@ fn launch_linux_app_background() -> Result<()> {
     Command::new("python3")
         .arg("main.py")
         .current_dir("platforms/linux")
+        .env("GSK_RENDERER", "cairo")
+        .env("GDK_DEBUG", "gl-disable")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
