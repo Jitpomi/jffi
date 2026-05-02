@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml.Shapes;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
+using uniffi.{{name_snake}}_core;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
@@ -19,7 +19,7 @@ using Windows.Foundation.Collections;
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
 
-namespace {{name}}
+namespace {{name_pascal}}
 {
     /// <summary>
     /// Provides application-specific behavior to supplement the default Application class.

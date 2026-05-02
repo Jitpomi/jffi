@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Window
-    x:Class="{{name}}.MainWindow"
+    x:Class="{{name_pascal}}.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:{{name}}"
+    xmlns:local="using:{{name_pascal}}"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Title="{{name}}">
+    Title="{{name_pascal}}">
 
     <Window.SystemBackdrop>
         <MicaBackdrop />
@@ -19,15 +19,10 @@
         VerticalAlignment="Center"
         HorizontalAlignment="Center"
         >
-            <TextBlock
-        x:Name="GreetingText"
-        FontSize="24"
-        FontWeight="SemiBold"
-        TextAlignment="Center"/>
-            <Button
-            x:Name="RefreshButton"
-            Content="Refresh"
-            Click="RefreshButton_Click"/>
+            <StackPanel>
+                <TextBlock Text="{x:Bind ViewModel.Greeting, Mode=OneWay}" />
+                <Button Content="Refresh" Command="{x:Bind ViewModel.RefreshGreetingCommand}" />
+            </StackPanel>
         </StackPanel>
 
     </Grid>
