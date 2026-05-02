@@ -868,8 +868,33 @@ fn find_msbuild() -> Option<String> {
     }
 }
 
-// Note: uniffi-bindgen is now run via 'cargo run --bin uniffi-bindgen' from the ffi directory
-// This uses the project's own uniffi-bindgen binary defined in core/Cargo.toml
+// Note: uniffi-bindgen is installed as a standalone cargo tool for binding generation.
+// This avoids compiling uniffi_bindgen as a library dependency, which can OOM on small VMs.
+
+fn ensure_uniffi_bindgen() -> Result<()> {
+    println!("  {} Checking uniffi-bindgen...", "→".bright_blue());
+
+    let check = Command::new("uniffi-bindgen")
+        .arg("--version")
+        .output();
+
+    if check.is_err() || !check.unwrap().status.success() {
+        println!("    Installing uniffi-bindgen...");
+        let status = Command::new("cargo")
+            .args(&["install", "uniffi_bindgen", "--version", "0.31.1"])
+            .status()
+            .context("Failed to install uniffi-bindgen")?;
+
+        if !status.success() {
+            anyhow::bail!("Failed to install uniffi-bindgen");
+        }
+        println!("    {} uniffi-bindgen installed successfully", "✓".green());
+    } else {
+        println!("    {} uniffi-bindgen is already installed", "✓".green());
+    }
+
+    Ok(())
+}
 
 fn ensure_uniffi_bindgen_cs() -> Result<()> {
     println!("  {} Checking uniffi-bindgen-cs...", "→".bright_blue());
@@ -929,27 +954,41 @@ fn ensure_uniffi_bindgen_cs() -> Result<()> {
 }
 
 fn build_linux(release: bool) -> Result<()> {
+    println!("{} Building Linux project...", "→".bright_blue());
+
     let profile = if release { "release" } else { "debug" };
-    
-    println!("  {} Building Rust library for Linux...", "→".bright_blue());
-    
+
+    // Check for Python dependencies
+    println!("  {} Checking dependencies...", "→".bright_blue());
+    let python_check = Command::new("python3")
+        .args(&["-c", "import gi; gi.require_version('Gtk', '4.0')"])
+        .output();
+
+    if python_check.is_err() || !python_check.unwrap().status.success() {
+        println!("{}", "  ⚠️  Python GTK4 dependencies not found.".yellow());
+        println!("  Run setup.sh to install: sudo ./platforms/linux/setup.sh");
+    }
+
+    // Build Rust library for Linux
+    println!("  {} Building Rust library...", "→".bright_blue());
+
     let mut args = vec!["build"];
     if release {
         args.push("--release");
     }
     args.extend(&["--manifest-path", "core/Cargo.toml"]);
-    
+
     let status = Command::new("cargo")
         .args(&args)
         .status()
         .context("Failed to build Rust library")?;
-    
+
     if !status.success() {
         anyhow::bail!("Rust build failed");
     }
-    
+
     println!("  {} Generating Python bindings...", "→".bright_blue());
-    
+
     // Find the library file
     let lib_dir = format!("target/{}", profile);
     let lib_path = std::fs::read_dir(&lib_dir)
@@ -962,19 +1001,10 @@ fn build_linux(release: bool) -> Result<()> {
         })
         .map(|e| e.path())
         .context("Could not find FFI library")?;
-    
-    // Use cargo run with uniffi/cli feature from the ffi crate
-    let status = Command::new("cargo")
-        .args(&[
-            "run",
-            "--manifest-path",
-            "core/Cargo.toml",
-            "--features",
-            "uniffi/cli",
-            "--bin",
-            "uniffi-bindgen",
-            "--",
-        ])
+
+    ensure_uniffi_bindgen()?;
+
+    let status = Command::new("uniffi-bindgen")
         .args(&[
             "generate",
             "--library",
@@ -986,11 +1016,11 @@ fn build_linux(release: bool) -> Result<()> {
         ])
         .status()
         .context("Failed to generate Python bindings")?;
-    
+
     if !status.success() {
         anyhow::bail!("Binding generation failed");
     }
-    
+
     println!("{}", "  ✅ Linux build complete".green());
     Ok(())
 }

@@ -352,10 +352,6 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "staticlib", "lib"]
 
-[[bin]]
-name = "uniffi-bindgen"
-path = "src/bin/uniffi-bindgen.rs"
-
 [dependencies]
 uniffi = {{ version = "{}", features = ["cli", "wasm-unstable-single-threaded"] }}
 "#,
@@ -363,14 +359,6 @@ uniffi = {{ version = "{}", features = ["cli", "wasm-unstable-single-threaded"] 
             uniffi_version
         );
         fs::write(core_dir.join("Cargo.toml"), cargo_toml)?;
-
-        // Generate uniffi-bindgen binary for binding generation
-        fs::create_dir_all(core_dir.join("src/bin"))?;
-        let bindgen_bin = r#"fn main() {
-    uniffi::uniffi_bindgen_main()
-}
-"#;
-        fs::write(core_dir.join("src/bin/uniffi-bindgen.rs"), bindgen_bin)?;
 
         // Generate uniffi.toml with C# binding configuration
         let uniffi_toml = format!(
