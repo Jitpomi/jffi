@@ -365,8 +365,7 @@ Early-stage framework. Contributions welcome!
 - Hot reload for Windows (file watcher workflow)
 
 ## 📄 License
-
-MIT
+GPL-3.0
 
 ##  Acknowledgments
 
