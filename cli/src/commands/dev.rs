@@ -524,6 +524,7 @@ fn launch_linux_app_background() -> Result<()> {
         .env("GSK_RENDERER", "cairo")
         .env("GDK_DEBUG", "gl-disable")
         .env("NO_AT_BRIDGE", "1")
+        .env("GTK_A11Y", "none")
         .env("LC_ALL", "C.UTF-8")
         .stdout(Stdio::null())
         .spawn()
