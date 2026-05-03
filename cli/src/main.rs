@@ -81,6 +81,12 @@ enum Commands {
         platform: String,
     },
     
+    /// Remove a platform from existing project
+    Remove {
+        /// Platform to remove
+        platform: String,
+    },
+    
 }
 
 fn main() -> anyhow::Result<()> {
@@ -101,6 +107,9 @@ fn main() -> anyhow::Result<()> {
         }
         Commands::Add { platform } => {
             commands::add::add_platform(&platform)?;
+        }
+        Commands::Remove { platform } => {
+            commands::remove::remove_platform(&platform)?;
         }
     }
     
