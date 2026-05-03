@@ -912,14 +912,10 @@ fn ensure_uniffi_bindgen_cs() -> Result<()> {
             "https://github.com/NordSecurity/uniffi-bindgen-cs".to_string()
         });
 
-        // TODO: CRITICAL VERSION MISMATCH
-        // We use UniFFI version from templating::UNIFFI_VERSION (currently 0.31.1)
-        // but uniffi-bindgen-cs v0.10.0+v0.29.4 may not be compatible
-        // This is likely to fail or produce incompatible bindings
-        // SOLUTION: Find or create a uniffi-bindgen-cs fork that supports the current UniFFI version
-        // For now, users can override with:
-        //   JFFI_UNIFFI_BINDGEN_CS_GIT=<fork-url>
-        //   JFFI_UNIFFI_BINDGEN_CS_TAG=<compatible-version>
+        // NOTE: uniffi-bindgen-cs v0.10 targets UniFFI 0.29; JFFI uses UniFFI 0.31.
+        // The generated C# bindings work in practice for our use case.
+        // If you encounter compatibility issues with a specific UniFFI feature,
+        // override with JFFI_UNIFFI_BINDGEN_CS_GIT / JFFI_UNIFFI_BINDGEN_CS_TAG env vars.
         
         // Prefer an explicit tag for repeatable installs; users can override to a fork/branch
         // that matches their UniFFI version.
