@@ -881,7 +881,7 @@ fn ensure_uniffi_bindgen() -> Result<()> {
     if check.is_err() || !check.unwrap().status.success() {
         println!("    Installing uniffi-bindgen...");
         let status = Command::new("cargo")
-            .args(&["install", "uniffi-bindgen", "--version", "0.31.1"])
+            .args(&["install", "uniffi", "--features", "cli", "--bin", "uniffi-bindgen", "--version", "0.31.1"])
             .status()
             .context("Failed to install uniffi-bindgen")?;
 
