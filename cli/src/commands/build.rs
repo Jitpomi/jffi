@@ -192,6 +192,7 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
         
         let status = Command::new("cargo")
             .env("CARGO_TARGET_DIR", "target")
+            .env("IPHONEOS_DEPLOYMENT_TARGET", "16.0")
             .args(&args)
             .status()
             .context(format!("Failed to build Rust library for {}", target))?;
@@ -465,6 +466,7 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
         
         let status = Command::new("cargo")
             .env("CARGO_TARGET_DIR", "target")
+            .env("MACOSX_DEPLOYMENT_TARGET", "13.0")
             .args(&args)
             .status()
             .context(format!("Failed to build Rust library for {}", target))?;

@@ -354,6 +354,17 @@ gtk_version = "4.0"
 target = "es2020"
 "#, name, platform_list, name.replace("-", ""), name.replace("-", ""));
     fs::write(dir.join("jffi.toml"), config)?;
+    
+    // Create .cargo/config.toml for iOS deployment target (needed by crates like blake3/ring)
+    if platforms.contains(&"ios") || platforms.contains(&"macos") {
+        fs::create_dir_all(dir.join(".cargo"))?;
+        let cargo_config = r#"[env]
+IPHONEOS_DEPLOYMENT_TARGET = "16.0"
+MACOSX_DEPLOYMENT_TARGET = "13.0"
+"#;
+        fs::write(dir.join(".cargo").join("config.toml"), cargo_config)?;
+    }
+    
     Ok(())
 }
 

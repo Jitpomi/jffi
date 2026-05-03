@@ -141,6 +141,20 @@ pub fn add_platform(platform: &str) -> Result<()> {
         println!("  {} ffi-web/", "✓".green());
     }
     
+    // Create .cargo/config.toml for iOS/macOS deployment targets
+    if platform == "ios" || platform == "macos" {
+        let project_dir = PathBuf::from(".");
+        if !project_dir.join(".cargo").join("config.toml").exists() {
+            fs::create_dir_all(project_dir.join(".cargo"))?;
+            let cargo_config = r#"[env]
+IPHONEOS_DEPLOYMENT_TARGET = "16.0"
+MACOSX_DEPLOYMENT_TARGET = "13.0"
+"#;
+            fs::write(project_dir.join(".cargo").join("config.toml"), cargo_config)?;
+            println!("  {} .cargo/config.toml", "✓".green());
+        }
+    }
+    
     // Add platform to config
     if !config.platforms.enabled.contains(&platform.to_string()) {
         config.platforms.enabled.push(platform.to_string());
