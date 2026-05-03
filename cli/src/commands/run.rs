@@ -476,6 +476,7 @@ fn run_linux() -> Result<()> {
         .current_dir("platforms/linux")
         .env("GSK_RENDERER", "cairo")
         .env("GDK_DEBUG", "gl-disable")
+        .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1000/bus")
         .spawn()
         .context("Failed to launch app")?;
 

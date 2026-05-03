@@ -481,7 +481,11 @@ fn launch_linux_app_background() -> Result<()> {
         .map(|e| e.path())
         .context("Could not find FFI library")?;
     
-    std::fs::copy(&lib_path, "platforms/linux/libcore.so")
+    let lib_filename = lib_path.file_name()
+        .context("Could not get library filename")?;
+    let dest_path = format!("platforms/linux/{}", lib_filename.to_string_lossy());
+    
+    std::fs::copy(&lib_path, &dest_path)
         .context("Failed to copy library to platforms/linux")?;
     
     // Check display environment for headless fallback
@@ -519,6 +523,7 @@ fn launch_linux_app_background() -> Result<()> {
     cmd.current_dir("platforms/linux")
         .env("GSK_RENDERER", "cairo")
         .env("GDK_DEBUG", "gl-disable")
+        .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1000/bus")
         .stdout(Stdio::null())
         .spawn()
         .context("Failed to launch app")?;
