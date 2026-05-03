@@ -5,6 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::templating::TemplateEngine;
+use crate::commands::new::{create_ffi_web_crate, create_workspace_cargo_toml};
 
 /// Find templates directory (same logic as new.rs)
 fn find_templates_dir() -> Result<PathBuf> {
@@ -126,6 +127,19 @@ pub fn add_platform(platform: &str) -> Result<()> {
     fs::create_dir_all(&platform_dest_dir)?;
     
     copy_dir_with_render(&platform_template_dir, &platform_dest_dir, &context)?;
+    
+    // Create web-specific infrastructure if adding web platform
+    if platform == "web" {
+        let project_dir = PathBuf::from(".");
+        let all_platforms: Vec<&str> = config.platforms.enabled.iter().map(|s| s.as_str()).collect();
+        let mut updated_platforms = all_platforms.clone();
+        if !updated_platforms.contains(&"web") {
+            updated_platforms.push("web");
+        }
+        create_ffi_web_crate(&project_dir, &name)?;
+        create_workspace_cargo_toml(&project_dir, &updated_platforms)?;
+        println!("  {} ffi-web/", "✓".green());
+    }
     
     // Add platform to config
     if !config.platforms.enabled.contains(&platform.to_string()) {

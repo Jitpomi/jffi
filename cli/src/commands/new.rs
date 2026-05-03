@@ -253,7 +253,7 @@ fn create_project_structure(
     Ok(())
 }
 
-fn create_workspace_cargo_toml(dir: &PathBuf, platforms: &[&str]) -> Result<()> {
+pub fn create_workspace_cargo_toml(dir: &PathBuf, platforms: &[&str]) -> Result<()> {
     let members = if platforms.contains(&"web") {
         r#"["core", "ffi-web"]"#
     } else {
@@ -268,7 +268,7 @@ resolver = "2"
     Ok(())
 }
 
-fn create_ffi_web_crate(dir: &PathBuf, name: &str) -> Result<()> {
+pub fn create_ffi_web_crate(dir: &PathBuf, name: &str) -> Result<()> {
     let ffi_web_dir = dir.join("ffi-web");
     fs::create_dir_all(ffi_web_dir.join("src"))?;
     
