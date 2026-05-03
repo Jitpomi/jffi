@@ -1,6 +1,6 @@
 [package]
 name = "jffi"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["JFFI Contributors"]
 description = "Cross-platform framework for building native apps with Rust business logic and platform-native UIs"
