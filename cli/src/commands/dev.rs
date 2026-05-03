@@ -484,20 +484,48 @@ fn launch_linux_app_background() -> Result<()> {
     std::fs::copy(&lib_path, "platforms/linux/libcore.so")
         .context("Failed to copy library to platforms/linux")?;
     
+    // Check display environment for headless fallback
+    let display_set = std::env::var("DISPLAY").is_ok()
+        || std::env::var("WAYLAND_DISPLAY").is_ok();
+    let has_xvfb = Command::new("which")
+        .arg("xvfb-run")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    if !display_set && !has_xvfb {
+        anyhow::bail!(
+            "No display server found. Either:\n\
+             • SSH with X11 forwarding: ssh -X <host>\n\
+             • Install xvfb: sudo apt install xvfb"
+        );
+    }
+
     // Launch Python app in background
-    Command::new("python3")
-        .arg("main.py")
-        .current_dir("platforms/linux")
+    let mut cmd = if !display_set {
+        println!(
+            "  {} No display detected, using xvfb-run for headless mode...",
+            "→".bright_blue()
+        );
+        let mut c = Command::new("xvfb-run");
+        c.args(&["--auto-servernum", "--server-args=-screen 0 1024x768x24", "python3", "main.py"]);
+        c
+    } else {
+        let mut c = Command::new("python3");
+        c.arg("main.py");
+        c
+    };
+
+    cmd.current_dir("platforms/linux")
         .env("GSK_RENDERER", "cairo")
         .env("GDK_DEBUG", "gl-disable")
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
         .spawn()
         .context("Failed to launch app")?;
-    
+
     // Give it a moment to start
     std::thread::sleep(Duration::from_millis(500));
-    
+
     Ok(())
 }
 
