@@ -166,7 +166,7 @@ Rust **can** hold state, but only for:
 | Android (Compose) | `ViewModel` + `StateFlow` |
 | iOS (SwiftUI) | `ObservableObject` / `@State` |
 | macOS (SwiftUI) | `ObservableObject` / `@State` |
-| Web (React) | `useState` / `useReducer` |
+| Web (Vanilla JS) | Module-level state / event listeners |
 | Windows (WinUI) | `ObservableObject` / `INotifyPropertyChanged` |
 | Linux (GTK) | `gio::Property` / manual signals |
 
@@ -174,7 +174,7 @@ Rust **can** hold state, but only for:
 
 If your JFFI app feels sluggish or has race conditions:
 
-1. [ ] Is UI state in Kotlin/Swift/React, or Rust?
+1. [ ] Is UI state in Kotlin/Swift/JavaScript/C#/Python, or Rust?
 2. [ ] Does a button click trigger more than 1 FFI call?
 3. [ ] Are you calling Rust getters from `@Composable` / `body` / `render()`?
 4. [ ] Do you have `Mutex<T>` where `T` is a UI concept?

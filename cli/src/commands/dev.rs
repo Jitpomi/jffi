@@ -12,7 +12,6 @@ pub fn watch_project(platform: &str) -> Result<()> {
     println!("{}", format!("👀 Rust watch mode for {}...", platform).bright_green().bold());
     println!();
     println!("   This watches your Rust code (core/) and rebuilds on changes.");
-    println!("   For Swift changes, use Xcode directly - it has native hot reload.");
     println!();
     
     // Initial build (full build to ensure Xcode compatibility)
