@@ -75,29 +75,17 @@ my-app/
 
 ##  Development Workflow
 
-### 1. Write Business Logic (Once)
+### 1. Write Business Logic + Expose via UniFFI
 
 `core/src/lib.rs`:
 
 ```rust
-pub struct App {
-    items: Vec<Item>,
-}
+use uniffi;
 
-impl App {
-    pub fn add_item(&mut self, id: String, title: String) {
-        self.items.push(Item { id, title, completed: false });
-    }
-}
-```
-
-### 2. Expose via UniFFI (In Core)
-
-Your `core/src/lib.rs` uses UniFFI macros directly:
-
-```rust
 #[derive(uniffi::Object)]
-pub struct Core {}
+pub struct Core {
+    // Pure computation, no UI state
+}
 
 #[uniffi::export]
 impl Core {
@@ -109,12 +97,16 @@ impl Core {
     pub fn greeting(&self) -> String {
         "Hello from JFFI".to_string()
     }
+
+    pub fn process_data(&self, input: String) -> String {
+        format!("Processed: {}", input)
+    }
 }
 
 uniffi::setup_scaffolding!();
 ```
 
-### 3. Build & Run
+### 2. Build & Run
 
 **For iOS:**
 ```bash
@@ -154,7 +146,7 @@ This automatically:
 - **Web**: Compiles Rust to WASM, generates JavaScript bindings, installs npm dependencies, starts Vite dev server
 - **Windows**: Compiles Rust, generates C# bindings with uniffi-bindgen-cs, builds with MSBuild/dotnet, launches WinUI 3 app
 
-### 4. Use in Native UI
+### 3. Use in Native UI
 
 `platforms/ios/ContentView.swift`:
 
