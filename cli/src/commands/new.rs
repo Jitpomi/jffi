@@ -411,9 +411,21 @@ jffi dev --platform {}
 
 ## Project Structure
 
-- `core/` - Business logic (pure Rust)
-- `ffi-web/` - WASM FFI layer (for web platform)
+- `core/` - Business logic + UniFFI exports
+- `ffi-web/` - WASM FFI layer (present when web platform is enabled)
 - `platforms/` - Platform-specific UIs
+- `Cargo.toml` - Workspace manifest
+- `jffi.toml` - Framework configuration
+
+## Add or Remove Platforms
+
+```bash
+# Add another platform to this project
+jffi add <platform>
+
+# Remove a platform
+jffi remove <platform>
+```
 
 ## Development
 
@@ -425,7 +437,7 @@ Edit your business logic in `core/src/lib.rs`. The FFI bindings will be automati
 2. Expose via `#[uniffi::export]`
 3. Rebuild: `jffi build --platform <platform>`
 4. Update UI in `platforms/<platform>/`
-"#, name, 
+"#, name,
     platforms.iter().map(|p| format!("- {}", p)).collect::<Vec<_>>().join("\n"),
     platforms[0], platforms[0], platforms[0]);
     

@@ -33,12 +33,10 @@ jffi run --platform macos    # macOS app
 jffi run --platform android  # Android Emulator
 jffi run --platform linux    # Linux GTK app
 jffi run --platform windows  # Windows app
-# jffi run --platform web    # Web browser (🚧 In Progress)
+jffi run --platform web      # Web browser
 ```
 
 That's it! The app builds, compiles Rust, generates platform bindings, and launches automatically.
-
-**Note:** Web platform support is currently in progress. The frontend templates are created but the `ffi-web` integration is incomplete.
 
 ## 📱 Supported Platforms
 
@@ -48,29 +46,31 @@ That's it! The app builds, compiles Rust, generates platform bindings, and launc
 | macOS | ✅ Ready | SwiftUI | Swift |
 | Android | ✅ Ready | Jetpack Compose | Kotlin |
 | Linux | ✅ Ready | GTK 4 + Libadwaita | Python |
-| Web | 🚧 In Progress | Vanilla JS + WASM | JavaScript |
+| Web | ✅ Ready | Vanilla JS + WASM | JavaScript |
 | Windows | ✅ Ready | WinUI 3 | C# |
 
 ## 🏗️ Project Structure
 
 ```
 my-app/
-├── core/                    # Pure Rust business logic
-│   ├── src/lib.rs          # Your app logic here
+├── core/                    # Rust business logic + UniFFI exports
+│   ├── src/lib.rs
 │   └── Cargo.toml
 │
-├── ffi/                     # FFI layer (auto-scaffolded)
-│   ├── src/lib.rs          # UniFFI exports
-│   └── Cargo.toml
+├── ffi-web/                 # WASM FFI wrapper (present when web is enabled)
+│   └── src/lib.rs
 │
 ├── platforms/
-│   └── ios/                # iOS SwiftUI app
-│       ├── *App.swift
-│       ├── AppState.swift
-│       ├── ContentView.swift
-│       └── *.xcodeproj     # Auto-generated
+│   ├── ios/                 # iOS SwiftUI app (auto-generated Xcode project)
+│   ├── android/             # Android Jetpack Compose app
+│   ├── macos/               # macOS SwiftUI app
+│   ├── linux/               # GTK 4 Python app
+│   ├── windows/             # WinUI 3 C# app
+│   └── web/                 # Vanilla JS + Vite frontend
 │
-└── jffi.toml               # Framework configuration
+├── jffi.toml                # Framework configuration
+├── Cargo.toml               # Workspace manifest
+└── Makefile                 # Convenience commands
 ```
 
 ##  Development Workflow
@@ -91,24 +91,27 @@ impl App {
 }
 ```
 
-### 2. Expose via FFI (Auto-scaffolded)
+### 2. Expose via UniFFI (In Core)
 
-`ffi/src/lib.rs`:
+Your `core/src/lib.rs` uses UniFFI macros directly:
 
 ```rust
 #[derive(uniffi::Object)]
-pub struct FfiApp {
-    app: Mutex<App>,
-}
+pub struct Core {}
 
 #[uniffi::export]
-impl FfiApp {
-    pub fn add_item(&self, id: String, title: String) -> Vec<ItemViewModel> {
-        let mut app = self.app.lock().unwrap();
-        app.add_item(id, title);
-        app.get_items().iter().map(ItemViewModel::from).collect()
+impl Core {
+    #[uniffi::constructor]
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub fn greeting(&self) -> String {
+        "Hello from JFFI".to_string()
     }
 }
+
+uniffi::setup_scaffolding!();
 ```
 
 ### 3. Build & Run
@@ -156,12 +159,12 @@ This automatically:
 `platforms/ios/ContentView.swift`:
 
 ```swift
-Button("Add Item") {
-    appState.addItem(id: UUID().uuidString, title: newItem)
+Button("Refresh") {
+    greeting = core.greeting()
 }
 ```
 
-The generated bindings make Rust functions available in Swift!
+The generated bindings make Rust functions available natively in Swift, Kotlin, C#, Python, and JavaScript.
 
 ## ⚡ Hot Reload
 
@@ -257,6 +260,9 @@ jffi dev --platform <platform>
 # Add platform to existing project
 jffi add <platform>
 
+# Remove platform from existing project
+jffi remove <platform>
+
 # List available platforms
 jffi platforms
 ```
@@ -344,7 +350,7 @@ cargo run --package jffi -- --help
 - [x] macOS support with SwiftUI
 - [x] Android support with Jetpack Compose
 - [x] Linux support with GTK 4 + Python
-- [ ] Web support with Vanilla JS + WASM (frontend templates created, ffi-web integration incomplete)
+- [x] Web support with Vanilla JS + WASM
 - [x] Windows support with WinUI 3 + C#
 - [x] Automatic Xcode project generation
 - [x] Automatic Android project generation
@@ -352,7 +358,7 @@ cargo run --package jffi -- --help
 - [x] Hot reload for iOS (Xcode-native workflow)
 - [x] Hot reload for Android (Android Studio-native workflow)
 - [x] Hot reload for Linux (auto-restart workflow)
-- [ ] Hot reload for Web (Vite hot reload - pending ffi-web completion)
+- [x] Hot reload for Web (Vite hot reload)
 - [x] Automatic emulator/simulator management
 - [x] Auto-install build dependencies (targets, NDK, GTK, WASM, wasm-bindgen, uniffi-bindgen-cs, etc.)
 
@@ -361,7 +367,6 @@ cargo run --package jffi -- --help
 Early-stage framework. Contributions welcome!
 
 **High priority:**
-- **Complete web platform support** (create ffi-web crate with wasm-bindgen integration)
 - Additional platform features and improvements
 - State persistence (SQLite/local storage)
 - Advanced UI components and patterns
