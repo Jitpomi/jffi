@@ -353,7 +353,7 @@ edition = "2021"
 crate-type = ["cdylib", "staticlib", "lib"]
 
 [dependencies]
-uniffi = {{ version = "{}", features = ["cli", "wasm-unstable-single-threaded"] }}
+uniffi = {{ version = "{}", features = ["wasm-unstable-single-threaded"] }}
 "#,
             context.get("name_snake").unwrap_or(&"app".to_string()),
             uniffi_version
