@@ -523,7 +523,8 @@ fn launch_linux_app_background() -> Result<()> {
     cmd.current_dir("platforms/linux")
         .env("GSK_RENDERER", "cairo")
         .env("GDK_DEBUG", "gl-disable")
-        .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1000/bus")
+        .env("NO_AT_BRIDGE", "1")
+        .env("LC_ALL", "C.UTF-8")
         .stdout(Stdio::null())
         .spawn()
         .context("Failed to launch app")?;
