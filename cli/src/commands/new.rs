@@ -260,10 +260,20 @@ pub fn create_workspace_cargo_toml(dir: &PathBuf, platforms: &[&str]) -> Result<
         r#"["core"]"#
     };
     
+    let profile = if platforms.contains(&"web") {
+        r#"
+
+[profile.release]
+opt-level = "z"
+lto = true
+"#
+    } else {
+        ""
+    };
+    
     let cargo_toml = format!(r#"[workspace]
 members = {}
-resolver = "2"
-"#, members);
+resolver = "2"{}"#, members, profile);
     fs::write(dir.join("Cargo.toml"), cargo_toml)?;
     Ok(())
 }
@@ -272,6 +282,7 @@ pub fn create_ffi_web_crate(dir: &PathBuf, name: &str) -> Result<()> {
     let ffi_web_dir = dir.join("ffi-web");
     fs::create_dir_all(ffi_web_dir.join("src"))?;
     
+    let module_name = name.replace("-", "_");
     let cargo_toml = format!(r#"[package]
 name = "{}-ffi-web"
 version = "0.1.0"
@@ -283,11 +294,7 @@ crate-type = ["cdylib"]
 [dependencies]
 {}-core = {{ path = "../core" }}
 wasm-bindgen = "0.2"
-
-[profile.release]
-opt-level = "z"
-lto = true
-"#, name, name);
+"#, name, module_name);
     fs::write(ffi_web_dir.join("Cargo.toml"), cargo_toml)?;
     
     let module_name = name.replace("-", "_");

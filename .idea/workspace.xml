@@ -12,7 +12,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="3f8e7173-ab83-4e4d-92f2-3009e9acfe15" name="Changes" comment="fix(build): add uniffi-bindgen auto-install for all platforms&#10;&#10;- Add ensure_uniffi_bindgen() helper that checks for uniffi-bindgen binary&#10;- Auto-install via 'cargo install uniffi-bindgen' if missing&#10;- Apply to iOS, Android, macOS, and Linux build paths&#10;- Prevents &quot;uniffi-bindgen not found&quot; errors on fresh setups&#10;- Matches standalone binary approach used across all platforms">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/commands/add.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/commands/add.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli/src/commands/new.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cli/src/commands/new.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
