@@ -201,13 +201,20 @@ fn run_android() -> Result<()> {
     // Build APK using gradlew
     let android_dir = std::path::Path::new("platforms/android");
     
-    let build_result = Command::new("bash")
-        .arg("-c")
+    use std::process::Stdio;
+    let verbose = std::env::var("JFFI_VERBOSE").is_ok();
+    
+    let mut gradle_cmd = Command::new("bash");
+    gradle_cmd.arg("-c")
         .arg(format!(
             "cd {} && export ANDROID_HOME=~/Library/Android/sdk && ./gradlew assembleDebug",
             android_dir.display()
-        ))
-        .status()
+        ));
+    if !verbose {
+        gradle_cmd.stdout(Stdio::null()).stderr(Stdio::null());
+    }
+    
+    let build_result = gradle_cmd.status()
         .context("Failed to run Gradle build")?;
     
     if !build_result.success() {
@@ -224,9 +231,12 @@ fn run_android() -> Result<()> {
     }
     
     // Install APK using adb
-    let install_status = Command::new(&adb_cmd)
-        .args(&["install", "-r", apk_path.to_str().unwrap()])
-        .status()
+    let mut install_cmd = Command::new(&adb_cmd);
+    install_cmd.args(&["install", "-r", apk_path.to_str().unwrap()]);
+    if !verbose {
+        install_cmd.stdout(Stdio::null()).stderr(Stdio::null());
+    }
+    let install_status = install_cmd.status()
         .context("Failed to install APK")?;
     
     if !install_status.success() {
@@ -300,14 +310,15 @@ fn run_macos() -> Result<()> {
 }
 
 fn launch_windows_app() -> Result<()> {
-    use std::process::Command;
+    use std::process::{Command, Stdio};
 
     let windows_dir = std::env::current_dir()?.join("platforms/windows");
+    let verbose = std::env::var("JFFI_VERBOSE").is_ok();
 
     // Deploy and launch the MSIX package via PowerShell
     // Detects host architecture and deploys only the matching build
-    let status = Command::new("powershell")
-        .args([
+    let mut ps_cmd = Command::new("powershell");
+    ps_cmd.args([
             "-ExecutionPolicy",
             "Bypass",
             "-Command",
@@ -353,8 +364,13 @@ fn launch_windows_app() -> Result<()> {
             Start-Process "shell:AppsFolder\$aumid"
             "#
         ])
-        .current_dir(&windows_dir)
-        .status()?;
+        .current_dir(&windows_dir);
+    
+    if !verbose {
+        ps_cmd.stdout(Stdio::null()).stderr(Stdio::null());
+    }
+    
+    let status = ps_cmd.status()?;
 
     if !status.success() {
         anyhow::bail!("Failed to deploy/launch Windows app");
@@ -403,11 +419,18 @@ fn run_linux() -> Result<()> {
         || !Command::new("pkg-config").args(&["--exists", "gtk4"]).output()?.status.success();
     
     if needs_setup {
+        use std::process::Stdio;
+        let verbose = std::env::var("JFFI_VERBOSE").is_ok();
+        
         println!("  {} Missing dependencies. Running setup script...", "→".bright_blue());
         
-        let status = Command::new("bash")
-            .arg("platforms/linux/setup.sh")
-            .status()
+        let mut setup_cmd = Command::new("bash");
+        setup_cmd.arg("platforms/linux/setup.sh");
+        if !verbose {
+            setup_cmd.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+        
+        let status = setup_cmd.status()
             .context("Failed to run setup script")?;
         
         if !status.success() {
@@ -506,14 +529,20 @@ fn run_web() -> Result<()> {
         anyhow::bail!("npm is not installed. Please install Node.js and npm first.");
     }
     
+    use std::process::Stdio;
+    let verbose = std::env::var("JFFI_VERBOSE").is_ok();
+    
     // Install npm dependencies if needed
     let node_modules = std::path::Path::new("platforms/web/node_modules");
     if !node_modules.exists() {
         println!("  {} Installing npm dependencies...", "→".bright_blue());
-        let status = Command::new("npm")
-            .arg("install")
-            .current_dir("platforms/web")
-            .status()
+        let mut npm_cmd = Command::new("npm");
+        npm_cmd.arg("install")
+            .current_dir("platforms/web");
+        if !verbose {
+            npm_cmd.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+        let status = npm_cmd.status()
             .context("Failed to install npm dependencies")?;
         
         if !status.success() {
@@ -525,11 +554,14 @@ fn run_web() -> Result<()> {
     println!("  {} Starting Vite dev server...", "→".bright_blue());
     println!("  {} Server will open at http://localhost:3000", "→".bright_blue());
     
-    let status = Command::new("npm")
-        .arg("run")
+    let mut vite_cmd = Command::new("npm");
+    vite_cmd.arg("run")
         .arg("dev")
-        .current_dir("platforms/web")
-        .status()
+        .current_dir("platforms/web");
+    if !verbose {
+        vite_cmd.stdout(Stdio::null()).stderr(Stdio::null());
+    }
+    let status = vite_cmd.status()
         .context("Failed to start Vite dev server")?;
     
     if !status.success() {

@@ -77,28 +77,39 @@ impl XcodeProject {
     }
 
     pub fn build(&self, destination: &str) -> Result<()> {
-        // Clean build folder to ensure XCFramework is properly embedded
-        let _ = Command::new("xcodebuild")
-            .args(&[
-                "-project",
-                self.project_path.to_str().unwrap(),
-                "-scheme",
-                &self.scheme,
-                "clean",
-            ])
-            .status();
+        use std::process::Stdio;
         
-        let status = Command::new("xcodebuild")
-            .args(&[
-                "-project",
-                self.project_path.to_str().unwrap(),
-                "-scheme",
-                &self.scheme,
-                "-destination",
-                destination,
-                "build",
-            ])
-            .status()
+        let verbose = std::env::var("JFFI_VERBOSE").is_ok();
+        
+        // Clean build folder to ensure XCFramework is properly embedded
+        let mut clean_cmd = Command::new("xcodebuild");
+        clean_cmd.args(&[
+            "-project",
+            self.project_path.to_str().unwrap(),
+            "-scheme",
+            &self.scheme,
+            "clean",
+        ]);
+        if !verbose {
+            clean_cmd.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+        let _ = clean_cmd.status();
+        
+        let mut build_cmd = Command::new("xcodebuild");
+        build_cmd.args(&[
+            "-project",
+            self.project_path.to_str().unwrap(),
+            "-scheme",
+            &self.scheme,
+            "-destination",
+            destination,
+            "build",
+        ]);
+        if !verbose {
+            build_cmd.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+        
+        let status = build_cmd.status()
             .context("Failed to build with xcodebuild")?;
 
         if !status.success() {

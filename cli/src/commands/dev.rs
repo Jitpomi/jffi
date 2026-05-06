@@ -512,14 +512,20 @@ fn launch_linux_app_background() -> Result<()> {
         c
     };
 
+    let verbose = std::env::var("JFFI_VERBOSE").is_ok();
+    
     cmd.current_dir("platforms/linux")
         .env("GSK_RENDERER", "cairo")
         .env("GDK_DEBUG", "gl-disable")
         .env("NO_AT_BRIDGE", "1")
         .env("GTK_A11Y", "none")
-        .env("LC_ALL", "C.UTF-8")
-        .stdout(Stdio::null())
-        .spawn()
+        .env("LC_ALL", "C.UTF-8");
+    
+    if !verbose {
+        cmd.stdout(Stdio::null());
+    }
+    
+    cmd.spawn()
         .context("Failed to launch app")?;
 
     // Give it a moment to start
@@ -570,16 +576,19 @@ fn touch_xcframework(platform: &str) -> Result<()> {
 fn start_web_dev_server() -> Result<()> {
     use std::process::Stdio;
     
+    let verbose = std::env::var("JFFI_VERBOSE").is_ok();
+    
     // Install npm dependencies if needed
     let node_modules = std::path::Path::new("platforms/web/node_modules");
     if !node_modules.exists() {
         println!("  {} Installing npm dependencies...", "→".bright_blue());
-        let status = Command::new("npm")
-            .arg("install")
-            .current_dir("platforms/web")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
+        let mut npm_install = Command::new("npm");
+        npm_install.arg("install")
+            .current_dir("platforms/web");
+        if !verbose {
+            npm_install.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+        let status = npm_install.status()
             .context("Failed to install npm dependencies")?;
         
         if !status.success() {
@@ -588,12 +597,13 @@ fn start_web_dev_server() -> Result<()> {
     }
     
     // Start Vite dev server in background
-    Command::new("npm")
-        .args(&["run", "dev"])
-        .current_dir("platforms/web")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
+    let mut vite_cmd = Command::new("npm");
+    vite_cmd.args(&["run", "dev"])
+        .current_dir("platforms/web");
+    if !verbose {
+        vite_cmd.stdout(Stdio::null()).stderr(Stdio::null());
+    }
+    vite_cmd.spawn()
         .context("Failed to start Vite dev server")?;
     
     // Give it a moment to start

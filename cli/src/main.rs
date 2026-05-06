@@ -56,6 +56,10 @@ enum Commands {
         /// Build for deployment (all architectures for Windows, otherwise same as default)
         #[arg(long)]
         deploy: bool,
+        
+        /// Show verbose build output
+        #[arg(short, long)]
+        verbose: bool,
     },
     
     /// Run the app on specific platform
@@ -67,6 +71,10 @@ enum Commands {
         /// Run on physical device (iOS only)
         #[arg(short, long)]
         device: bool,
+        
+        /// Show verbose build output
+        #[arg(short, long)]
+        verbose: bool,
     },
     
     /// Watch mode - auto-rebuild on changes
@@ -74,6 +82,10 @@ enum Commands {
         /// Platform to develop for
         #[arg(short, long, default_value = "ios")]
         platform: String,
+        
+        /// Show verbose build output
+        #[arg(short, long)]
+        verbose: bool,
     },
     
     /// Add a new platform to existing project
@@ -97,13 +109,22 @@ fn main() -> anyhow::Result<()> {
         Commands::New { name, platforms, template, path } => {
             commands::new::create_project(&name, platforms.as_deref(), template.as_deref(), path)?;
         }
-        Commands::Build { platform, all, release, device, deploy } => {
+        Commands::Build { platform, all, release, device, deploy, verbose } => {
+            if verbose {
+                std::env::set_var("JFFI_VERBOSE", "1");
+            }
             commands::build::build_project(platform, all, release, device, deploy)?;
         }
-        Commands::Run { platform, device } => {
+        Commands::Run { platform, device, verbose } => {
+            if verbose {
+                std::env::set_var("JFFI_VERBOSE", "1");
+            }
             commands::run::run_project(&platform, device)?;
         }
-        Commands::Dev { platform } => {
+        Commands::Dev { platform, verbose } => {
+            if verbose {
+                std::env::set_var("JFFI_VERBOSE", "1");
+            }
             commands::dev::watch_project(&platform)?;
         }
         Commands::Add { platform } => {
