@@ -172,6 +172,7 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
     use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
     
     let profile = if release { "release" } else { "debug" };
+    let verbose = std::env::var("JFFI_VERBOSE").is_ok();
     
     // Always build for all architectures to ensure Xcode compatibility
     // (Xcode may build for device even when running on simulator)
@@ -184,39 +185,62 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
     let target_names: Vec<&str> = targets.iter().map(|(t, _)| *t).collect();
     ensure_rust_targets(&target_names)?;
     
-    // Create multi-progress for parallel build visualization
-    let multi = MultiProgress::new();
-    let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
-        .unwrap()
-        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
-    
-    // Build for each target
-    for (target, target_name) in &targets {
-        let pb = multi.add(ProgressBar::new_spinner());
-        pb.set_style(spinner_style.clone());
-        pb.set_prefix("  →");
-        pb.set_message(format!("Building {}", target_name));
-        pb.enable_steady_tick(std::time::Duration::from_millis(100));
-        
-        let mut args = vec!["build"];
-        if release {
-            args.push("--release");
+    if verbose {
+        // Verbose mode: no progress bars, just plain output
+        for (target, target_name) in &targets {
+            println!("  {} Building Rust library for {}...", "→".bright_blue(), target_name);
+            
+            let mut args = vec!["build"];
+            if release {
+                args.push("--release");
+            }
+            args.extend(&["--manifest-path", "core/Cargo.toml", "--target", target]);
+            
+            let status = Command::new("cargo")
+                .env("CARGO_TARGET_DIR", "target")
+                .env("IPHONEOS_DEPLOYMENT_TARGET", "16.0")
+                .args(&args)
+                .status()
+                .context(format!("Failed to build Rust library for {}", target))?;
+            
+            if !status.success() {
+                anyhow::bail!("Rust build failed for {}", target);
+            }
         }
-        args.extend(&["--manifest-path", "core/Cargo.toml", "--target", target]);
+    } else {
+        // Clean mode: use progress bars
+        let multi = MultiProgress::new();
+        let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
+            .unwrap()
+            .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
         
-        let status = Command::new("cargo")
-            .env("CARGO_TARGET_DIR", "target")
-            .env("IPHONEOS_DEPLOYMENT_TARGET", "16.0")
-            .args(&args)
-            .status()
-            .context(format!("Failed to build Rust library for {}", target))?;
-        
-        if !status.success() {
-            pb.finish_with_message(format!("{} {}", "✗".red(), target_name));
-            anyhow::bail!("Rust build failed for {}", target);
+        for (target, target_name) in &targets {
+            let pb = multi.add(ProgressBar::new_spinner());
+            pb.set_style(spinner_style.clone());
+            pb.set_prefix("  →");
+            pb.set_message(format!("Building {}", target_name));
+            pb.enable_steady_tick(std::time::Duration::from_millis(100));
+            
+            let mut args = vec!["build"];
+            if release {
+                args.push("--release");
+            }
+            args.extend(&["--manifest-path", "core/Cargo.toml", "--target", target]);
+            
+            let status = Command::new("cargo")
+                .env("CARGO_TARGET_DIR", "target")
+                .env("IPHONEOS_DEPLOYMENT_TARGET", "16.0")
+                .args(&args)
+                .status()
+                .context(format!("Failed to build Rust library for {}", target))?;
+            
+            if !status.success() {
+                pb.finish_with_message(format!("{} {}", "✗".red(), target_name));
+                anyhow::bail!("Rust build failed for {}", target);
+            }
+            
+            pb.finish_with_message(format!("{} {}", "✓".green(), target_name));
         }
-        
-        pb.finish_with_message(format!("{} {}", "✓".green(), target_name));
     }
     
     println!("  {} Generating Swift bindings...", "→".bright_blue());
@@ -389,6 +413,8 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
 fn build_android(release: bool) -> Result<()> {
     use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
     
+    let verbose = std::env::var("JFFI_VERBOSE").is_ok();
+    
     // Build for all Android architectures
     let architectures = vec![
         ("aarch64-linux-android", "arm64-v8a"),
@@ -405,37 +431,60 @@ fn build_android(release: bool) -> Result<()> {
     
     let profile = if release { "release" } else { "debug" };
     
-    // Create multi-progress for parallel build visualization
-    let multi = MultiProgress::new();
-    let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
-        .unwrap()
-        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
-    
-    for (target, abi) in &architectures {
-        let pb = multi.add(ProgressBar::new_spinner());
-        pb.set_style(spinner_style.clone());
-        pb.set_prefix("  →");
-        pb.set_message(format!("Building Android {}", abi));
-        pb.enable_steady_tick(std::time::Duration::from_millis(100));
-        
-        let mut args = vec!["ndk", "-t", target, "-o", "platforms/android/app/src/main/jniLibs", "build"];
-        if release {
-            args.push("--release");
+    if verbose {
+        // Verbose mode: no progress bars, just plain output
+        for (target, abi) in &architectures {
+            println!("  {} Building Android {}...", "→".bright_blue(), abi);
+            
+            let mut args = vec!["ndk", "-t", target, "-o", "platforms/android/app/src/main/jniLibs", "build"];
+            if release {
+                args.push("--release");
+            }
+            args.extend(&["--manifest-path", "core/Cargo.toml"]);
+            
+            let status = Command::new("cargo")
+                .env("CARGO_TARGET_DIR", "target")
+                .args(&args)
+                .status()
+                .context(format!("Failed to build for {}", target))?;
+            
+            if !status.success() {
+                anyhow::bail!("Rust build failed for {}", target);
+            }
         }
-        args.extend(&["--manifest-path", "core/Cargo.toml"]);
+    } else {
+        // Clean mode: use progress bars
+        let multi = MultiProgress::new();
+        let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
+            .unwrap()
+            .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
         
-        let status = Command::new("cargo")
-            .env("CARGO_TARGET_DIR", "target")
-            .args(&args)
-            .status()
-            .context(format!("Failed to build for {}", target))?;
-        
-        if !status.success() {
-            pb.finish_with_message(format!("{} Android {}", "✗".red(), abi));
-            anyhow::bail!("Rust build failed for {}", target);
+        for (target, abi) in &architectures {
+            let pb = multi.add(ProgressBar::new_spinner());
+            pb.set_style(spinner_style.clone());
+            pb.set_prefix("  →");
+            pb.set_message(format!("Building Android {}", abi));
+            pb.enable_steady_tick(std::time::Duration::from_millis(100));
+            
+            let mut args = vec!["ndk", "-t", target, "-o", "platforms/android/app/src/main/jniLibs", "build"];
+            if release {
+                args.push("--release");
+            }
+            args.extend(&["--manifest-path", "core/Cargo.toml"]);
+            
+            let status = Command::new("cargo")
+                .env("CARGO_TARGET_DIR", "target")
+                .args(&args)
+                .status()
+                .context(format!("Failed to build for {}", target))?;
+            
+            if !status.success() {
+                pb.finish_with_message(format!("{} Android {}", "✗".red(), abi));
+                anyhow::bail!("Rust build failed for {}", target);
+            }
+            
+            pb.finish_with_message(format!("{} Android {}", "✓".green(), abi));
         }
-        
-        pb.finish_with_message(format!("{} Android {}", "✓".green(), abi));
     }
     
     // Find the library file for binding generation
@@ -481,6 +530,7 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
     use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
     
     let profile = if release { "release" } else { "debug" };
+    let verbose = std::env::var("JFFI_VERBOSE").is_ok();
     
     // Always build for both architectures to ensure compatibility
     let targets = vec![
@@ -491,39 +541,62 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
     let target_names: Vec<&str> = targets.iter().map(|(t, _)| *t).collect();
     ensure_rust_targets(&target_names)?;
     
-    // Create multi-progress for parallel build visualization
-    let multi = MultiProgress::new();
-    let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
-        .unwrap()
-        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
-    
-    // Build for each target
-    for (target, target_name) in &targets {
-        let pb = multi.add(ProgressBar::new_spinner());
-        pb.set_style(spinner_style.clone());
-        pb.set_prefix("  →");
-        pb.set_message(format!("Building {}", target_name));
-        pb.enable_steady_tick(std::time::Duration::from_millis(100));
-        
-        let mut args = vec!["build"];
-        if release {
-            args.push("--release");
+    if verbose {
+        // Verbose mode: no progress bars, just plain output
+        for (target, target_name) in &targets {
+            println!("  {} Building Rust library for {}...", "→".bright_blue(), target_name);
+            
+            let mut args = vec!["build"];
+            if release {
+                args.push("--release");
+            }
+            args.extend(&["--manifest-path", "core/Cargo.toml", "--target", target]);
+            
+            let status = Command::new("cargo")
+                .env("CARGO_TARGET_DIR", "target")
+                .env("MACOSX_DEPLOYMENT_TARGET", "13.0")
+                .args(&args)
+                .status()
+                .context(format!("Failed to build Rust library for {}", target))?;
+            
+            if !status.success() {
+                anyhow::bail!("Rust build failed for {}", target);
+            }
         }
-        args.extend(&["--manifest-path", "core/Cargo.toml", "--target", target]);
+    } else {
+        // Clean mode: use progress bars
+        let multi = MultiProgress::new();
+        let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
+            .unwrap()
+            .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
         
-        let status = Command::new("cargo")
-            .env("CARGO_TARGET_DIR", "target")
-            .env("MACOSX_DEPLOYMENT_TARGET", "13.0")
-            .args(&args)
-            .status()
-            .context(format!("Failed to build Rust library for {}", target))?;
-        
-        if !status.success() {
-            pb.finish_with_message(format!("{} {}", "✗".red(), target_name));
-            anyhow::bail!("Rust build failed for {}", target);
+        for (target, target_name) in &targets {
+            let pb = multi.add(ProgressBar::new_spinner());
+            pb.set_style(spinner_style.clone());
+            pb.set_prefix("  →");
+            pb.set_message(format!("Building {}", target_name));
+            pb.enable_steady_tick(std::time::Duration::from_millis(100));
+            
+            let mut args = vec!["build"];
+            if release {
+                args.push("--release");
+            }
+            args.extend(&["--manifest-path", "core/Cargo.toml", "--target", target]);
+            
+            let status = Command::new("cargo")
+                .env("CARGO_TARGET_DIR", "target")
+                .env("MACOSX_DEPLOYMENT_TARGET", "13.0")
+                .args(&args)
+                .status()
+                .context(format!("Failed to build Rust library for {}", target))?;
+            
+            if !status.success() {
+                pb.finish_with_message(format!("{} {}", "✗".red(), target_name));
+                anyhow::bail!("Rust build failed for {}", target);
+            }
+            
+            pb.finish_with_message(format!("{} {}", "✓".green(), target_name));
         }
-        
-        pb.finish_with_message(format!("{} {}", "✓".green(), target_name));
     }
     
     println!("  {} Generating Swift bindings...", "→".bright_blue());
@@ -717,57 +790,101 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
 fn build_windows_archs(archs: &[&str], platforms: &[&str], release: bool, profile: &str) -> Result<()> {
     use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
     
-    // Create multi-progress for parallel build visualization
-    let multi = MultiProgress::new();
-    let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
-        .unwrap()
-        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
+    let verbose = std::env::var("JFFI_VERBOSE").is_ok();
     
     // Step 1: Build Rust libraries for specified architectures
-    for arch in archs.iter() {
-        let target = format!("{}-pc-windows-msvc", arch);
-        
-        // Ensure the Rust target is installed
-        let target_installed = Command::new("rustup")
-            .args(["target", "list", "--installed"])
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).contains(&target))
-            .unwrap_or(false);
-        if !target_installed {
-            println!("  {} Installing Rust target {}...", "→".bright_blue(), target);
-            let status = Command::new("rustup")
-                .args(["target", "add", &target])
+    if verbose {
+        // Verbose mode: no progress bars, just plain output
+        for arch in archs.iter() {
+            let target = format!("{}-pc-windows-msvc", arch);
+            
+            // Ensure the Rust target is installed
+            let target_installed = Command::new("rustup")
+                .args(["target", "list", "--installed"])
+                .output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).contains(&target))
+                .unwrap_or(false);
+            if !target_installed {
+                println!("  {} Installing Rust target {}...", "→".bright_blue(), target);
+                let status = Command::new("rustup")
+                    .args(["target", "add", &target])
+                    .status()
+                    .context("Failed to install Rust target via rustup")?;
+                if !status.success() {
+                    anyhow::bail!("rustup target add {} failed", target);
+                }
+            }
+
+            println!("  {} Building Windows {}...", "→".bright_blue(), arch);
+            
+            let mut args = vec!["build"];
+            if release {
+                args.push("--release");
+            }
+            args.extend(&["--target", &target, "--manifest-path", "core/Cargo.toml"]);
+            
+            let status = Command::new("cargo")
+                .env("CARGO_TARGET_DIR", "target")
+                .args(&args)
                 .status()
-                .context("Failed to install Rust target via rustup")?;
+                .context("Failed to build Rust library")?;
+            
             if !status.success() {
-                anyhow::bail!("rustup target add {} failed", target);
+                anyhow::bail!("Rust build failed for {}", arch);
             }
         }
+    } else {
+        // Clean mode: use progress bars
+        let multi = MultiProgress::new();
+        let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
+            .unwrap()
+            .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
+        
+        for arch in archs.iter() {
+            let target = format!("{}-pc-windows-msvc", arch);
+            
+            // Ensure the Rust target is installed
+            let target_installed = Command::new("rustup")
+                .args(["target", "list", "--installed"])
+                .output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).contains(&target))
+                .unwrap_or(false);
+            if !target_installed {
+                println!("  {} Installing Rust target {}...", "→".bright_blue(), target);
+                let status = Command::new("rustup")
+                    .args(["target", "add", &target])
+                    .status()
+                    .context("Failed to install Rust target via rustup")?;
+                if !status.success() {
+                    anyhow::bail!("rustup target add {} failed", target);
+                }
+            }
 
-        let pb = multi.add(ProgressBar::new_spinner());
-        pb.set_style(spinner_style.clone());
-        pb.set_prefix("  →");
-        pb.set_message(format!("Building Windows {}", arch));
-        pb.enable_steady_tick(std::time::Duration::from_millis(100));
-        
-        let mut args = vec!["build"];
-        if release {
-            args.push("--release");
+            let pb = multi.add(ProgressBar::new_spinner());
+            pb.set_style(spinner_style.clone());
+            pb.set_prefix("  →");
+            pb.set_message(format!("Building Windows {}", arch));
+            pb.enable_steady_tick(std::time::Duration::from_millis(100));
+            
+            let mut args = vec!["build"];
+            if release {
+                args.push("--release");
+            }
+            args.extend(&["--target", &target, "--manifest-path", "core/Cargo.toml"]);
+            
+            let status = Command::new("cargo")
+                .env("CARGO_TARGET_DIR", "target")
+                .args(&args)
+                .status()
+                .context("Failed to build Rust library")?;
+            
+            if !status.success() {
+                pb.finish_with_message(format!("{} Windows {}", "✗".red(), arch));
+                anyhow::bail!("Rust build failed for {}", arch);
+            }
+            
+            pb.finish_with_message(format!("{} Windows {}", "✓".green(), arch));
         }
-        args.extend(&["--target", &target, "--manifest-path", "core/Cargo.toml"]);
-        
-        let status = Command::new("cargo")
-            .env("CARGO_TARGET_DIR", "target")
-            .args(&args)
-            .status()
-            .context("Failed to build Rust library")?;
-        
-        if !status.success() {
-            pb.finish_with_message(format!("{} Windows {}", "✗".red(), arch));
-            anyhow::bail!("Rust build failed for {}", arch);
-        }
-        
-        pb.finish_with_message(format!("{} Windows {}", "✓".green(), arch));
     }
     
     // Step 2: Generate C# bindings once (using x64 DLL)
@@ -1036,34 +1153,50 @@ fn build_linux(release: bool) -> Result<()> {
     }
 
     // Build Rust library for Linux
-    use indicatif::{ProgressBar, ProgressStyle};
+    let verbose = std::env::var("JFFI_VERBOSE").is_ok();
     
-    let pb = ProgressBar::new_spinner();
-    let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
-        .unwrap()
-        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
-    pb.set_style(spinner_style);
-    pb.set_prefix("  →");
-    pb.set_message("Building Rust library");
-    pb.enable_steady_tick(std::time::Duration::from_millis(100));
-
     let mut args = vec!["build"];
     if release {
         args.push("--release");
     }
     args.extend(&["--manifest-path", "core/Cargo.toml"]);
 
-    let status = Command::new("cargo")
-        .args(&args)
-        .status()
-        .context("Failed to build Rust library")?;
+    if verbose {
+        // Verbose mode: no progress bar, just plain output
+        println!("  {} Building Rust library...", "→".bright_blue());
+        
+        let status = Command::new("cargo")
+            .args(&args)
+            .status()
+            .context("Failed to build Rust library")?;
 
-    if !status.success() {
-        pb.finish_with_message(format!("{} Rust library", "✗".red()));
-        anyhow::bail!("Rust build failed");
+        if !status.success() {
+            anyhow::bail!("Rust build failed");
+        }
+    } else {
+        // Clean mode: use progress bar
+        use indicatif::{ProgressBar, ProgressStyle};
+        let pb = ProgressBar::new_spinner();
+        let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
+            .unwrap()
+            .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
+        pb.set_style(spinner_style);
+        pb.set_prefix("  →");
+        pb.set_message("Building Rust library");
+        pb.enable_steady_tick(std::time::Duration::from_millis(100));
+
+        let status = Command::new("cargo")
+            .args(&args)
+            .status()
+            .context("Failed to build Rust library")?;
+
+        if !status.success() {
+            pb.finish_with_message(format!("{} Build failed", "✗".red()));
+            anyhow::bail!("Rust build failed");
+        }
+
+        pb.finish_with_message(format!("{} Rust library", "✓".green()));
     }
-    
-    pb.finish_with_message(format!("{} Rust library", "✓".green()));
 
     println!("  {} Generating Python bindings...", "→".bright_blue());
 
@@ -1106,17 +1239,10 @@ fn build_linux(release: bool) -> Result<()> {
 fn build_web(release: bool) -> Result<()> {
     use indicatif::{ProgressBar, ProgressStyle};
     
+    let verbose = std::env::var("JFFI_VERBOSE").is_ok();
+    
     // Ensure wasm32-unknown-unknown target is installed
     ensure_wasm_target()?;
-    
-    let pb = ProgressBar::new_spinner();
-    let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
-        .unwrap()
-        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
-    pb.set_style(spinner_style);
-    pb.set_prefix("  →");
-    pb.set_message("Building WASM");
-    pb.enable_steady_tick(std::time::Duration::from_millis(100));
     
     let profile = if release { "release" } else { "debug" };
     
@@ -1127,17 +1253,41 @@ fn build_web(release: bool) -> Result<()> {
     }
     args.extend(&["--manifest-path", "ffi-web/Cargo.toml"]);
     
-    let status = Command::new("cargo")
-        .args(&args)
-        .status()
-        .context("Failed to build Rust library for WASM")?;
-    
-    if !status.success() {
-        pb.finish_with_message(format!("{} WASM", "✗".red()));
-        anyhow::bail!("Rust WASM build failed");
+    if verbose {
+        // Verbose mode: no progress bar, just plain output
+        println!("  {} Building WASM...", "→".bright_blue());
+        
+        let status = Command::new("cargo")
+            .args(&args)
+            .status()
+            .context("Failed to build Rust library for WASM")?;
+        
+        if !status.success() {
+            anyhow::bail!("Rust WASM build failed");
+        }
+    } else {
+        // Clean mode: use progress bar
+        let pb = ProgressBar::new_spinner();
+        let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
+            .unwrap()
+            .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
+        pb.set_style(spinner_style);
+        pb.set_prefix("  →");
+        pb.set_message("Building WASM");
+        pb.enable_steady_tick(std::time::Duration::from_millis(100));
+        
+        let status = Command::new("cargo")
+            .args(&args)
+            .status()
+            .context("Failed to build Rust library for WASM")?;
+        
+        if !status.success() {
+            pb.finish_with_message(format!("{} WASM", "✗".red()));
+            anyhow::bail!("Rust WASM build failed");
+        }
+        
+        pb.finish_with_message(format!("{} WASM", "✓".green()));
     }
-    
-    pb.finish_with_message(format!("{} WASM", "✓".green()));
     
     println!("  {} Generating JavaScript bindings with wasm-bindgen...", "→".bright_blue());
     

@@ -89,9 +89,6 @@ pub fn watch_project(platform: &str) -> Result<()> {
     } else if platform == "web" {
         println!("{}", "  → Starting web dev server...".bright_blue());
         start_web_dev_server()?;
-        println!();
-        println!("{}", "  ✓ Vite dev server running!".green());
-        println!();
         println!("{}", "   🚀 Development mode active!".bright_yellow().bold());
         println!();
         println!("   Development workflow:");
@@ -607,7 +604,11 @@ fn start_web_dev_server() -> Result<()> {
         .context("Failed to start Vite dev server")?;
     
     // Give it a moment to start
-    std::thread::sleep(Duration::from_millis(1000));
+    std::thread::sleep(Duration::from_millis(1500));
+    
+    println!();
+    println!("  {} Vite dev server running at {}", "✓".green(), "http://localhost:3000".bright_cyan().underline());
+    println!();
     
     Ok(())
 }
