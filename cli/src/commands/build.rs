@@ -169,6 +169,8 @@ fn build_ios_target(release: bool, _target_type: &str) -> Result<()> {
 }
 
 fn build_ios_xcframework(release: bool) -> Result<()> {
+    use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+    
     let profile = if release { "release" } else { "debug" };
     
     // Always build for all architectures to ensure Xcode compatibility
@@ -182,9 +184,20 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
     let target_names: Vec<&str> = targets.iter().map(|(t, _)| *t).collect();
     ensure_rust_targets(&target_names)?;
     
+    // Create multi-progress for parallel build visualization
+    let multi = MultiProgress::new();
+    let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
+        .unwrap()
+        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
+    
     // Build for each target
     for (target, target_name) in &targets {
-        println!("  {} Building Rust library for {}...", "→".bright_blue(), target_name);
+        let pb = multi.add(ProgressBar::new_spinner());
+        pb.set_style(spinner_style.clone());
+        pb.set_prefix("  →");
+        pb.set_message(format!("Building {}", target_name));
+        pb.enable_steady_tick(std::time::Duration::from_millis(100));
+        
         let mut args = vec!["build"];
         if release {
             args.push("--release");
@@ -199,8 +212,11 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
             .context(format!("Failed to build Rust library for {}", target))?;
         
         if !status.success() {
+            pb.finish_with_message(format!("{} {}", "✗".red(), target_name));
             anyhow::bail!("Rust build failed for {}", target);
         }
+        
+        pb.finish_with_message(format!("{} {}", "✓".green(), target_name));
     }
     
     println!("  {} Generating Swift bindings...", "→".bright_blue());
@@ -371,7 +387,7 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
 }
 
 fn build_android(release: bool) -> Result<()> {
-    println!("  {} Building Rust library for Android...", "→".bright_blue());
+    use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
     
     // Build for all Android architectures
     let architectures = vec![
@@ -389,9 +405,19 @@ fn build_android(release: bool) -> Result<()> {
     
     let profile = if release { "release" } else { "debug" };
     
+    // Create multi-progress for parallel build visualization
+    let multi = MultiProgress::new();
+    let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
+        .unwrap()
+        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
+    
     for (target, abi) in &architectures {
-        println!("    Building for {} ({})", abi, target);
-        println!("    Building {} ({})", abi, target);
+        let pb = multi.add(ProgressBar::new_spinner());
+        pb.set_style(spinner_style.clone());
+        pb.set_prefix("  →");
+        pb.set_message(format!("Building Android {}", abi));
+        pb.enable_steady_tick(std::time::Duration::from_millis(100));
+        
         let mut args = vec!["ndk", "-t", target, "-o", "platforms/android/app/src/main/jniLibs", "build"];
         if release {
             args.push("--release");
@@ -405,8 +431,11 @@ fn build_android(release: bool) -> Result<()> {
             .context(format!("Failed to build for {}", target))?;
         
         if !status.success() {
+            pb.finish_with_message(format!("{} Android {}", "✗".red(), abi));
             anyhow::bail!("Rust build failed for {}", target);
         }
+        
+        pb.finish_with_message(format!("{} Android {}", "✓".green(), abi));
     }
     
     // Find the library file for binding generation
@@ -449,6 +478,8 @@ fn build_macos(_arch: &str, release: bool) -> Result<()> {
 }
 
 fn build_macos_xcframework(release: bool) -> Result<()> {
+    use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+    
     let profile = if release { "release" } else { "debug" };
     
     // Always build for both architectures to ensure compatibility
@@ -460,9 +491,20 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
     let target_names: Vec<&str> = targets.iter().map(|(t, _)| *t).collect();
     ensure_rust_targets(&target_names)?;
     
+    // Create multi-progress for parallel build visualization
+    let multi = MultiProgress::new();
+    let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
+        .unwrap()
+        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
+    
     // Build for each target
     for (target, target_name) in &targets {
-        println!("  {} Building Rust library for {}...", "→".bright_blue(), target_name);
+        let pb = multi.add(ProgressBar::new_spinner());
+        pb.set_style(spinner_style.clone());
+        pb.set_prefix("  →");
+        pb.set_message(format!("Building {}", target_name));
+        pb.enable_steady_tick(std::time::Duration::from_millis(100));
+        
         let mut args = vec!["build"];
         if release {
             args.push("--release");
@@ -477,8 +519,11 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
             .context(format!("Failed to build Rust library for {}", target))?;
         
         if !status.success() {
+            pb.finish_with_message(format!("{} {}", "✗".red(), target_name));
             anyhow::bail!("Rust build failed for {}", target);
         }
+        
+        pb.finish_with_message(format!("{} {}", "✓".green(), target_name));
     }
     
     println!("  {} Generating Swift bindings...", "→".bright_blue());
@@ -670,6 +715,13 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
 }
 
 fn build_windows_archs(archs: &[&str], platforms: &[&str], release: bool, profile: &str) -> Result<()> {
+    use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+    
+    // Create multi-progress for parallel build visualization
+    let multi = MultiProgress::new();
+    let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
+        .unwrap()
+        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
     
     // Step 1: Build Rust libraries for specified architectures
     for arch in archs.iter() {
@@ -692,7 +744,11 @@ fn build_windows_archs(archs: &[&str], platforms: &[&str], release: bool, profil
             }
         }
 
-        println!("  {} Building Rust library for Windows ({})...", "→".bright_blue(), arch);
+        let pb = multi.add(ProgressBar::new_spinner());
+        pb.set_style(spinner_style.clone());
+        pb.set_prefix("  →");
+        pb.set_message(format!("Building Windows {}", arch));
+        pb.enable_steady_tick(std::time::Duration::from_millis(100));
         
         let mut args = vec!["build"];
         if release {
@@ -707,8 +763,11 @@ fn build_windows_archs(archs: &[&str], platforms: &[&str], release: bool, profil
             .context("Failed to build Rust library")?;
         
         if !status.success() {
+            pb.finish_with_message(format!("{} Windows {}", "✗".red(), arch));
             anyhow::bail!("Rust build failed for {}", arch);
         }
+        
+        pb.finish_with_message(format!("{} Windows {}", "✓".green(), arch));
     }
     
     // Step 2: Generate C# bindings once (using x64 DLL)
@@ -977,7 +1036,16 @@ fn build_linux(release: bool) -> Result<()> {
     }
 
     // Build Rust library for Linux
-    println!("  {} Building Rust library...", "→".bright_blue());
+    use indicatif::{ProgressBar, ProgressStyle};
+    
+    let pb = ProgressBar::new_spinner();
+    let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
+        .unwrap()
+        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
+    pb.set_style(spinner_style);
+    pb.set_prefix("  →");
+    pb.set_message("Building Rust library");
+    pb.enable_steady_tick(std::time::Duration::from_millis(100));
 
     let mut args = vec!["build"];
     if release {
@@ -991,8 +1059,11 @@ fn build_linux(release: bool) -> Result<()> {
         .context("Failed to build Rust library")?;
 
     if !status.success() {
+        pb.finish_with_message(format!("{} Rust library", "✗".red()));
         anyhow::bail!("Rust build failed");
     }
+    
+    pb.finish_with_message(format!("{} Rust library", "✓".green()));
 
     println!("  {} Generating Python bindings...", "→".bright_blue());
 
@@ -1033,10 +1104,19 @@ fn build_linux(release: bool) -> Result<()> {
 }
 
 fn build_web(release: bool) -> Result<()> {
+    use indicatif::{ProgressBar, ProgressStyle};
+    
     // Ensure wasm32-unknown-unknown target is installed
     ensure_wasm_target()?;
     
-    println!("  {} Building Rust library for Web (WASM)...", "→".bright_blue());
+    let pb = ProgressBar::new_spinner();
+    let spinner_style = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}")
+        .unwrap()
+        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
+    pb.set_style(spinner_style);
+    pb.set_prefix("  →");
+    pb.set_message("Building WASM");
+    pb.enable_steady_tick(std::time::Duration::from_millis(100));
     
     let profile = if release { "release" } else { "debug" };
     
@@ -1053,8 +1133,11 @@ fn build_web(release: bool) -> Result<()> {
         .context("Failed to build Rust library for WASM")?;
     
     if !status.success() {
+        pb.finish_with_message(format!("{} WASM", "✗".red()));
         anyhow::bail!("Rust WASM build failed");
     }
+    
+    pb.finish_with_message(format!("{} WASM", "✓".green()));
     
     println!("  {} Generating JavaScript bindings with wasm-bindgen...", "→".bright_blue());
     

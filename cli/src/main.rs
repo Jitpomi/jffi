@@ -9,6 +9,7 @@ mod templating;
 #[derive(Parser)]
 #[command(name = "jffi")]
 #[command(about = "JFFI - Cross-platform app framework with Rust + native UIs", long_about = None)]
+#[command(version)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
