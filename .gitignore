@@ -1,5 +1,8 @@
 /target
 
+# IDE metadata
+.idea/
+
 # Generated Swift bindings (auto-generated, don't commit)
 ios-app/ffi.swift
 ios-app/ffiFFI.h

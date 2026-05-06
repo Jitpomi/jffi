@@ -212,14 +212,7 @@ pub fn watch_project(platform: &str) -> Result<()> {
                                     // Touch XCFramework to update timestamp
                                     let _ = touch_xcframework(platform);
                                     
-                                    // Auto-relaunch app on simulator
-                                    println!("{}", "  → Relaunching app on simulator...".bright_blue());
-                                    if let Err(e) = relaunch_ios_app() {
-                                        println!("{}", format!("  ✗ Failed to relaunch: {}", e).red());
-                                        println!("{}", "  → Press Cmd+R in Xcode to manually relaunch".yellow());
-                                    } else {
-                                        println!("{}", "  ✓ Rust rebuild complete! App relaunched with new code.".green());
-                                    }
+                                    println!("{}", "  ✓ Rust rebuild complete! Press Cmd+B in Xcode to use new code.".green());
                                 } else if platform == "macos" {
                                     // Touch XCFramework to update timestamp and notify Xcode
                                     let _ = touch_xcframework(platform);
@@ -546,35 +539,6 @@ fn restart_linux_app() -> Result<()> {
     
     // Relaunch
     launch_linux_app_background()
-}
-
-fn relaunch_ios_app() -> Result<()> {
-    use crate::config::load_config;
-    
-    // Get project name for bundle ID
-    let config = load_config()?;
-    let app_name = &config.package.name;
-    let bundle_id = format!("com.example.{}", app_name.replace("-", "").to_lowercase());
-    
-    // Kill existing app process
-    let _ = Command::new("xcrun")
-        .args(&["simctl", "terminate", "booted", &bundle_id])
-        .status();
-    
-    // Wait a moment for cleanup
-    std::thread::sleep(Duration::from_millis(500));
-    
-    // Relaunch app
-    let status = Command::new("xcrun")
-        .args(&["simctl", "launch", "booted", &bundle_id])
-        .status()
-        .context("Failed to relaunch app")?;
-    
-    if !status.success() {
-        anyhow::bail!("Failed to launch app on simulator");
-    }
-    
-    Ok(())
 }
 
 fn touch_xcframework(platform: &str) -> Result<()> {
