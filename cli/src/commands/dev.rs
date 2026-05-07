@@ -152,11 +152,12 @@ pub fn watch_project(platform: &str) -> Result<()> {
                     let is_relevant_change = event.paths.iter().any(|p| {
                         let path_str = p.to_string_lossy();
                         // Ignore target directory, hidden files, and temp files
-                        !path_str.contains("/target/") 
-                        && !path_str.contains("/.") 
+                        !path_str.contains("/target/")
+                        && !path_str.contains("/.")
                         && !path_str.ends_with('~')
                         && !path_str.contains(".swp")
                         && !path_str.contains(".tmp")
+                        && !path_str.contains("core/src/android.rs")
                     });
                     
                     if !is_relevant_change {
