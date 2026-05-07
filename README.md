@@ -65,8 +65,15 @@ When building for Android, JFFI automatically:
 3. **Creates** a Kotlin helper (`JffiAndroidInit.kt`) with `initNdkContext()` method
 4. **Injects** the initialization call in `MainActivity.onCreate()`
 5. **Updates** `core/Cargo.toml` with `ndk-context` and `jni` dependencies
+6. **Configures** 16 KB page alignment for all Rust libraries (`.cargo/config.toml`)
+7. **Sets** `android:extractNativeLibs="true"` for prebuilt AAR dependencies (JNA, ML Kit)
 
 **Result:** Android apps using networking libraries (iroh, hickory-resolver, etc.) work out of the box with zero configuration.
+
+**Note on 16 KB Alignment:**
+- Your Rust code: ✅ Automatically aligned via linker flags
+- Prebuilt AARs (JNA, ML Kit): ❌ Not aligned (upstream issue)
+- Solution: `extractNativeLibs="true"` extracts libraries at install time (official Android approach)
 
 **References:**
 - [UniFFI uses JNA](https://mozilla.github.io/uniffi-rs/latest/kotlin/gradle.html)

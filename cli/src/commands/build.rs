@@ -634,7 +634,7 @@ use std::ffi::c_void;
 /// The pointers passed to ndk-context must remain valid for the lifetime of the app.
 #[no_mangle]
 pub unsafe extern "C" fn Java_{jni_package}_JffiAndroidInit_initNdkContext(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     context: JObject,
 ) {{
@@ -724,7 +724,7 @@ import android.content.Context
  */
 object JffiAndroidInit {{
     init {{
-        System.loadLibrary("{lib_name}_core")
+        System.loadLibrary("{lib_name}")
     }}
 
     /**
