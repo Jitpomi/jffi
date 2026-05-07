@@ -27,6 +27,15 @@ import com.example.{{name_package}}.ui.theme.{{name_pascal}}Theme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // JFFI: Initialize Android context for Rust code (if ndk-context is needed)
+        // This is auto-generated and safe to call even if not needed
+        try {
+            JffiAndroidInit.initNdkContext(applicationContext)
+        } catch (e: UnsatisfiedLinkError) {
+            // JffiAndroidInit not generated - ndk-context not needed
+        }
+        
         enableEdgeToEdge()
         setContent {
             {{name_pascal}}Theme {
