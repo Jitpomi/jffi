@@ -410,6 +410,21 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
     Ok(())
 }
 
+fn validate_android_manifest() -> Result<()> {
+    // Check if AndroidManifest.xml has extractNativeLibs="true"
+    // This is required for prebuilt AAR dependencies (JNA, ML Kit) that aren't 16 KB aligned
+    let manifest_path = "platforms/android/app/src/main/AndroidManifest.xml";
+    let manifest_content = std::fs::read_to_string(manifest_path)
+        .context("Failed to read AndroidManifest.xml")?;
+    
+    if !manifest_content.contains("extractNativeLibs") {
+        println!("  {} Warning: Add android:extractNativeLibs=\"true\" to <application> in AndroidManifest.xml", "⚠".bright_yellow());
+        println!("     Required for prebuilt AAR dependencies (JNA, ML Kit) that aren't 16 KB aligned");
+    }
+    
+    Ok(())
+}
+
 fn generate_android_cargo_config() -> Result<()> {
     // Generate .cargo/config.toml with 16 KB page alignment for Android 15+
     // This is required for modern Android devices to avoid runtime warnings and crashes
@@ -468,10 +483,17 @@ fn build_android(release: bool) -> Result<()> {
     generate_android_cargo_config()?;
     
     // Check if ndk-context initialization is needed and generate bridge BEFORE build
+    let no_bridge = std::env::var("JFFI_NO_ANDROID_BRIDGE").is_ok();
     let needs_ndk_context = check_ndk_context_needed();
-    if needs_ndk_context {
+    
+    if needs_ndk_context && no_bridge {
+        println!("  {} Skipping ndk-context JNI bridge (--no-android-bridge)", "ℹ".bright_blue());
+    } else if needs_ndk_context {
         println!("  {} Detected ndk-context dependency - generating JNI bridge...", "ℹ".bright_blue());
         generate_android_ndk_bridge()?;
+        
+        // Validate AndroidManifest.xml has extractNativeLibs for prebuilt AARs
+        validate_android_manifest()?;
     }
     
     // Build for all Android architectures
