@@ -49,6 +49,8 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        // Note: JFFI auto-generates core/.cargo/config.toml with 16 KB page alignment
+        // for Android 15+ compatibility. No useLegacyPackaging needed.
     }
 }
 
