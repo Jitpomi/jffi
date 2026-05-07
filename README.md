@@ -49,6 +49,31 @@ That's it! The app builds, compiles Rust, generates platform bindings, and launc
 | Web | ✅ Ready | Vanilla JS + WASM | JavaScript |
 | Windows | ✅ Ready | WinUI 3 | C# |
 
+### 🤖 Android: Automatic ndk-context Support
+
+JFFI automatically handles the UniFFI + JNA + ndk-context incompatibility for Android apps using networking libraries.
+
+**The Problem:**
+- UniFFI uses JNA (Java Native Access) which doesn't call `JNI_OnLoad`
+- Some Rust crates (like `hickory-resolver` used by `iroh`) need Android context for DNS resolution
+- Without initialization, apps crash with: `android context was not initialized`
+
+**JFFI's Solution:**
+When building for Android, JFFI automatically:
+1. **Detects** if your Rust dependencies use `ndk-context` (via `cargo tree`)
+2. **Generates** a JNI bridge (`core/src/android.rs`) to initialize ndk-context
+3. **Creates** a Kotlin helper (`JffiAndroidInit.kt`) with `initNdkContext()` method
+4. **Injects** the initialization call in `MainActivity.onCreate()`
+5. **Updates** `core/Cargo.toml` with `ndk-context` and `jni` dependencies
+
+**Result:** Android apps using networking libraries (iroh, hickory-resolver, etc.) work out of the box with zero configuration.
+
+**References:**
+- [UniFFI uses JNA](https://mozilla.github.io/uniffi-rs/latest/kotlin/gradle.html)
+- [JNA doesn't call JNI_OnLoad](https://github.com/java-native-access/jna/issues/1019)
+- [ndk-context docs](https://docs.rs/ndk-context/latest/ndk_context/)
+- [UniFFI issue #1778](https://github.com/mozilla/uniffi-rs/issues/1778)
+
 ## 🏗️ Project Structure
 
 ```
