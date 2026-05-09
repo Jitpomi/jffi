@@ -1039,11 +1039,12 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
 
 fn check_windows_toolchain(arch: &str) -> Result<bool> {
     // Check if required C compiler is available for the target architecture
+    // Use 'where' on Windows (like 'which' on Unix) to find executables in PATH
     match arch {
         "aarch64" => {
             // aarch64-pc-windows-msvc requires clang for C dependencies like ring
-            let has_clang = Command::new("clang")
-                .arg("--version")
+            let has_clang = Command::new("where")
+                .arg("clang")
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status()
@@ -1053,7 +1054,8 @@ fn check_windows_toolchain(arch: &str) -> Result<bool> {
         }
         "x86_64" | "i686" => {
             // x86/x64 use MSVC's cl.exe which is typically available
-            let has_msvc = Command::new("cl")
+            let has_msvc = Command::new("where")
+                .arg("cl")
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status()
