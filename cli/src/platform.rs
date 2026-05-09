@@ -101,10 +101,11 @@ impl XcodeProject {
             self.project_path.to_str().unwrap(),
             "-scheme",
             &self.scheme,
-            "-destination",
-            destination,
-            "build",
         ]);
+        if !destination.is_empty() {
+            build_cmd.args(&["-destination", destination]);
+        }
+        build_cmd.arg("build");
         if !verbose {
             build_cmd.stdout(Stdio::null()).stderr(Stdio::null());
         }

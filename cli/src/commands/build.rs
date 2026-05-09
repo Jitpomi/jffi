@@ -151,7 +151,7 @@ pub fn build_platform(platform: &str, release: bool) -> Result<()> {
         }
         "macos-arm64" => build_macos("aarch64", release),
         "macos-x64" => build_macos("x86_64", release),
-        "windows" => build_windows_all_archs(release),
+        "windows" => build_windows_host_arch(release),
         "linux" => build_linux(release),
         "web" => build_web(release),
         _ => anyhow::bail!("Unknown platform: {}", platform),
@@ -1037,15 +1037,84 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
     Ok(())
 }
 
+fn check_windows_toolchain(arch: &str) -> Result<bool> {
+    // Check if required C compiler is available for the target architecture
+    match arch {
+        "aarch64" => {
+            // aarch64-pc-windows-msvc requires clang for C dependencies like ring
+            let has_clang = Command::new("clang")
+                .arg("--version")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            Ok(has_clang)
+        }
+        "x86_64" | "i686" => {
+            // x86/x64 use MSVC's cl.exe which is typically available
+            let has_msvc = Command::new("cl")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            Ok(has_msvc)
+        }
+        _ => Ok(false),
+    }
+}
+
 fn build_windows_archs(archs: &[&str], platforms: &[&str], release: bool, profile: &str) -> Result<()> {
     use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
     
     let verbose = std::env::var("JFFI_VERBOSE").is_ok();
     
-    // Step 1: Build Rust libraries for specified architectures
+    // Filter architectures by available toolchains
+    let mut available_archs = Vec::new();
+    let mut available_platforms = Vec::new();
+    let mut skipped = Vec::new();
+    
+    for (i, arch) in archs.iter().enumerate() {
+        match check_windows_toolchain(arch) {
+            Ok(true) => {
+                available_archs.push(*arch);
+                available_platforms.push(platforms[i]);
+            }
+            Ok(false) => {
+                let platform = platforms[i];
+                let msg = match *arch {
+                    "aarch64" => {
+                        "Install LLVM/Clang: winget install LLVM.LLVM"
+                    }
+                    "x86_64" | "i686" => {
+                        "Install Visual Studio Build Tools with C++ workload"
+                    }
+                    _ => "Install the required C compiler",
+                };
+                skipped.push(format!("{} ({})", platform, msg));
+            }
+            Err(_) => {
+                skipped.push(format!("{} (toolchain check failed)", platforms[i]));
+            }
+        }
+    }
+    
+    if !skipped.is_empty() {
+        println!("  {} Skipping unsupported architectures:", "⚠".bright_yellow());
+        for s in &skipped {
+            println!("     • {}", s);
+        }
+    }
+    
+    if available_archs.is_empty() {
+        anyhow::bail!("No Windows toolchains available. Install Visual Studio Build Tools (x64/x86) or LLVM/Clang (ARM64).");
+    }
+    
+    // Step 1: Build Rust libraries for available architectures
     if verbose {
         // Verbose mode: no progress bars, just plain output
-        for arch in archs.iter() {
+        for arch in available_archs.iter() {
             let target = format!("{}-pc-windows-msvc", arch);
             
             // Ensure the Rust target is installed
@@ -1090,7 +1159,7 @@ fn build_windows_archs(archs: &[&str], platforms: &[&str], release: bool, profil
             .unwrap()
             .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
         
-        for arch in archs.iter() {
+        for arch in available_archs.iter() {
             let target = format!("{}-pc-windows-msvc", arch);
             
             // Ensure the Rust target is installed
