@@ -1038,8 +1038,10 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
 }
 
 fn check_windows_toolchain(arch: &str) -> Result<bool> {
-    // Check if required C compiler is available for the target architecture
-    // Use 'where' on Windows (like 'which' on Unix) to find executables in PATH
+    // Only aarch64 requires special toolchain detection.
+    // x86_64 and i686 use MSVC which Rust's cc crate finds automatically
+    // (via registry, environment variables, or VS installation paths).
+    // cl.exe is typically NOT in global PATH but cargo build still works.
     match arch {
         "aarch64" => {
             // aarch64-pc-windows-msvc requires clang for C dependencies like ring
@@ -1053,15 +1055,9 @@ fn check_windows_toolchain(arch: &str) -> Result<bool> {
             Ok(has_clang)
         }
         "x86_64" | "i686" => {
-            // x86/x64 use MSVC's cl.exe which is typically available
-            let has_msvc = Command::new("where")
-                .arg("cl")
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
-            Ok(has_msvc)
+            // MSVC is always assumed available for x64/x86 on Windows
+            // Rust's cc crate handles MSVC discovery automatically
+            Ok(true)
         }
         _ => Ok(false),
     }
