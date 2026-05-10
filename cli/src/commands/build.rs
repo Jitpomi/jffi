@@ -1138,6 +1138,9 @@ fn build_windows_archs(archs: &[&str], platforms: &[&str], release: bool, profil
             if release {
                 args.push("--release");
             }
+            // Limit to 1 job on Windows to reduce memory pressure from large deps (iroh, etc.)
+            args.push("--jobs");
+            args.push("1");
             args.extend(&["--target", &target, "--manifest-path", "core/Cargo.toml"]);
             
             let status = Command::new("cargo")
@@ -1187,6 +1190,9 @@ fn build_windows_archs(archs: &[&str], platforms: &[&str], release: bool, profil
             if release {
                 args.push("--release");
             }
+            // Limit to 1 job on Windows to reduce memory pressure from large deps (iroh, etc.)
+            args.push("--jobs");
+            args.push("1");
             args.extend(&["--target", &target, "--manifest-path", "core/Cargo.toml"]);
             
             let status = Command::new("cargo")
