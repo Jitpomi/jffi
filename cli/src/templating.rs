@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use rand::Rng;
+use rand::RngExt;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -272,14 +272,14 @@ impl TemplateEngine {
 
         // Generate UUIDs for Xcode project files (no hyphens)
         // macOS template needs up to UUID29
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for i in 1..=30 {
             let uuid = format!(
                 "{:08X}{:08X}{:08X}{:08X}",
-                rng.gen::<u32>(),
-                rng.gen::<u32>(),
-                rng.gen::<u32>(),
-                rng.gen::<u32>()
+                rng.random::<u32>(),
+                rng.random::<u32>(),
+                rng.random::<u32>(),
+                rng.random::<u32>()
             );
             context.insert(format!("UUID{}", i), uuid);
         }
@@ -288,11 +288,11 @@ impl TemplateEngine {
         for i in 1..=5 {
             let guid = format!(
                 "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
-                rng.gen::<u32>(),
-                rng.gen::<u16>(),
-                rng.gen::<u16>(),
-                rng.gen::<u16>(),
-                rng.gen::<u64>() & 0xFFFFFFFFFFFF // 48 bits
+                rng.random::<u32>(),
+                rng.random::<u16>(),
+                rng.random::<u16>(),
+                rng.random::<u16>(),
+                rng.random::<u64>() & 0xFFFFFFFFFFFF // 48 bits
             );
             context.insert(format!("GUID{}", i), guid);
         }

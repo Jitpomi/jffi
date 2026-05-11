@@ -6,6 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::templating::TemplateEngine;
+use crate::platform::Platform;
 
 /// Find templates directory with multiple fallback locations
 fn find_templates_dir() -> Result<PathBuf> {
@@ -196,18 +197,30 @@ pub fn create_project(
     let original_dir = env::current_dir()?;
     env::set_current_dir(&project_dir)?;
     
-    // Run initial build for the first platform to generate FFI bindings
-    let first_platform = platform_list_ref[0];
-    match crate::commands::build::build_platform(first_platform, false) {
-        Ok(_) => {
-            println!();
-            println!("{}", format!("  ✅ FFI bindings generated for {}!", first_platform).green());
+    // Run initial build for the first buildable platform to generate FFI bindings
+    let first_buildable_platform = platform_list_ref.iter()
+        .find(|&&p| {
+            Platform::from_str(p)
+                .map(|p_enum| p_enum.check_requirements().is_ok())
+                .unwrap_or(false)
+        });
+
+    if let Some(platform) = first_buildable_platform {
+        match crate::commands::build::build_platform(platform, false) {
+            Ok(_) => {
+                println!();
+                println!("{}", format!("  ✅ FFI bindings generated for {}!", platform).green());
+            }
+            Err(e) => {
+                println!();
+                println!("{}", format!("  ⚠️  Warning: Initial build failed: {}", e).yellow());
+                println!("{}", "  You can run 'jffi build' manually later.".yellow());
+            }
         }
-        Err(e) => {
-            println!();
-            println!("{}", format!("  ⚠️  Warning: Initial build failed: {}", e).yellow());
-            println!("{}", "  You can run 'jffi build' manually later.".yellow());
-        }
+    } else {
+        println!();
+        println!("{}", "  ⚠️  Warning: No selected platforms are buildable on this host OS.".yellow());
+        println!("{}", "  FFI bindings were not generated. You can generate them later on a supported OS.".yellow());
     }
     
     // Return to original directory

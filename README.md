@@ -49,6 +49,21 @@ That's it! The app builds, compiles Rust, generates platform bindings, and launc
 | Web | ✅ Ready | Vanilla JS + WASM | JavaScript |
 | Windows | ✅ Ready | WinUI 3 | C# |
 
+### 💻 Development Host Compatibility
+
+JFFI currently requires the native host for building and running most desktop/mobile platforms. Android and Web are cross-platform by default.
+
+| Target Platform | Mac Host | Windows Host | Linux Host |
+|-----------------|----------|--------------|------------|
+| **iOS**         | ✅ Native | ❌ No       | ❌ No       |
+| **macOS**       | ✅ Native | ❌ No       | ❌ No       |
+| **Android**     | ✅ Native | ✅ Native    | ✅ Native    |
+| **Windows**     | ❌ No     | ✅ Native    | ❌ No       |
+| **Linux**       | ❌ No     | ❌ No       | ✅ Native    |
+| **Web**         | ✅ Native | ✅ Native    | ✅ Native    |
+
+*Note: Android and Web can be developed from any host. Other platforms currently require their respective native host for UI development and execution.*
+
 ### 🤖 Android: Automatic ndk-context Support
 
 JFFI automatically handles the UniFFI + JNA + ndk-context incompatibility for Android apps using networking libraries.
@@ -385,6 +400,11 @@ cargo run --package jffi -- --help
 - [x] Hot reload for Web (Vite hot reload)
 - [x] Automatic emulator/simulator management
 - [x] Auto-install build dependencies (targets, NDK, GTK, WASM, wasm-bindgen, uniffi-bindgen-cs, etc.)
+- [ ] Full cross-compilation support (build any platform from any host)
+    - [ ] macOS -> Windows (via MinGW/Wine)
+    - [ ] Linux -> Windows (via MinGW/Wine)
+    - [ ] Linux -> macOS/iOS (via osxcross)
+    - [ ] Windows -> Linux (via WSL or cross-rs)
 
 ## 🤝 Contributing
 

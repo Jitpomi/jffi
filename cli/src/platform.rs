@@ -37,6 +37,9 @@ impl Platform {
         }
     }
 
+    pub fn check_requirements(&self) -> Result<()> {
+        crate::setup::setup_platform(self)
+    }
 }
 
 /// iOS/macOS Xcode project
@@ -81,11 +84,12 @@ impl XcodeProject {
         
         let verbose = std::env::var("JFFI_VERBOSE").is_ok();
         
-        // Clean build folder to ensure XCFramework is properly embedded
+        let project_path_str = self.project_path.to_str().ok_or_else(|| anyhow::anyhow!("Invalid project path"))?;
+        
         let mut clean_cmd = Command::new("xcodebuild");
         clean_cmd.args(&[
             "-project",
-            self.project_path.to_str().unwrap(),
+            project_path_str,
             "-scheme",
             &self.scheme,
             "clean",
@@ -98,7 +102,7 @@ impl XcodeProject {
         let mut build_cmd = Command::new("xcodebuild");
         build_cmd.args(&[
             "-project",
-            self.project_path.to_str().unwrap(),
+            project_path_str,
             "-scheme",
             &self.scheme,
         ]);
@@ -146,8 +150,9 @@ impl AndroidProject {
     }
 
     pub fn open(&self) -> Result<()> {
+        let path_str = self.project_path.to_str().ok_or_else(|| anyhow::anyhow!("Invalid project path"))?;
         Command::new("open")
-            .args(&["-a", "Android Studio", self.project_path.to_str().unwrap()])
+            .args(&["-a", "Android Studio", path_str])
             .status()
             .context("Failed to open Android Studio")?;
         Ok(())
@@ -158,14 +163,21 @@ impl AndroidProject {
             return Some(tool_name.to_string());
         }
 
-        let home = std::env::var("HOME").unwrap_or_default();
+        let home = std::env::var("HOME").ok()?;
         let tool_subdir = if tool_name == "emulator" { "emulator" } else { "platform-tools" };
 
-        let possible_paths = vec![
+        let mut possible_paths = vec![
             format!("{}/Library/Android/sdk/{}/{}", home, tool_subdir, tool_name),
             format!("{}/Android/Sdk/{}/{}", home, tool_subdir, tool_name),
             format!("{}/.android/sdk/{}/{}", home, tool_subdir, tool_name),
         ];
+
+        if let Ok(sdk_root) = std::env::var("ANDROID_SDK_ROOT") {
+            possible_paths.push(format!("{}/{}/{}", sdk_root, tool_subdir, tool_name));
+        }
+        if let Ok(sdk_home) = std::env::var("ANDROID_HOME") {
+            possible_paths.push(format!("{}/{}/{}", sdk_home, tool_subdir, tool_name));
+        }
 
         possible_paths
             .into_iter()
@@ -241,8 +253,9 @@ impl IOSSimulator {
     }
 
     pub fn install_app(&self, app_path: &Path) -> Result<()> {
+        let app_path_str = app_path.to_str().ok_or_else(|| anyhow::anyhow!("Invalid app path"))?;
         let status = Command::new("xcrun")
-            .args(&["simctl", "install", "booted", app_path.to_str().unwrap()])
+            .args(&["simctl", "install", "booted", app_path_str])
             .status()
             .context("Failed to install app")?;
 

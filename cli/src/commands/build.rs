@@ -3,6 +3,7 @@ use colored::*;
 use std::process::Command;
 use std::path::Path;
 use std::fs;
+use crate::platform::Platform;
 
 fn validate_project_structure() -> Result<()> {
     if !Path::new("jffi.toml").exists() {
@@ -28,42 +29,6 @@ fn validate_project_structure() -> Result<()> {
     Ok(())
 }
 
-fn ensure_rust_targets(targets: &[&str]) -> Result<()> {
-    let output = Command::new("rustup")
-        .args(["target", "list", "--installed"])
-        .output()
-        .context("Failed to run rustup. Please install Rust with rustup.")?;
-
-    if !output.status.success() {
-        anyhow::bail!("Failed to check installed Rust targets via rustup");
-    }
-
-    let installed = String::from_utf8_lossy(&output.stdout);
-    let mut missing = Vec::new();
-
-    for target in targets {
-        if !installed.lines().any(|l| l.trim() == *target) {
-            missing.push(*target);
-        }
-    }
-
-    if missing.is_empty() {
-        return Ok(());
-    }
-
-    let status = Command::new("rustup")
-        .arg("target")
-        .arg("add")
-        .args(&missing)
-        .status()
-        .context("Failed to install required Rust targets via rustup")?;
-
-    if !status.success() {
-        anyhow::bail!("Failed to install Rust targets: {}", missing.join(", "));
-    }
-
-    Ok(())
-}
 
 pub fn build_project(platform: Option<String>, all: bool, release: bool, device: bool, deploy: bool) -> Result<()> {
     validate_project_structure()?;
@@ -81,7 +46,12 @@ pub fn build_project(platform: Option<String>, all: bool, release: bool, device:
 
 pub fn build_platform_with_options(platform: &str, release: bool, device: bool, deploy: bool) -> Result<()> {
     validate_project_structure()?;
-    
+
+    // Check if requirements are met for this platform
+    if let Some(p_enum) = Platform::from_str(platform) {
+        p_enum.check_requirements()?;
+    }
+
     println!("{}", format!("🔨 Building for {}...", platform).bright_green().bold());
     
     match platform {
@@ -136,6 +106,11 @@ fn build_all_platforms(release: bool) -> Result<()> {
 pub fn build_platform(platform: &str, release: bool) -> Result<()> {
     validate_project_structure()?;
     
+    // Check if requirements are met for this platform
+    if let Some(p_enum) = Platform::from_str(platform) {
+        p_enum.check_requirements()?;
+    }
+
     println!("{}", format!("🔨 Building for {}...", platform).bright_green().bold());
     
     match platform {
@@ -182,8 +157,6 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
         ("aarch64-apple-ios", "iOS Device"),
     ];
     
-    let target_names: Vec<&str> = targets.iter().map(|(t, _)| *t).collect();
-    ensure_rust_targets(&target_names)?;
     
     if verbose {
         // Verbose mode: no progress bars, just plain output
@@ -503,13 +476,6 @@ fn build_android(release: bool) -> Result<()> {
         ("x86_64-linux-android", "x86_64"),
     ];
     
-    // Check if Android targets are installed
-    let targets: Vec<&str> = architectures.iter().map(|(t, _)| *t).collect();
-    ensure_android_targets(&targets)?;
-    
-    // Check if cargo-ndk is installed
-    ensure_cargo_ndk()?;
-    
     let profile = if release { "release" } else { "debug" };
     
     if verbose {
@@ -604,21 +570,9 @@ fn build_android(release: bool) -> Result<()> {
 }
 
 fn generate_android_ndk_bridge() -> Result<()> {
-    // Get package name from AndroidManifest.xml
-    let manifest_path = "platforms/android/app/src/main/AndroidManifest.xml";
-    let manifest_content = std::fs::read_to_string(manifest_path)
-        .context("Failed to read AndroidManifest.xml")?;
-    
-    let package_name = manifest_content
-        .lines()
-        .find(|line| line.contains("package="))
-        .and_then(|line| {
-            line.split("package=\"")
-                .nth(1)?
-                .split('"')
-                .next()
-        })
-        .context("Could not find package name in AndroidManifest.xml")?;
+    // Get package name from jffi.toml
+    let config = crate::config::load_config()?;
+    let package_name = &config.platforms.android.package;
     
     // Get project name for library name
     let cargo_toml = std::fs::read_to_string("core/Cargo.toml")
@@ -788,8 +742,6 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
         ("x86_64-apple-darwin", "macOS Intel"),
     ];
     
-    let target_names: Vec<&str> = targets.iter().map(|(t, _)| *t).collect();
-    ensure_rust_targets(&target_names)?;
     
     if verbose {
         // Verbose mode: no progress bars, just plain output
@@ -1735,58 +1687,6 @@ fn ensure_wasm_bindgen_cli() -> Result<()> {
     Ok(())
 }
 
-fn ensure_android_targets(targets: &[&str]) -> Result<()> {
-    println!("  {} Checking Android targets...", "→".bright_blue());
-    
-    // Check which targets are installed
-    let output = Command::new("rustup")
-        .args(&["target", "list", "--installed"])
-        .output()
-        .context("Failed to check installed targets")?;
-    
-    let installed = String::from_utf8_lossy(&output.stdout);
-    
-    for target in targets {
-        if !installed.contains(target) {
-            println!("    Installing {}...", target.bright_yellow());
-            let status = Command::new("rustup")
-                .args(&["target", "add", target])
-                .status()
-                .context(format!("Failed to install target {}", target))?;
-            
-            if !status.success() {
-                anyhow::bail!("Failed to install Android target: {}", target);
-            }
-        }
-    }
-    
-    println!("  {} Android targets ready", "✓".green());
-    Ok(())
-}
-
-fn ensure_cargo_ndk() -> Result<()> {
-    println!("  {} Checking cargo-ndk...", "→".bright_blue());
-    
-    // Check if cargo-ndk is installed
-    let check = Command::new("cargo")
-        .args(&["ndk", "--version"])
-        .output();
-    
-    if check.is_err() || !check.unwrap().status.success() {
-        println!("    Installing cargo-ndk...");
-        let status = Command::new("cargo")
-            .args(&["install", "cargo-ndk"])
-            .status()
-            .context("Failed to install cargo-ndk")?;
-        
-        if !status.success() {
-            anyhow::bail!("Failed to install cargo-ndk");
-        }
-        println!("  {} cargo-ndk installed", "✓".green());
-    }
-    
-    Ok(())
-}
 
 /// Post-process UniFFI-generated Swift files to fix Swift 6 concurrency issues
 /// This is a workaround for UniFFI issue #2818 until official support is added

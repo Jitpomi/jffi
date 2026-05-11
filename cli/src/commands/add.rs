@@ -82,15 +82,15 @@ pub fn add_platform(platform: &str) -> Result<()> {
     
     // Generate UUIDs for Xcode project files (no hyphens)
     // macOS template needs up to UUID29
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
+    use rand::RngExt;
+    let mut rng = rand::rng();
     for i in 1..=30 {
         let uuid = format!(
             "{:08X}{:08X}{:08X}{:08X}",
-            rng.gen::<u32>(),
-            rng.gen::<u32>(),
-            rng.gen::<u32>(),
-            rng.gen::<u32>()
+            rng.random::<u32>(),
+            rng.random::<u32>(),
+            rng.random::<u32>(),
+            rng.random::<u32>()
         );
         context.insert(format!("UUID{}", i), uuid);
     }
@@ -99,11 +99,11 @@ pub fn add_platform(platform: &str) -> Result<()> {
     for i in 1..=5 {
         let guid = format!(
             "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
-            rng.gen::<u32>(),
-            rng.gen::<u16>(),
-            rng.gen::<u16>(),
-            rng.gen::<u16>(),
-            rng.gen::<u64>() & 0xFFFFFFFFFFFF
+            rng.random::<u32>(),
+            rng.random::<u16>(),
+            rng.random::<u16>(),
+            rng.random::<u16>(),
+            rng.random::<u64>() & 0xFFFFFFFFFFFF
         );
         context.insert(format!("GUID{}", i), guid);
     }

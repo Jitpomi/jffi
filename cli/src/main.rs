@@ -4,6 +4,7 @@ use std::path::PathBuf;
 mod commands;
 mod config;
 mod platform;
+mod setup;
 mod templating;
 
 #[derive(Parser)]
