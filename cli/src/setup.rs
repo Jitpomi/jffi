@@ -72,6 +72,27 @@ pub fn ensure_rust_targets(targets: &[&str]) -> Result<()> {
     Ok(())
 }
 
+/// Ensure Python requirements are installed.
+pub fn ensure_python_requirements(platform: &str) -> Result<()> {
+    let requirements_path = std::path::Path::new("platforms").join(platform).join("requirements.txt");
+    if !requirements_path.exists() {
+        return Ok(());
+    }
+
+    println!("  {} Checking Python dependencies (requirements.txt)... ", "→".bright_blue());
+    
+    let status = Command::new("pip3")
+        .args(["install", "--user", "-r", requirements_path.to_str().unwrap()])
+        .status()
+        .context("Failed to install Python dependencies via pip3")?;
+
+    if !status.success() {
+        anyhow::bail!("Failed to install Python dependencies. Please run 'pip3 install -r {}' manually.", requirements_path.display());
+    }
+
+    Ok(())
+}
+
 /// Setup all dependencies for a platform.
 pub fn setup_platform(platform: &Platform) -> Result<()> {
     println!("{}", format!("🔧 Checking environment for {}...", platform.as_str()).bright_cyan().bold());
@@ -95,14 +116,13 @@ pub fn setup_platform(platform: &Platform) -> Result<()> {
         Platform::Android => {
             ensure_tool("cargo-ndk", &["cargo", "install", "cargo-ndk"])?;
             ensure_rust_targets(&["aarch64-linux-android", "armv7-linux-androideabi", "x86_64-linux-android"])?;
-            // Note: NDK/SDK check is complex, handled by cargo-ndk at build time
         }
         Platform::Linux => {
             if Command::new("cc").arg("--version").output().is_err() {
                 anyhow::bail!("C compiler (cc) is missing. Install build-essential or equivalent.");
             }
             
-            // Helper to install system packages on Debian-based systems
+            // Helper to install system packages
             let install_system_deps = |packages: Vec<&str>| -> Result<()> {
                 if std::env::consts::OS == "linux" && Command::new("apt-get").arg("--version").output().is_ok() {
                     let has_sudo = Command::new("sudo").arg("-n").arg("true").status().map(|s| s.success()).unwrap_or(false);
@@ -114,12 +134,32 @@ pub fn setup_platform(platform: &Platform) -> Result<()> {
                         Command::new("apt-get")
                     };
                     
-                    println!("  {} Installing system dependencies: {}...", "→".bright_blue(), packages.join(", "));
+                    println!("  {} Installing Linux system dependencies: {}...", "→".bright_blue(), packages.join(", "));
                     let _ = cmd.args(["install", "-y"]).args(packages).status()?;
                     Ok(())
+                } else if std::env::consts::OS == "macos" && Command::new("brew").arg("--version").output().is_ok() {
+                    println!("  {} Installing macOS system dependencies for Linux support: {}...", "→".bright_blue(), packages.join(", "));
+                    
+                    // Map linux package names to brew package names if needed
+                    let brew_packages: Vec<&str> = packages.iter().map(|&p| match p {
+                        "libgtk-4-dev" => "gtk4",
+                        "libadwaita-1-dev" => "libadwaita",
+                        "python3-gi" => "pygobject3",
+                        _ => p,
+                    }).collect();
+                    
+                    let status = Command::new("brew")
+                        .arg("install")
+                        .args(brew_packages)
+                        .status()?;
+                        
+                    if !status.success() {
+                        anyhow::bail!("Homebrew failed to install dependencies.");
+                    }
+                    Ok(())
                 } else {
-                    if std::env::consts::OS != "linux" {
-                        anyhow::bail!("Building for Linux requires a Linux host. Cross-compilation from {} is not yet fully supported.", std::env::consts::OS);
+                    if std::env::consts::OS != "linux" && std::env::consts::OS != "macos" {
+                        anyhow::bail!("Building for Linux requires a Linux or macOS host. {} is not supported.", std::env::consts::OS);
                     } else {
                         anyhow::bail!("Missing system dependencies: {}. Please install them manually using your package manager.", packages.join(", "));
                     }
@@ -135,8 +175,11 @@ pub fn setup_platform(platform: &Platform) -> Result<()> {
             let has_adwaita = Command::new("pkg-config").args(["--exists", "libadwaita-1"]).status().map(|s| s.success()).unwrap_or(false);
             
             if !has_gtk4 || !has_adwaita {
-                install_system_deps(vec!["libgtk-4-dev", "libadwaita-1-dev"])?;
+                install_system_deps(vec!["libgtk-4-dev", "libadwaita-1-dev", "python3-gi"])?;
             }
+
+            // Install Python requirements
+            ensure_python_requirements("linux")?;
         }
         Platform::Windows => {
             if std::env::consts::OS != "windows" {
