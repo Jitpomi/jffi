@@ -462,13 +462,18 @@ fn run_linux() -> Result<()> {
         .context("Failed to copy library to platforms/linux")?;
     
     // Check display environment for headless fallback
-    let display_set = std::env::var("DISPLAY").is_ok()
-        || std::env::var("WAYLAND_DISPLAY").is_ok();
+    let display_var = std::env::var("DISPLAY").unwrap_or_default();
+    let wayland_var = std::env::var("WAYLAND_DISPLAY").unwrap_or_default();
+    let display_set = !display_var.trim().is_empty() || !wayland_var.trim().is_empty();
+    
     let has_xvfb = Command::new("which")
         .arg("xvfb-run")
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
+
+    // Allow user to disable headless mode via env var
+    let force_no_headless = std::env::var("JFFI_HEADLESS").map(|v| v == "0").unwrap_or(false);
 
     if !display_set && !has_xvfb {
         anyhow::bail!(
@@ -481,15 +486,19 @@ fn run_linux() -> Result<()> {
     // Launch the Python app
     println!("  {} Launching app...", "→".bright_blue());
 
-    let mut cmd = if !display_set {
+    let mut cmd = if !display_set && !force_no_headless {
         println!(
             "  {} No display detected, using xvfb-run for headless mode...",
             "→".bright_blue()
         );
+        println!("     (Set JFFI_HEADLESS=0 to disable this behavior)");
         let mut c = Command::new("xvfb-run");
         c.args(&["--auto-servernum", "--server-args=-screen 0 1024x768x24", "python3", "main.py"]);
         c
     } else {
+        if !display_set && force_no_headless {
+            println!("  {} Headless mode disabled, attempting regular launch...", "→".bright_blue());
+        }
         let mut c = Command::new("python3");
         c.arg("main.py");
         c
