@@ -190,7 +190,14 @@ pub fn setup_platform(platform: &Platform) -> Result<()> {
             let has_adwaita = Command::new("pkg-config").args(["--exists", "libadwaita-1"]).status().map(|s| s.success()).unwrap_or(false);
             
             if !has_gtk4 || !has_adwaita {
-                install_system_deps(vec!["libgtk-4-dev", "libadwaita-1-dev", "python3-gi"])?;
+                install_system_deps(vec![
+                    "libgtk-4-dev", 
+                    "libadwaita-1-dev", 
+                    "python3-gi", 
+                    "python3-gi-cairo", 
+                    "gir1.2-gtk-4.0", 
+                    "gir1.2-adw-1"
+                ])?;
             }
 
             // Install Python requirements
