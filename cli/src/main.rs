@@ -6,6 +6,7 @@ mod config;
 mod platform;
 mod setup;
 mod templating;
+mod flatpak;
 
 #[derive(Parser)]
 #[command(name = "jffi")]
@@ -65,6 +66,8 @@ enum Commands {
         /// Skip auto-generation of Android ndk-context JNI bridge
         #[arg(long)]
         no_android_bridge: bool,
+        #[arg(long)]
+        flatpak: bool,
     },
     
     /// Run the app on specific platform
@@ -84,6 +87,8 @@ enum Commands {
         /// Skip auto-generation of Android ndk-context JNI bridge
         #[arg(long)]
         no_android_bridge: bool,
+        #[arg(long)]
+        flatpak: bool,
     },
     
     /// Watch mode - auto-rebuild on changes
@@ -99,6 +104,8 @@ enum Commands {
         /// Skip auto-generation of Android ndk-context JNI bridge
         #[arg(long)]
         no_android_bridge: bool,
+        #[arg(long)]
+        flatpak: bool,
     },
     
     /// Add a new platform to existing project
@@ -122,30 +129,39 @@ fn main() -> anyhow::Result<()> {
         Commands::New { name, platforms, template, path } => {
             commands::new::create_project(&name, platforms.as_deref(), template.as_deref(), path)?;
         }
-        Commands::Build { platform, all, release, device, deploy, verbose, no_android_bridge } => {
+        Commands::Build { platform, all, release, device, deploy, verbose, no_android_bridge, flatpak } => {
             if verbose {
                 std::env::set_var("JFFI_VERBOSE", "1");
             }
             if no_android_bridge {
                 std::env::set_var("JFFI_NO_ANDROID_BRIDGE", "1");
+            }
+            if flatpak {
+                std::env::set_var("JFFI_FLATPAK", "1");
             }
             commands::build::build_project(platform, all, release, device, deploy)?;
         }
-        Commands::Run { platform, device, verbose, no_android_bridge } => {
+        Commands::Run { platform, device, verbose, no_android_bridge, flatpak } => {
             if verbose {
                 std::env::set_var("JFFI_VERBOSE", "1");
             }
             if no_android_bridge {
                 std::env::set_var("JFFI_NO_ANDROID_BRIDGE", "1");
+            }
+            if flatpak {
+                std::env::set_var("JFFI_FLATPAK", "1");
             }
             commands::run::run_project(&platform, device)?;
         }
-        Commands::Dev { platform, verbose, no_android_bridge } => {
+        Commands::Dev { platform, verbose, no_android_bridge, flatpak } => {
             if verbose {
                 std::env::set_var("JFFI_VERBOSE", "1");
             }
             if no_android_bridge {
                 std::env::set_var("JFFI_NO_ANDROID_BRIDGE", "1");
+            }
+            if flatpak {
+                std::env::set_var("JFFI_FLATPAK", "1");
             }
             commands::dev::watch_project(&platform)?;
         }

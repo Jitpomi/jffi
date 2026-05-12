@@ -95,12 +95,18 @@ impl Default for WindowsConfig {
 pub struct LinuxConfig {
     #[serde(default = "default_gtk_version")]
     pub gtk_version: String,
+    #[serde(default = "default_linux_app_id")]
+    pub app_id: String,
+    #[serde(default = "default_linux_runtime_version")]
+    pub runtime_version: String,
 }
 
 impl Default for LinuxConfig {
     fn default() -> Self {
         Self {
             gtk_version: "4.0".to_string(),
+            app_id: "io.jffi.app".to_string(),
+            runtime_version: "46".to_string(),
         }
     }
 }
@@ -141,6 +147,14 @@ fn default_gtk_version() -> String {
 
 fn default_web_target() -> String {
     "es2020".to_string()
+}
+
+fn default_linux_app_id() -> String {
+    "io.jffi.app".to_string()
+}
+
+fn default_linux_runtime_version() -> String {
+    "46".to_string()
 }
 
 pub fn load_config() -> Result<Config> {

@@ -1412,6 +1412,9 @@ fn ensure_uniffi_bindgen_cs() -> Result<()> {
 }
 
 fn build_linux(release: bool) -> Result<()> {
+    if std::env::var("JFFI_FLATPAK").is_ok() {
+        return crate::flatpak::build_flatpak(release);
+    }
     println!("{} Building Linux project...", "→".bright_blue());
 
     let profile = if release { "release" } else { "debug" };

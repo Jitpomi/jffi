@@ -24,7 +24,13 @@ pub fn run_project(platform_str: &str, device: bool) -> Result<()> {
         Platform::Macos => run_macos(),
         Platform::Android => run_android(),
         Platform::Windows => run_windows(),
-        Platform::Linux => run_linux(),
+        Platform::Linux => {
+            if std::env::var("JFFI_FLATPAK").is_ok() {
+                crate::flatpak::run_flatpak()
+            } else {
+                run_linux()
+            }
+        },
         Platform::Web => run_web(),
     }
 }

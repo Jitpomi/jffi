@@ -514,9 +514,17 @@ fn launch_linux_app_background() -> Result<()> {
         if !display_set && force_no_headless {
             println!("  {} Headless mode disabled, attempting regular launch...", "→".bright_blue());
         }
-        let mut c = Command::new("python3");
-        c.arg("main.py");
-        c
+        
+        if std::env::var("JFFI_FLATPAK").is_ok() {
+            let config = crate::config::load_config()?;
+            let mut c = Command::new("flatpak");
+            c.args(&["run", &config.platforms.linux.app_id]);
+            c
+        } else {
+            let mut c = Command::new("python3");
+            c.arg("main.py");
+            c
+        }
     };
 
     let verbose = std::env::var("JFFI_VERBOSE").is_ok();
@@ -542,10 +550,17 @@ fn launch_linux_app_background() -> Result<()> {
 }
 
 fn restart_linux_app() -> Result<()> {
-    // Kill existing Python processes running main.py
-    let _ = Command::new("pkill")
-        .args(&["-f", "python3.*main.py"])
-        .status();
+    // Kill existing processes
+    if std::env::var("JFFI_FLATPAK").is_ok() {
+        let config = crate::config::load_config()?;
+        let _ = Command::new("flatpak")
+            .args(&["kill", &config.platforms.linux.app_id])
+            .status();
+    } else {
+        let _ = Command::new("pkill")
+            .args(&["-f", "python3.*main.py"])
+            .status();
+    }
     
     // Wait a moment for cleanup
     std::thread::sleep(Duration::from_millis(200));
