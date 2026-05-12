@@ -81,10 +81,25 @@ pub fn ensure_python_requirements(platform: &str) -> Result<()> {
 
     println!("  {} Checking Python dependencies (requirements.txt)... ", "→".bright_blue());
     
+    let req_str = requirements_path.to_str().unwrap();
+    
+    // Attempt 1: Standard user install
     let status = Command::new("pip3")
-        .args(["install", "--user", "-r", requirements_path.to_str().unwrap()])
+        .args(["install", "--user", "-r", req_str])
         .status()
-        .context("Failed to install Python dependencies via pip3")?;
+        .context("Failed to run pip3")?;
+
+    if status.success() {
+        return Ok(());
+    }
+
+    // Attempt 2: Handle PEP 668 (externally-managed-environment)
+    // This is common on Debian 12+, Ubuntu 23.04+, etc.
+    println!("  {} Environment is managed by OS. Retrying with --break-system-packages...", "⚠".yellow());
+    let status = Command::new("pip3")
+        .args(["install", "--user", "--break-system-packages", "-r", req_str])
+        .status()
+        .context("Failed to run pip3 with --break-system-packages")?;
 
     if !status.success() {
         anyhow::bail!("Failed to install Python dependencies. Please run 'pip3 install -r {}' manually.", requirements_path.display());
