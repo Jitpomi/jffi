@@ -10,13 +10,10 @@ pub fn remove_platform(platform: &str) -> Result<()> {
     // Validate project structure
     if !PathBuf::from("jffi.toml").exists() {
         anyhow::bail!(
-            "{}\n\n{}",
+            "{}\n\nThis command must be run from a project created with:\n  {} {}",
             "Error: Not in a JFFI project directory.".red().bold(),
-            format!(
-                "This command must be run from a project created with:\n  {} {}",
-                "jffi new".bright_cyan(),
-                "<project-name>".bright_yellow()
-            )
+            "jffi new".bright_cyan(),
+            "<project-name>".bright_yellow()
         );
     }
 

@@ -8,13 +8,10 @@ use crate::platform::Platform;
 fn validate_project_structure() -> Result<()> {
     if !Path::new("jffi.toml").exists() {
         anyhow::bail!(
-            "{}\n\n{}",
+            "{}\n\nThis command must be run from a project created with:\n  {} {}\n\nOr navigate to an existing JFFI project directory.",
             "Error: Not in a JFFI project directory.".red().bold(),
-            format!(
-                "This command must be run from a project created with:\n  {} {}\n\nOr navigate to an existing JFFI project directory.",
-                "jffi new".bright_cyan(),
-                "<project-name>".bright_yellow()
-            )
+            "jffi new".bright_cyan(),
+            "<project-name>".bright_yellow()
         );
     }
     
@@ -233,7 +230,7 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
     
     // Generate Swift bindings using uniffi-bindgen
     let status = Command::new("uniffi-bindgen")
-        .args(&[
+        .args([
             "generate",
             "--library",
             lib_path.to_str().unwrap(),
@@ -289,7 +286,7 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
     std::fs::create_dir_all(universal_dir)?;
     
     let lipo_status = Command::new("lipo")
-        .args(&[
+        .args([
             "-create",
             &sim_arm64_lib,
             &sim_x86_lib,
@@ -366,7 +363,7 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
     
     // XCFramework doesn't exist - create it fresh
     let xcframework_status = Command::new("xcodebuild")
-        .args(&[
+        .args([
             "-create-xcframework",
             "-library", &sim_universal_lib,
             "-library", &device_lib,
@@ -435,7 +432,7 @@ rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
 fn check_ndk_context_needed() -> bool {
     // Check if any dependency uses ndk-context (e.g., hickory-resolver for DNS)
     let output = Command::new("cargo")
-        .args(&["tree", "-i", "ndk-context", "--target", "aarch64-linux-android", "--depth", "10"])
+        .args(["tree", "-i", "ndk-context", "--target", "aarch64-linux-android", "--depth", "10"])
         .output();
     
     if let Ok(output) = output {
@@ -549,7 +546,7 @@ fn build_android(release: bool) -> Result<()> {
     
     // Generate Kotlin bindings using uniffi-bindgen
     let status = Command::new("uniffi-bindgen")
-        .args(&[
+        .args([
             "generate",
             "--library",
             lib_path.to_str().unwrap(),
@@ -818,7 +815,7 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
     
     // Generate Swift bindings using uniffi-bindgen
     let status = Command::new("uniffi-bindgen")
-        .args(&[
+        .args([
             "generate",
             "--library",
             lib_path.to_str().unwrap(),
@@ -857,7 +854,7 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
     std::fs::create_dir_all("target/macos-universal")?;
     
     let lipo_status = Command::new("lipo")
-        .args(&[
+        .args([
             "-create",
             &arm64_lib,
             &x86_lib,
@@ -926,7 +923,7 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
     
     // XCFramework doesn't exist - create it fresh
     let xcframework_status = Command::new("xcodebuild")
-        .args(&[
+        .args([
             "-create-xcframework",
             "-library", &universal_lib,
             "-output", &xcframework_path,
@@ -1305,7 +1302,7 @@ fn find_msbuild() -> Option<String> {
     // Ask vswhere to locate MSBuild.exe. Example output:
     // C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe
     let out = Command::new(vswhere)
-        .args(&[
+        .args([
             "-latest",
             "-products",
             "*",
@@ -1343,7 +1340,7 @@ fn ensure_uniffi_bindgen() -> Result<()> {
     if check.is_err() || !check.unwrap().status.success() {
         println!("    Installing uniffi-bindgen...");
         let status = Command::new("cargo")
-            .args(&["install", "uniffi", "--features", "cli", "--bin", "uniffi-bindgen", "--version", "0.31.1"])
+            .args(["install", "uniffi", "--features", "cli", "--bin", "uniffi-bindgen", "--version", "0.31.1"])
             .status()
             .context("Failed to install uniffi-bindgen")?;
 
@@ -1389,11 +1386,11 @@ fn ensure_uniffi_bindgen_cs() -> Result<()> {
 
         let mut cmd = Command::new("cargo");
         cmd.env("CARGO_NET_GIT_FETCH_WITH_CLI", "true")
-            .args(&["install", "uniffi-bindgen-cs", "--git", &repo]);
+            .args(["install", "uniffi-bindgen-cs", "--git", &repo]);
         if let Some(branch) = branch.as_deref() {
-            cmd.args(&["--branch", branch]);
+            cmd.args(["--branch", branch]);
         } else {
-            cmd.args(&["--tag", &tag]);
+            cmd.args(["--tag", &tag]);
         }
 
         let status = cmd
@@ -1412,9 +1409,6 @@ fn ensure_uniffi_bindgen_cs() -> Result<()> {
 }
 
 fn build_linux(release: bool) -> Result<()> {
-    if std::env::var("JFFI_FLATPAK").is_ok() {
-        return crate::flatpak::build_flatpak(release);
-    }
     println!("{} Building Linux project...", "→".bright_blue());
 
     let profile = if release { "release" } else { "debug" };
@@ -1422,7 +1416,7 @@ fn build_linux(release: bool) -> Result<()> {
     // Check for Python dependencies
     println!("  {} Checking dependencies...", "→".bright_blue());
     let python_check = Command::new("python3")
-        .args(&["-c", "import gi; gi.require_version('Gtk', '4.0')"])
+        .args(["-c", "import gi; gi.require_version('Gtk', '4.0')"])
         .output();
 
     if python_check.is_err() || !python_check.unwrap().status.success() {
@@ -1494,7 +1488,7 @@ fn build_linux(release: bool) -> Result<()> {
     ensure_uniffi_bindgen()?;
 
     let status = Command::new("uniffi-bindgen")
-        .args(&[
+        .args([
             "generate",
             "--library",
             lib_path.to_str().unwrap(),
@@ -1609,7 +1603,7 @@ fn ensure_wasm_target() -> Result<()> {
     println!("  {} Checking wasm32-unknown-unknown target...", "→".bright_blue());
     
     let output = Command::new("rustup")
-        .args(&["target", "list", "--installed"])
+        .args(["target", "list", "--installed"])
         .output()
         .context("Failed to check installed targets")?;
     
@@ -1618,7 +1612,7 @@ fn ensure_wasm_target() -> Result<()> {
     if !installed.contains("wasm32-unknown-unknown") {
         println!("    Installing wasm32-unknown-unknown...");
         let status = Command::new("rustup")
-            .args(&["target", "add", "wasm32-unknown-unknown"])
+            .args(["target", "add", "wasm32-unknown-unknown"])
             .status()
             .context("Failed to install wasm32-unknown-unknown target")?;
         
@@ -1663,7 +1657,7 @@ fn ensure_wasm_bindgen_cli() -> Result<()> {
     let needs_install = if let Ok(output) = check {
         if output.status.success() {
             let installed_version = String::from_utf8_lossy(&output.stdout);
-            let installed_version = installed_version.trim().split_whitespace().last().unwrap_or("");
+            let installed_version = installed_version.split_whitespace().last().unwrap_or("");
             installed_version != required_version
         } else {
             true
@@ -1675,7 +1669,7 @@ fn ensure_wasm_bindgen_cli() -> Result<()> {
     if needs_install {
         println!("    Installing wasm-bindgen-cli {} (this may take a few minutes)...", required_version);
         let status = Command::new("cargo")
-            .args(&["install", "-f", "wasm-bindgen-cli", "--version", &required_version])
+            .args(["install", "-f", "wasm-bindgen-cli", "--version", &required_version])
             .status()
             .context("Failed to install wasm-bindgen-cli")?;
         

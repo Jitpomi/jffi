@@ -24,13 +24,7 @@ pub fn run_project(platform_str: &str, device: bool) -> Result<()> {
         Platform::Macos => run_macos(),
         Platform::Android => run_android(),
         Platform::Windows => run_windows(),
-        Platform::Linux => {
-            if std::env::var("JFFI_FLATPAK").is_ok() {
-                crate::flatpak::run_flatpak()
-            } else {
-                run_linux()
-            }
-        },
+        Platform::Linux => run_linux(),
         Platform::Web => run_web(),
     }
 }
@@ -107,7 +101,7 @@ fn run_ios() -> Result<()> {
                 eprintln!("  ⚠ Launch failed (attempt {}/3): {}", attempt + 1, e);
                 eprintln!("  → Cleaning up and retrying...");
                 let _ = Command::new("xcrun")
-                    .args(&["simctl", "uninstall", "booted", &bundle_id])
+                    .args(["simctl", "uninstall", "booted", &bundle_id])
                     .status();
                 std::thread::sleep(std::time::Duration::from_secs(2));
             }
@@ -187,7 +181,7 @@ fn run_android() -> Result<()> {
     // Wait for device to be ready
     for i in 1..=30 {
         let status = Command::new(&adb_cmd)
-            .args(&["shell", "getprop", "sys.boot_completed"])
+            .args(["shell", "getprop", "sys.boot_completed"])
             .output();
         
         if let Ok(output) = status {
@@ -238,7 +232,7 @@ fn run_android() -> Result<()> {
     
     // Install APK using adb
     let mut install_cmd = Command::new(&adb_cmd);
-    install_cmd.args(&["install", "-r", apk_path.to_str().unwrap()]);
+    install_cmd.args(["install", "-r", apk_path.to_str().unwrap()]);
     if !verbose {
         install_cmd.stdout(Stdio::null()).stderr(Stdio::null());
     }
@@ -264,7 +258,7 @@ fn run_android() -> Result<()> {
     // Launch the app
     let activity = format!("{}.MainActivity", package_name);
     Command::new(&adb_cmd)
-        .args(&[
+        .args([
             "shell",
             "am",
             "start",
@@ -422,7 +416,7 @@ fn run_linux() -> Result<()> {
     // Check for build tools (gcc)
     let needs_setup = !Command::new("gcc").arg("--version").output()?.status.success()
         || !Command::new("python3").arg("--version").output()?.status.success()
-        || !Command::new("pkg-config").args(&["--exists", "gtk4"]).output()?.status.success();
+        || !Command::new("pkg-config").args(["--exists", "gtk4"]).output()?.status.success();
     
     if needs_setup {
         use std::process::Stdio;
@@ -499,7 +493,7 @@ fn run_linux() -> Result<()> {
         );
         println!("     (Set JFFI_HEADLESS=0 to disable this behavior)");
         let mut c = Command::new("xvfb-run");
-        c.args(&["--auto-servernum", "--server-args=-screen 0 1024x768x24", "python3", "main.py"]);
+        c.args(["--auto-servernum", "--server-args=-screen 0 1024x768x24", "python3", "main.py"]);
         c
     } else {
         if !display_set && force_no_headless {

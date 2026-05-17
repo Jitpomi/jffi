@@ -343,7 +343,7 @@ pub fn rebuild_windows_rust_only() -> Result<()> {
     
     // Build only the detected target
     let status = Command::new("cargo")
-        .args(&["build", "--target", target, "--manifest-path", "core/Cargo.toml"])
+        .args(["build", "--target", target, "--manifest-path", "core/Cargo.toml"])
         .status()
         .context("Failed to run cargo build")?;
     
@@ -508,23 +508,15 @@ fn launch_linux_app_background() -> Result<()> {
         );
         println!("     (Set JFFI_HEADLESS=0 to disable this behavior)");
         let mut c = Command::new("xvfb-run");
-        c.args(&["--auto-servernum", "--server-args=-screen 0 1024x768x24", "python3", "main.py"]);
+        c.args(["--auto-servernum", "--server-args=-screen 0 1024x768x24", "python3", "main.py"]);
         c
     } else {
         if !display_set && force_no_headless {
             println!("  {} Headless mode disabled, attempting regular launch...", "→".bright_blue());
         }
-        
-        if std::env::var("JFFI_FLATPAK").is_ok() {
-            let config = crate::config::load_config()?;
-            let mut c = Command::new("flatpak");
-            c.args(&["run", &config.platforms.linux.app_id]);
-            c
-        } else {
-            let mut c = Command::new("python3");
-            c.arg("main.py");
-            c
-        }
+        let mut c = Command::new("python3");
+        c.arg("main.py");
+        c
     };
 
     let verbose = std::env::var("JFFI_VERBOSE").is_ok();
@@ -551,16 +543,9 @@ fn launch_linux_app_background() -> Result<()> {
 
 fn restart_linux_app() -> Result<()> {
     // Kill existing processes
-    if std::env::var("JFFI_FLATPAK").is_ok() {
-        let config = crate::config::load_config()?;
-        let _ = Command::new("flatpak")
-            .args(&["kill", &config.platforms.linux.app_id])
-            .status();
-    } else {
-        let _ = Command::new("pkill")
-            .args(&["-f", "python3.*main.py"])
-            .status();
-    }
+    let _ = Command::new("pkill")
+        .args(["-f", "python3.*main.py"])
+        .status();
     
     // Wait a moment for cleanup
     std::thread::sleep(Duration::from_millis(200));
@@ -620,7 +605,7 @@ fn start_web_dev_server() -> Result<()> {
     
     // Start Vite dev server in background
     let mut vite_cmd = Command::new("npm");
-    vite_cmd.args(&["run", "dev"])
+    vite_cmd.args(["run", "dev"])
         .current_dir("platforms/web");
     if !verbose {
         vite_cmd.stdout(Stdio::null()).stderr(Stdio::null());

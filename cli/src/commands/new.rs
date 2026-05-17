@@ -3,7 +3,7 @@ use colored::*;
 use dialoguer::{theme::ColorfulTheme, Input, MultiSelect};
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::templating::TemplateEngine;
 use crate::platform::Platform;
@@ -71,7 +71,7 @@ pub fn create_project(
         
         if let Some(t) = available_templates.iter().find(|t| 
             t.name.to_lowercase() == template_lower || 
-            t.path.file_name().map(|n| n.to_str()).flatten().map(|n| n.to_lowercase()) == Some(template_lower.clone())
+            t.path.file_name().and_then(|n| n.to_str()).map(|n| n.to_lowercase()) == Some(template_lower.clone())
         ) {
             if t.manifest.metadata.is_coming_soon() {
                 anyhow::bail!("Template '{}' is coming soon. Only 'hello' is available.", template_arg);
@@ -154,7 +154,7 @@ pub fn create_project(
         let defaults = vec![true, false, false, false, false, false];
         let chosen = MultiSelect::with_theme(&theme)
             .with_prompt("Select platforms")
-            .items(&items)
+            .items(items)
             .defaults(&defaults)
             .interact()?;
 
@@ -266,7 +266,7 @@ fn create_project_structure(
     Ok(())
 }
 
-pub fn create_workspace_cargo_toml(dir: &PathBuf, platforms: &[&str]) -> Result<()> {
+pub fn create_workspace_cargo_toml(dir: &Path, platforms: &[&str]) -> Result<()> {
     let members = if platforms.contains(&"web") {
         r#"["core", "ffi-web"]"#
     } else {
@@ -291,7 +291,7 @@ resolver = "2"{}"#, members, profile);
     Ok(())
 }
 
-pub fn create_ffi_web_crate(dir: &PathBuf, name: &str) -> Result<()> {
+pub fn create_ffi_web_crate(dir: &Path, name: &str) -> Result<()> {
     let ffi_web_dir = dir.join("ffi-web");
     fs::create_dir_all(ffi_web_dir.join("src"))?;
     
@@ -337,7 +337,7 @@ impl FfiCore {{
     Ok(())
 }
 
-fn create_config_file(dir: &PathBuf, name: &str, platforms: &[&str]) -> Result<()> {
+fn create_config_file(dir: &Path, name: &str, platforms: &[&str]) -> Result<()> {
     let platform_list: Vec<&str> = platforms.to_vec();
     let config = format!(r#"[package]
 name = "{}"
@@ -381,7 +381,7 @@ MACOSX_DEPLOYMENT_TARGET = "13.0"
     Ok(())
 }
 
-fn create_makefile(dir: &PathBuf, platforms: &[&str]) -> Result<()> {
+fn create_makefile(dir: &Path, platforms: &[&str]) -> Result<()> {
     let first_platform = platforms.first().unwrap_or(&"ios");
     
     let makefile = format!(r#".PHONY: help build run dev clean
@@ -418,7 +418,7 @@ clean:
     Ok(())
 }
 
-fn create_readme(dir: &PathBuf, name: &str, platforms: &[&str]) -> Result<()> {
+fn create_readme(dir: &Path, name: &str, platforms: &[&str]) -> Result<()> {
     let readme = format!(r#"# {}
 
 Cross-platform app built with Rust + UniFFI

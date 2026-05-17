@@ -4,3 +4,6 @@ pub mod run;
 pub mod dev;
 pub mod add;
 pub mod remove;
+pub mod bundle;
+pub mod doctor;
+pub mod icons;

@@ -87,7 +87,7 @@ impl XcodeProject {
         let project_path_str = self.project_path.to_str().ok_or_else(|| anyhow::anyhow!("Invalid project path"))?;
         
         let mut clean_cmd = Command::new("xcodebuild");
-        clean_cmd.args(&[
+        clean_cmd.args([
             "-project",
             project_path_str,
             "-scheme",
@@ -100,14 +100,14 @@ impl XcodeProject {
         let _ = clean_cmd.status();
         
         let mut build_cmd = Command::new("xcodebuild");
-        build_cmd.args(&[
+        build_cmd.args([
             "-project",
             project_path_str,
             "-scheme",
             &self.scheme,
         ]);
         if !destination.is_empty() {
-            build_cmd.args(&["-destination", destination]);
+            build_cmd.args(["-destination", destination]);
         }
         build_cmd.arg("build");
         if !verbose {
@@ -152,7 +152,7 @@ impl AndroidProject {
     pub fn open(&self) -> Result<()> {
         let path_str = self.project_path.to_str().ok_or_else(|| anyhow::anyhow!("Invalid project path"))?;
         Command::new("open")
-            .args(&["-a", "Android Studio", path_str])
+            .args(["-a", "Android Studio", path_str])
             .status()
             .context("Failed to open Android Studio")?;
         Ok(())
@@ -193,7 +193,7 @@ pub struct IOSSimulator;
 impl IOSSimulator {
     pub fn get_available() -> Result<(String, String)> {
         let output = Command::new("xcrun")
-            .args(&["simctl", "list", "devices", "available"])
+            .args(["simctl", "list", "devices", "available"])
             .output()
             .context("Failed to list simulators")?;
 
@@ -238,7 +238,7 @@ impl IOSSimulator {
 
     pub fn boot(&self, uuid: &str) -> Result<()> {
         Command::new("xcrun")
-            .args(&["simctl", "boot", uuid])
+            .args(["simctl", "boot", uuid])
             .output()
             .ok();
         Ok(())
@@ -246,7 +246,7 @@ impl IOSSimulator {
 
     pub fn open_app(&self) -> Result<()> {
         Command::new("open")
-            .args(&["-a", "Simulator"])
+            .args(["-a", "Simulator"])
             .status()
             .ok();
         Ok(())
@@ -255,7 +255,7 @@ impl IOSSimulator {
     pub fn install_app(&self, app_path: &Path) -> Result<()> {
         let app_path_str = app_path.to_str().ok_or_else(|| anyhow::anyhow!("Invalid app path"))?;
         let status = Command::new("xcrun")
-            .args(&["simctl", "install", "booted", app_path_str])
+            .args(["simctl", "install", "booted", app_path_str])
             .status()
             .context("Failed to install app")?;
 
@@ -267,7 +267,7 @@ impl IOSSimulator {
 
     pub fn launch_app(&self, bundle_id: &str) -> Result<()> {
         let status = Command::new("xcrun")
-            .args(&["simctl", "launch", "booted", bundle_id])
+            .args(["simctl", "launch", "booted", bundle_id])
             .status()
             .context("Failed to launch app")?;
 

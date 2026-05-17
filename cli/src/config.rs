@@ -6,6 +6,7 @@ use std::fs;
 pub struct Config {
     pub package: PackageConfig,
     pub platforms: PlatformsConfig,
+    pub bundle: Option<BundleConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,18 +96,12 @@ impl Default for WindowsConfig {
 pub struct LinuxConfig {
     #[serde(default = "default_gtk_version")]
     pub gtk_version: String,
-    #[serde(default = "default_linux_app_id")]
-    pub app_id: String,
-    #[serde(default = "default_linux_runtime_version")]
-    pub runtime_version: String,
 }
 
 impl Default for LinuxConfig {
     fn default() -> Self {
         Self {
             gtk_version: "4.0".to_string(),
-            app_id: "io.jffi.app".to_string(),
-            runtime_version: "46".to_string(),
         }
     }
 }
@@ -149,13 +144,169 @@ fn default_web_target() -> String {
     "es2020".to_string()
 }
 
-fn default_linux_app_id() -> String {
-    "io.jffi.app".to_string()
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BundleConfig {
+    pub name: Option<String>,
+    pub identifier: Option<String>,
+    pub version: Option<String>,
+    pub display_version: Option<String>,
+    pub build_number: Option<u32>,
+    pub resources: Option<Vec<String>>,
+    pub license_file: Option<String>,
+    pub homepage: Option<String>,
+    pub icons: Option<BundleIconsConfig>,
+    pub macos: Option<BundleMacosConfig>,
+    pub ios: Option<BundleIosConfig>,
+    pub android: Option<BundleAndroidConfig>,
+    pub windows: Option<BundleWindowsConfig>,
+    pub linux: Option<BundleLinuxConfig>,
+    pub web: Option<BundleWebConfig>,
+    pub signing: Option<BundleSigningConfig>,
 }
 
-fn default_linux_runtime_version() -> String {
-    "46".to_string()
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BundleIconsConfig {
+    pub source: String,
+    #[serde(default = "default_true")]
+    pub generate: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BundleMacosConfig {
+    #[serde(default = "default_macos_formats")]
+    pub formats: Vec<String>,
+    #[serde(default = "default_macos_targets")]
+    pub targets: Vec<String>,
+    #[serde(default = "default_macos_deployment_target")]
+    pub minimum_system_version: String,
+    pub category: Option<String>,
+    pub signing_identity: Option<String>,
+    #[serde(default = "default_true")]
+    pub hardened_runtime: bool,
+    #[serde(default = "default_true")]
+    pub notarize: bool,
+    #[serde(default = "default_true")]
+    pub staple: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BundleIosConfig {
+    #[serde(default = "default_ios_format")]
+    pub format: String,
+    #[serde(default = "default_ios_destination")]
+    pub destination: String,
+    #[serde(default = "default_ios_export_method")]
+    pub export_method: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BundleAndroidConfig {
+    #[serde(default = "default_android_formats")]
+    pub formats: Vec<String>,
+    #[serde(default = "default_android_abis")]
+    pub abis: Vec<String>,
+    #[serde(default = "default_android_min_sdk_bundle")]
+    pub min_sdk: u32,
+    #[serde(default = "default_android_compile_sdk")]
+    pub compile_sdk: u32,
+    #[serde(default = "default_android_build_type")]
+    pub build_type: String,
+    #[serde(default = "default_true")]
+    pub split_debug_symbols: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BundleWindowsConfig {
+    #[serde(default = "default_windows_formats")]
+    pub formats: Vec<String>,
+    pub identity_name: Option<String>,
+    pub publisher_id: Option<String>,
+    #[serde(default = "default_windows_targets")]
+    pub targets: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BundleLinuxConfig {
+    #[serde(default = "default_linux_formats")]
+    pub formats: Vec<String>,
+    pub app_id: Option<String>,
+    #[serde(default = "default_linux_runtime")]
+    pub runtime: String,
+    #[serde(default = "default_linux_runtime_version")]
+    pub runtime_version: String,
+    #[serde(default = "default_linux_sdk")]
+    pub sdk: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BundleWebConfig {
+    #[serde(default = "default_web_dist_dir")]
+    pub dist_dir: String,
+    #[serde(default = "default_web_build_command")]
+    pub build_command: String,
+    #[serde(default = "default_true")]
+    pub wasm_opt: bool,
+    #[serde(default = "default_web_base_path")]
+    pub base_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BundleSigningConfig {
+    #[serde(default = "default_signing_profile")]
+    pub profile: String,
+    pub profiles: Option<std::collections::HashMap<String, SigningProfile>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SigningProfile {
+    pub apple: Option<AppleSigningProfile>,
+    pub android: Option<AndroidSigningProfile>,
+    pub windows: Option<WindowsSigningProfile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowsSigningProfile {
+    pub certificate_thumbprint: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppleSigningProfile {
+    pub method: Option<String>,
+    pub team_id: Option<String>,
+    pub entitlements: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AndroidSigningProfile {
+    pub keystore_path: Option<String>,
+    pub key_alias: Option<String>,
+    pub store_password_env: Option<String>,
+    pub key_password_env: Option<String>,
+}
+
+fn default_true() -> bool { true }
+fn default_macos_formats() -> Vec<String> { vec!["app".to_string(), "dmg".to_string()] }
+fn default_macos_targets() -> Vec<String> { vec!["aarch64-apple-darwin".to_string(), "x86_64-apple-darwin".to_string()] }
+fn default_ios_format() -> String { "ipa".to_string() }
+fn default_ios_destination() -> String { "generic/platform=iOS".to_string() }
+fn default_ios_export_method() -> String { "app-store".to_string() }
+fn default_android_formats() -> Vec<String> { vec!["aab".to_string(), "apk".to_string()] }
+fn default_android_abis() -> Vec<String> { vec!["arm64-v8a".to_string(), "armeabi-v7a".to_string(), "x86_64".to_string()] }
+fn default_android_min_sdk_bundle() -> u32 { 23 }
+fn default_android_compile_sdk() -> u32 { 36 }
+fn default_android_build_type() -> String { "release".to_string() }
+fn default_windows_formats() -> Vec<String> { vec!["msixbundle".to_string(), "msi".to_string()] }
+fn default_windows_targets() -> Vec<String> { vec!["x86_64-pc-windows-msvc".to_string(), "aarch64-pc-windows-msvc".to_string()] }
+fn default_linux_formats() -> Vec<String> { vec!["flatpak".to_string(), "appimage".to_string(), "deb".to_string()] }
+fn default_linux_runtime() -> String { "org.gnome.Platform".to_string() }
+fn default_linux_runtime_version() -> String { "48".to_string() }
+fn default_linux_sdk() -> String { "org.gnome.Sdk".to_string() }
+fn default_web_dist_dir() -> String { "platforms/web/dist".to_string() }
+fn default_web_build_command() -> String { "npm run build".to_string() }
+fn default_web_base_path() -> String { "/".to_string() }
+fn default_signing_profile() -> String { "release".to_string() }
+
+
 
 pub fn load_config() -> Result<Config> {
     let config_path = "jffi.toml";
