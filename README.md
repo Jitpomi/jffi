@@ -38,6 +38,18 @@ jffi run --platform web      # Web browser
 
 That's it! The app builds, compiles Rust, generates platform bindings, and launches automatically.
 
+### Check Environment Readiness
+
+Before building or bundling for new platforms, use `jffi doctor` to verify that your development environment has all the required tools, SDKs, and compilers installed.
+
+```bash
+# Check environment readiness for all supported platforms
+jffi doctor
+
+# Check readiness for a specific platform
+jffi doctor --platform android
+```
+
 ### Bundle Your App for Distribution
 
 Once your application is ready, JFFI can orchestrate the packaging of release-ready artifacts (DMG, AppImage, EXE, APK, etc.) for distribution using a single command.
