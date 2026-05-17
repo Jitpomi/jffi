@@ -38,6 +38,27 @@ jffi run --platform web      # Web browser
 
 That's it! The app builds, compiles Rust, generates platform bindings, and launches automatically.
 
+### Bundle Your App for Distribution
+
+Once your application is ready, JFFI can orchestrate the packaging of release-ready artifacts (DMG, AppImage, EXE, APK, etc.) for distribution using a single command.
+
+```bash
+# Bundle for macOS (creates a .dmg)
+jffi bundle --platform macos
+
+# Bundle for Windows (creates an .exe or installer)
+jffi bundle --platform windows
+
+# Bundle for Linux (creates an .AppImage or Flatpak)
+jffi bundle --platform linux
+
+# Bundle for Android (creates an .aab or .apk)
+jffi bundle --platform android
+
+# Advanced options (code signing, notarization, specific formats)
+jffi bundle --platform macos --format app --profile release --notarize
+```
+
 ## 📱 Supported Platforms
 
 | Platform | Status | UI Framework | Language |
