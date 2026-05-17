@@ -4,6 +4,10 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+if (file("../../target/jffi/generated/android/jffi-bundle.gradle").exists()) {
+    apply(from = "../../target/jffi/generated/android/jffi-bundle.gradle")
+}
+
 android {
     namespace = "com.example.{{name_package}}"
     compileSdk = 35

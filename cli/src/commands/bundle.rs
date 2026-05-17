@@ -187,6 +187,29 @@ fn bundle_android(
             }
             
             let gradlew = if cfg!(windows) { "gradlew.bat" } else { "./gradlew" };
+            let gradlew_path = android_dir.join(if cfg!(windows) { "gradlew.bat" } else { "gradlew" });
+            
+            if !gradlew_path.exists() {
+                println!("  {} Generating Gradle wrapper...", "→".bright_blue());
+                let wrapper_jar = "gradle/wrapper/gradle-wrapper.jar";
+                if android_dir.join(wrapper_jar).exists() {
+                    let wrapper_status = Command::new("java")
+                        .args(["-classpath", wrapper_jar, "org.gradle.wrapper.GradleWrapperMain", "wrapper"])
+                        .current_dir(android_dir)
+                        .status()
+                        .context("Failed to generate Gradle wrapper using Java")?;
+                    if !wrapper_status.success() {
+                        println!("  {} Warning: Failed to generate Gradle wrapper", "⚠".yellow());
+                    } else if !cfg!(windows) {
+                        let _ = Command::new("chmod")
+                            .args(["+x", "gradlew"])
+                            .current_dir(android_dir)
+                            .status();
+                    }
+                } else {
+                    println!("  {} Warning: gradle-wrapper.jar not found at {}", "⚠".yellow(), android_dir.join(wrapper_jar).display());
+                }
+            }
             
             if print_commands {
                 let mut out = format!("{} {}", gradlew, gradle_args.join(" "));
