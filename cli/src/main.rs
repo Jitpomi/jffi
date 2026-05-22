@@ -84,6 +84,10 @@ enum Commands {
         /// Skip auto-generation of Android ndk-context JNI bridge
         #[arg(long)]
         no_android_bridge: bool,
+
+        /// Release build
+        #[arg(short, long)]
+        release: bool,
     },
     
     /// Watch mode - auto-rebuild on changes
@@ -179,14 +183,14 @@ fn main() -> anyhow::Result<()> {
             }
             commands::build::build_project(platform, all, release, device, deploy)?;
         }
-        Commands::Run { platform, device, verbose, no_android_bridge } => {
+        Commands::Run { platform, device, verbose, no_android_bridge, release } => {
             if verbose {
                 std::env::set_var("JFFI_VERBOSE", "1");
             }
             if no_android_bridge {
                 std::env::set_var("JFFI_NO_ANDROID_BRIDGE", "1");
             }
-            commands::run::run_project(&platform, device)?;
+            commands::run::run_project(&platform, device, release)?;
         }
         Commands::Dev { platform, verbose, no_android_bridge } => {
             if verbose {

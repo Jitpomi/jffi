@@ -4,7 +4,7 @@ use std::process::Command;
 
 use crate::platform::Platform;
 
-pub fn run_project(platform_str: &str, device: bool) -> Result<()> {
+pub fn run_project(platform_str: &str, device: bool, release: bool) -> Result<()> {
     let platform = Platform::from_str(platform_str)
         .ok_or_else(|| anyhow::anyhow!("Unknown platform: {}", platform_str))?;
     
@@ -12,8 +12,12 @@ pub fn run_project(platform_str: &str, device: bool) -> Result<()> {
     println!("{}", format!("🚀 Running on {}...", target_desc).bright_green().bold());
     println!();
     
+    // Sync configurations to native projects before run
+    let config = crate::config::load_config()?;
+    crate::commands::build::sync_configs_to_platforms(&config)?;
+    
     // Build first
-    crate::commands::build::build_project(Some(platform_str.to_string()), false, false, device, false)?;
+    crate::commands::build::build_project(Some(platform_str.to_string()), false, release, device, false)?;
     
     println!();
     println!("{}", format!("▶️  Launching {}...", target_desc).bright_cyan().bold());
@@ -87,8 +91,11 @@ fn run_ios() -> Result<()> {
     // Give simulator time to boot
     std::thread::sleep(std::time::Duration::from_secs(3));
     
-    // Get bundle ID (lowercase to match Info.plist)
-    let bundle_id = format!("com.example.{}", app_name.replace("-", "").to_lowercase());
+    // Get bundle ID from config
+    let config = crate::config::load_config()?;
+    let bundle_id = config.bundle.as_ref()
+        .and_then(|b| b.identifier.clone())
+        .unwrap_or_else(|| config.platforms.ios.bundle_id.clone());
     
     // Install and launch with retry logic
     for attempt in 0..3 {
@@ -129,20 +136,21 @@ fn run_android() -> Result<()> {
     // Find adb command
     let adb_cmd = android.find_tool("adb")
         .context("adb not found. Please install Android SDK platform-tools.")?;
+
+    let get_emulator_serial = |adb_path: &str| -> Option<String> {
+        let output = Command::new(adb_path).arg("devices").output().ok()?;
+        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        stdout_str.lines()
+            .skip(1) // Skip header
+            .find(|line| line.contains("emulator") && line.contains("device"))
+            .and_then(|line| line.split_whitespace().next().map(|s| s.to_string()))
+    };
     
     // Check if an emulator is already running
-    let devices_output = Command::new(&adb_cmd)
-        .arg("devices")
-        .output()
-        .context("Failed to check for running devices")?;
+    let mut serial = get_emulator_serial(&adb_cmd);
     
-    let devices_str = String::from_utf8_lossy(&devices_output.stdout);
-    let running_emulator = devices_str.lines()
-        .skip(1) // Skip "List of devices attached" header
-        .find(|line| line.contains("emulator") && line.contains("device"));
-    
-    if running_emulator.is_some() {
-        println!("  {} Using already-running emulator", "→".bright_blue());
+    if let Some(ref s) = serial {
+        println!("  {} Using already-running emulator: {}", "→".bright_blue(), s.bright_cyan());
     } else {
         // Check if emulator is available
         let emulator_output = Command::new(&emulator_cmd)
@@ -176,15 +184,23 @@ fn run_android() -> Result<()> {
         // Wait a bit for emulator to start
         println!("  {} Waiting for emulator to boot...", "→".bright_blue());
         std::thread::sleep(std::time::Duration::from_secs(5));
+        
+        serial = get_emulator_serial(&adb_cmd);
     }
     
     // Wait for device to be ready
     for i in 1..=30 {
-        let status = Command::new(&adb_cmd)
-            .args(["shell", "getprop", "sys.boot_completed"])
-            .output();
+        if serial.is_none() {
+            serial = get_emulator_serial(&adb_cmd);
+        }
+
+        let mut check_cmd = Command::new(&adb_cmd);
+        if let Some(ref s) = serial {
+            check_cmd.args(["-s", s]);
+        }
+        check_cmd.args(["shell", "getprop", "sys.boot_completed"]);
         
-        if let Ok(output) = status {
+        if let Ok(output) = check_cmd.output() {
             if String::from_utf8_lossy(&output.stdout).trim() == "1" {
                 break;
             }
@@ -255,6 +271,9 @@ fn run_android() -> Result<()> {
     
     // Install APK using adb
     let mut install_cmd = Command::new(&adb_cmd);
+    if let Some(ref s) = serial {
+        install_cmd.args(["-s", s]);
+    }
     install_cmd.args(["install", "-r", apk_path.to_str().unwrap()]);
     if !verbose {
         install_cmd.stdout(Stdio::null()).stderr(Stdio::null());
@@ -280,16 +299,19 @@ fn run_android() -> Result<()> {
     
     // Launch the app
     let activity = format!("{}.MainActivity", package_name);
-    Command::new(&adb_cmd)
-        .args([
-            "shell",
-            "am",
-            "start",
-            "-n",
-            &format!("{}/{}", package_name, activity),
-        ])
-        .status()
-        .context("Failed to launch app")?;
+    let mut launch_cmd = Command::new(&adb_cmd);
+    if let Some(ref s) = serial {
+        launch_cmd.args(["-s", s]);
+    }
+    launch_cmd.args([
+        "shell",
+        "am",
+        "start",
+        "-n",
+        &format!("{}/{}", package_name, activity),
+    ])
+    .status()
+    .context("Failed to launch app")?;
     
     println!();
     println!("{}", "  ✅ App launched on emulator!".green());

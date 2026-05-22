@@ -273,20 +273,28 @@ pub fn create_workspace_cargo_toml(dir: &Path, platforms: &[&str]) -> Result<()>
         r#"["core"]"#
     };
     
-    let profile = if platforms.contains(&"web") {
-        r#"
+    // Web projects optimize release build for size ("z"), others optimize for speed ("3")
+    let release_opt = if platforms.contains(&"web") { "z" } else { "3" };
+    
+    let cargo_toml = format!(
+        r#"[workspace]
+members = {}
+resolver = "2"
+
+# Optimize all dependencies in dev mode to make external libraries run at release speed
+[profile.dev.package."*"]
+opt-level = 3
+
+# Also optimize our own core crate in dev mode
+[profile.dev]
+opt-level = 3
 
 [profile.release]
-opt-level = "z"
+opt-level = "{}"
 lto = true
-"#
-    } else {
-        ""
-    };
-    
-    let cargo_toml = format!(r#"[workspace]
-members = {}
-resolver = "2"{}"#, members, profile);
+"#,
+        members, release_opt
+    );
     fs::write(dir.join("Cargo.toml"), cargo_toml)?;
     Ok(())
 }
@@ -476,3 +484,50 @@ Edit your business logic in `core/src/lib.rs`. The FFI bindings will be automati
     println!("  {} README.md", "✓".green());
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn test_create_workspace_cargo_toml_non_web() {
+        let unique_id = uuid::Uuid::new_v4().to_string();
+        let temp_dir = env::temp_dir().join(format!("jffi_test_{}", unique_id));
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let platforms = vec!["ios", "android"];
+        create_workspace_cargo_toml(&temp_dir, &platforms).unwrap();
+
+        let cargo_toml_content = fs::read_to_string(temp_dir.join("Cargo.toml")).unwrap();
+        assert!(cargo_toml_content.contains("members = [\"core\"]"));
+        assert!(cargo_toml_content.contains("[profile.dev.package.\"*\"]"));
+        assert!(cargo_toml_content.contains("opt-level = 3"));
+        assert!(cargo_toml_content.contains("[profile.release]"));
+        assert!(cargo_toml_content.contains("opt-level = \"3\""));
+        assert!(cargo_toml_content.contains("lto = true"));
+
+        fs::remove_dir_all(temp_dir).ok();
+    }
+
+    #[test]
+    fn test_create_workspace_cargo_toml_web() {
+        let unique_id = uuid::Uuid::new_v4().to_string();
+        let temp_dir = env::temp_dir().join(format!("jffi_test_{}", unique_id));
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let platforms = vec!["ios", "web"];
+        create_workspace_cargo_toml(&temp_dir, &platforms).unwrap();
+
+        let cargo_toml_content = fs::read_to_string(temp_dir.join("Cargo.toml")).unwrap();
+        assert!(cargo_toml_content.contains("members = [\"core\", \"ffi-web\"]"));
+        assert!(cargo_toml_content.contains("[profile.dev.package.\"*\"]"));
+        assert!(cargo_toml_content.contains("opt-level = 3"));
+        assert!(cargo_toml_content.contains("[profile.release]"));
+        assert!(cargo_toml_content.contains("opt-level = \"z\""));
+        assert!(cargo_toml_content.contains("lto = true"));
+
+        fs::remove_dir_all(temp_dir).ok();
+    }
+}
+

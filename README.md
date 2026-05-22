@@ -123,6 +123,23 @@ When building for Android, JFFI automatically:
 - Prebuilt AARs (JNA, ML Kit): ❌ Not aligned (upstream issue)
 - Solution: `extractNativeLibs="true"` extracts libraries at install time (official Android approach)
 
+**Note on Production Bundling & Signing Environment:**
+- When running `jffi bundle --platform android`, JFFI's build orchestrator automatically generates a production signing configuration block derived from your `jffi.toml` profiles.
+- **Secure Interactive Prompts** *(recommended)*: If the signing environment variables are not pre-set, `jffi bundle` will securely prompt you for your keystore and key passwords at runtime with masked input — no plaintext exposure in shell history:
+  ```
+  🔑 Env var JFFI_ANDROID_STORE_PASSWORD not set. Keystore password is required for signing.
+  Enter Android Keystore Password (JFFI_ANDROID_STORE_PASSWORD): ••••••••••••••
+  🔑 Env var JFFI_ANDROID_KEY_PASSWORD not set. Key password is required for signing.
+  Enter Android Key Password (JFFI_ANDROID_KEY_PASSWORD): ••••••••••••••
+  ```
+- **CI/CD (non-interactive)**: For automated pipelines, export the variables before invoking the command:
+  ```bash
+  export JFFI_ANDROID_STORE_PASSWORD=your_keystore_password
+  export JFFI_ANDROID_KEY_PASSWORD=your_key_password
+  jffi bundle --platform android
+  ```
+  > ⚠️ Never hard-code passwords in scripts committed to version control. Use CI secret management (e.g. GitHub Actions Secrets, GitLab CI Variables, Fastlane Match).
+
 **References:**
 - [UniFFI uses JNA](https://mozilla.github.io/uniffi-rs/latest/kotlin/gradle.html)
 - [JNA doesn't call JNI_OnLoad](https://github.com/java-native-access/jna/issues/1019)

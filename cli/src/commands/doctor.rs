@@ -26,10 +26,10 @@ fn doctor_bundle(platform: Option<&str>, release: bool) -> Result<()> {
         vec!["macos", "ios", "android", "windows", "linux", "web"]
     };
     
-    for p in platforms_to_check {
+    for p in &platforms_to_check {
         println!("\n{}", format!("Checking prerequisites for {}:", p.to_uppercase()).bright_cyan().bold());
         
-        match p {
+        match *p {
             "macos" | "ios" => {
                 check_tool("xcodebuild", &["-version"], "Xcode is required for Apple platforms");
                 check_tool("lipo", &["-info"], "lipo is required for universal binaries");
@@ -82,6 +82,26 @@ fn doctor_bundle(platform: Option<&str>, release: bool) -> Result<()> {
                 println!("  {} Unknown platform: {}", "⚠".yellow(), p);
             }
         }
+    }
+    
+    // Validate jffi.toml config if it exists
+    if std::path::Path::new("jffi.toml").exists() {
+        println!("\n{}", "🔍 Validating jffi.toml configuration...".bright_cyan().bold());
+        match crate::config::load_config() {
+            Ok(config) => {
+                for p in &platforms_to_check {
+                    println!("\nChecking store-readiness for platform: {}", p.to_uppercase());
+                    if let Err(e) = crate::commands::bundle::validate_bundle_config(&config, p, !release) {
+                        println!("  {} {}", "✗".red(), e);
+                    }
+                }
+            }
+            Err(e) => {
+                println!("  {} Failed to load or parse jffi.toml: {}", "✗".red(), e);
+            }
+        }
+    } else {
+        println!("\n{} 'jffi.toml' not found. Skipping store-readiness checks.", "⚠".yellow());
     }
     
     println!("\n{}", "✅ Doctor check complete.".bright_green().bold());

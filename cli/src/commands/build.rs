@@ -30,6 +30,9 @@ fn validate_project_structure() -> Result<()> {
 pub fn build_project(platform: Option<String>, all: bool, release: bool, device: bool, deploy: bool) -> Result<()> {
     validate_project_structure()?;
     
+    let config = crate::config::load_config()?;
+    sync_configs_to_platforms(&config)?;
+    
     if all {
         build_all_platforms(release)?;
     } else if let Some(platform) = platform {
@@ -466,12 +469,21 @@ fn build_android(release: bool) -> Result<()> {
         validate_android_manifest()?;
     }
     
+    let config = crate::config::load_config()?;
+    
     // Build for all Android architectures
-    let architectures = vec![
+    let mut architectures = vec![
         ("aarch64-linux-android", "arm64-v8a"),
         ("armv7-linux-androideabi", "armeabi-v7a"),
         ("x86_64-linux-android", "x86_64"),
     ];
+    
+    if let Some(abis) = &config.platforms.android.abis {
+        architectures.retain(|(_, abi)| abis.contains(&abi.to_string()));
+        if architectures.is_empty() {
+            anyhow::bail!("No valid Android ABIs configured in jffi.toml. Enabled ABIs: {:?}", abis);
+        }
+    }
     
     let profile = if release { "release" } else { "debug" };
     
@@ -486,10 +498,20 @@ fn build_android(release: bool) -> Result<()> {
             }
             args.extend(&["--manifest-path", "core/Cargo.toml"]);
             
-            let status = Command::new("cargo")
-                .env("CARGO_TARGET_DIR", "target")
-                .args(&args)
-                .status()
+            let ndk_platform = std::env::var("CARGO_NDK_PLATFORM")
+                .unwrap_or_else(|_| config.platforms.android.min_sdk.to_string());
+            
+            let mut cmd = Command::new("cargo");
+            cmd.env("CARGO_TARGET_DIR", "target")
+                .env("CARGO_NDK_PLATFORM", ndk_platform)
+                .args(&args);
+            
+            if let Some(rustflags) = &config.platforms.android.rustflags {
+                let env_var_name = format!("CARGO_TARGET_{}_RUSTFLAGS", target.to_uppercase().replace("-", "_"));
+                cmd.env(env_var_name, rustflags);
+            }
+            
+            let status = cmd.status()
                 .context(format!("Failed to build for {}", target))?;
             
             if !status.success() {
@@ -516,10 +538,20 @@ fn build_android(release: bool) -> Result<()> {
             }
             args.extend(&["--manifest-path", "core/Cargo.toml"]);
             
-            let status = Command::new("cargo")
-                .env("CARGO_TARGET_DIR", "target")
-                .args(&args)
-                .status()
+            let ndk_platform = std::env::var("CARGO_NDK_PLATFORM")
+                .unwrap_or_else(|_| config.platforms.android.min_sdk.to_string());
+            
+            let mut cmd = Command::new("cargo");
+            cmd.env("CARGO_TARGET_DIR", "target")
+                .env("CARGO_NDK_PLATFORM", ndk_platform)
+                .args(&args);
+            
+            if let Some(rustflags) = &config.platforms.android.rustflags {
+                let env_var_name = format!("CARGO_TARGET_{}_RUSTFLAGS", target.to_uppercase().replace("-", "_"));
+                cmd.env(env_var_name, rustflags);
+            }
+            
+            let status = cmd.status()
                 .context(format!("Failed to build for {}", target))?;
             
             if !status.success() {
@@ -530,19 +562,48 @@ fn build_android(release: bool) -> Result<()> {
             pb.finish_with_message(format!("{} Android {}", "✓".green(), abi));
         }
     }
+
+    // Copy libc++_shared.so for each architecture if available in the NDK
+    if let Some(ndk_dir) = find_ndk_dir() {
+        for (target, abi) in &architectures {
+            if let Some(libcxx_path) = find_libcxx_shared(&ndk_dir, target) {
+                let dest_dir = format!("platforms/android/app/src/main/jniLibs/{}", abi);
+                let dest_path = Path::new(&dest_dir).join("libc++_shared.so");
+                if let Err(e) = std::fs::create_dir_all(&dest_dir) {
+                    println!("  {} Warning: Failed to create jniLibs directory: {}", "⚠".yellow(), e);
+                } else if let Err(e) = std::fs::copy(&libcxx_path, &dest_path) {
+                    println!("  {} Warning: Failed to copy libc++_shared.so for {}: {}", "⚠".yellow(), abi, e);
+                } else {
+                    if verbose {
+                        println!("  {} Copied libc++_shared.so to {}", "✓".green(), dest_path.display());
+                    }
+                }
+            }
+        }
+    } else {
+        println!("  {} Warning: Could not find Android NDK directory to bundle libc++_shared.so", "⚠".yellow());
+    }
     
-    // Find the library file for binding generation
-    let lib_dir = format!("target/aarch64-linux-android/{}", profile);
-    let lib_path = std::fs::read_dir(&lib_dir)
-        .context("Failed to read target directory")?
-        .filter_map(|e| e.ok())
-        .find(|e| {
-            let name = e.file_name();
-            let name_str = name.to_string_lossy();
-            name_str.starts_with("lib") && name_str.ends_with("core.so")
-        })
-        .map(|e| e.path())
-        .context("Could not find FFI library")?;
+    // Find the library file for binding generation in the built target directories
+    let mut lib_path = None;
+    for (target, _) in &architectures {
+        let lib_dir = format!("target/{}/{}", target, profile);
+        if let Ok(entries) = std::fs::read_dir(&lib_dir) {
+            if let Some(path) = entries
+                .filter_map(|e| e.ok())
+                .find(|e| {
+                    let name = e.file_name();
+                    let name_str = name.to_string_lossy();
+                    name_str.starts_with("lib") && name_str.ends_with("core.so")
+                })
+                .map(|e| e.path())
+            {
+                lib_path = Some(path);
+                break;
+            }
+        }
+    }
+    let lib_path = lib_path.context("Could not find FFI library in any target directory")?;
     
     // Generate Kotlin bindings using uniffi-bindgen
     let status = Command::new("uniffi-bindgen")
@@ -607,7 +668,7 @@ use std::ffi::c_void;
 /// The pointers passed to ndk-context must remain valid for the lifetime of the app.
 #[no_mangle]
 pub unsafe extern "C" fn Java_{jni_package}_JffiAndroidInit_initNdkContext(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     context: JObject,
 ) {{
@@ -1736,3 +1797,162 @@ fn patch_swift_file(path: &Path) -> Result<()> {
     
     Ok(())
 }
+
+pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
+    println!("  {} Syncing jffi.toml configurations to native platform builds...", "→".bright_blue());
+
+    // 1. Android
+    let gradle_path = Path::new("platforms/android/app/build.gradle.kts");
+    if gradle_path.exists() {
+        let content = fs::read_to_string(gradle_path)?;
+        
+        let package = &config.platforms.android.package;
+        let min_sdk = config.platforms.android.min_sdk;
+        let target_sdk = config.platforms.android.target_sdk.unwrap_or(35);
+        let version_name = config.bundle.as_ref()
+            .and_then(|b| b.version.as_ref())
+            .unwrap_or(&config.package.version);
+        let version_code = config.bundle.as_ref()
+            .and_then(|b| b.build_number)
+            .unwrap_or_else(|| config.package.version_code.unwrap_or(1));
+        
+        let lines: Vec<String> = content.lines().map(|line| {
+            let trimmed = line.trim();
+            if trimmed.starts_with("applicationId =") {
+                let indent = line.len() - line.trim_start().len();
+                format!("{:width$}applicationId = \"{}\"", "", package, width = indent)
+            } else if trimmed.starts_with("namespace =") {
+                let indent = line.len() - line.trim_start().len();
+                format!("{:width$}namespace = \"{}\"", "", package, width = indent)
+            } else if trimmed.starts_with("minSdk =") {
+                let indent = line.len() - line.trim_start().len();
+                format!("{:width$}minSdk = {}", "", min_sdk, width = indent)
+            } else if trimmed.starts_with("targetSdk =") {
+                let indent = line.len() - line.trim_start().len();
+                format!("{:width$}targetSdk = {}", "", target_sdk, width = indent)
+            } else if trimmed.starts_with("versionName =") {
+                let indent = line.len() - line.trim_start().len();
+                format!("{:width$}versionName = \"{}\"", "", version_name, width = indent)
+            } else if trimmed.starts_with("versionCode =") {
+                let indent = line.len() - line.trim_start().len();
+                format!("{:width$}versionCode = {}", "", version_code, width = indent)
+            } else {
+                line.to_string()
+            }
+        }).collect();
+        
+        let new_content = lines.join("\n");
+        if new_content != content {
+            fs::write(gradle_path, new_content)?;
+            println!("    {} Synced Android gradle configurations (package: {})", "✓".green(), package);
+        }
+    }
+
+    // 2. iOS/macOS Xcode Projects
+    let bundle_id = config.bundle.as_ref()
+        .and_then(|b| b.identifier.clone())
+        .unwrap_or_else(|| config.platforms.ios.bundle_id.clone());
+
+    let platforms = vec!["ios", "macos"];
+    for platform_str in platforms {
+        let platform_dir = format!("platforms/{}", platform_str);
+        if !Path::new(&platform_dir).exists() {
+            continue;
+        }
+        
+        if let Ok(entries) = fs::read_dir(&platform_dir) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("xcodeproj") {
+                    let pbxproj_path = path.join("project.pbxproj");
+                    if pbxproj_path.exists() {
+                        let content = fs::read_to_string(&pbxproj_path)?;
+                        
+                        let lines: Vec<String> = content.lines().map(|line| {
+                            if line.contains("PRODUCT_BUNDLE_IDENTIFIER = ") {
+                                let parts: Vec<&str> = line.split('=').collect();
+                                if parts.len() == 2 {
+                                    let indent = line.len() - line.trim_start().len();
+                                    format!("{:width$}PRODUCT_BUNDLE_IDENTIFIER = {};", "", bundle_id, width = indent)
+                                } else {
+                                    line.to_string()
+                                }
+                            } else {
+                                line.to_string()
+                            }
+                        }).collect();
+                        
+                        let new_content = lines.join("\n");
+                        if new_content != content {
+                            fs::write(&pbxproj_path, new_content)?;
+                            println!("    {} Synced {} Xcode bundle identifier ({})", "✓".green(), platform_str, bundle_id);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn find_ndk_dir() -> Option<std::path::PathBuf> {
+    if let Ok(ndk_home) = std::env::var("ANDROID_NDK_HOME") {
+        let path = std::path::PathBuf::from(ndk_home);
+        if path.exists() { return Some(path); }
+    }
+    
+    // Fallback to checking SDK paths
+    let sdk_roots = vec![
+        std::env::var("ANDROID_HOME").ok(),
+        std::env::var("ANDROID_SDK_ROOT").ok(),
+        std::env::var("HOME").ok().map(|h| format!("{}/Library/Android/sdk", h)),
+        std::env::var("HOME").ok().map(|h| format!("{}/Android/Sdk", h)),
+    ];
+    
+    for sdk_root in sdk_roots.into_iter().flatten() {
+        let ndk_base = std::path::PathBuf::from(&sdk_root).join("ndk");
+        if ndk_base.exists() {
+            if let Ok(entries) = std::fs::read_dir(&ndk_base) {
+                let mut versions: Vec<std::path::PathBuf> = entries
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.path())
+                    .filter(|p| p.is_dir())
+                    .collect();
+                versions.sort();
+                if let Some(latest) = versions.last() {
+                    return Some(latest.clone());
+                }
+            }
+        }
+        
+        let ndk_bundle = std::path::PathBuf::from(&sdk_root).join("ndk-bundle");
+        if ndk_bundle.exists() { return Some(ndk_bundle); }
+    }
+    None
+}
+
+fn find_libcxx_shared(ndk_dir: &Path, target: &str) -> Option<std::path::PathBuf> {
+    let target_sub = match target {
+        "aarch64-linux-android" => "aarch64-linux-android",
+        "armv7-linux-androideabi" => "arm-linux-androideabi",
+        "x86_64-linux-android" => "x86_64-linux-android",
+        "i686-linux-android" => "i686-linux-android",
+        _ => target,
+    };
+    
+    let hosts = vec!["darwin-x86_64", "linux-x86_64", "windows-x86_64", "windows"];
+    for host in hosts {
+        let path = ndk_dir
+            .join("toolchains/llvm/prebuilt")
+            .join(host)
+            .join("sysroot/usr/lib")
+            .join(target_sub)
+            .join("libc++_shared.so");
+        if path.exists() {
+            return Some(path);
+        }
+    }
+    None
+}
+

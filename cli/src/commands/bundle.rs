@@ -3,6 +3,7 @@ use colored::*;
 use std::process::Command;
 use std::path::{Path, PathBuf};
 use std::fs;
+use std::io::IsTerminal;
 
 use crate::config::{Config, BundleAndroidConfig};
 
@@ -22,6 +23,9 @@ pub fn bundle_project(
     }
     
     let config = crate::config::load_config()?;
+    
+    // Validate configurations for store compatibility
+    validate_bundle_config(&config, platform, no_sign)?;
     
     if print_plan {
         println!("{}", "📋 Bundle Plan:".bright_cyan().bold());
@@ -140,43 +144,58 @@ fn bundle_android(
             anyhow::bail!("Rust build failed for Android");
         }
     }
-    
-    for fmt in formats {
-        let gradle_task = match fmt.as_str() {
-            "aab" => "bundleRelease",
-            "apk" => "assembleRelease",
-            _ => anyhow::bail!("Unsupported Android format: {}", fmt),
-        };
-        
-        let gradle_args = vec![gradle_task.to_string()];
-        
-        let mut gradle_envs: Vec<(String, String)> = Vec::new();
-        
-        if !no_sign {
-            let profile_name = profile;
-            if let Some(signing) = &bundle_config.signing {
-                if let Some(profiles) = &signing.profiles {
-                    if let Some(prof) = profiles.get(profile_name) {
-                        if let Some(android_prof) = &prof.android {
-                            if let Some(store_env) = &android_prof.store_password_env {
-                                if let Ok(pwd) = std::env::var(store_env) {
-                                    gradle_envs.push(("JFFI_ANDROID_STORE_PASSWORD".to_string(), pwd));
-                                } else {
-                                    println!("  {} Warning: Env var {} not found for keystore password", "⚠".yellow(), store_env);
-                                }
+
+    // Collect signing env vars (and prompt interactively if needed) ONCE before the format loop
+    let mut gradle_envs: Vec<(String, String)> = Vec::new();
+    if !no_sign {
+        let profile_name = profile;
+        if let Some(signing) = &bundle_config.signing {
+            if let Some(profiles) = &signing.profiles {
+                if let Some(prof) = profiles.get(profile_name) {
+                    if let Some(android_prof) = &prof.android {
+                        if let Some(store_env) = &android_prof.store_password_env {
+                            if let Ok(pwd) = std::env::var(store_env) {
+                                gradle_envs.push(("JFFI_ANDROID_STORE_PASSWORD".to_string(), pwd));
+                            } else if std::io::stdin().is_terminal() {
+                                println!("  {} Env var {} not set. Keystore password is required for signing.", "🔑".cyan(), store_env);
+                                let pwd = dialoguer::Password::new()
+                                    .with_prompt(format!("Enter Android Keystore Password ({})", store_env))
+                                    .interact()
+                                    .context("Failed to read keystore password")?;
+                                gradle_envs.push(("JFFI_ANDROID_STORE_PASSWORD".to_string(), pwd));
+                            } else {
+                                println!("  {} Warning: Env var {} not found for keystore password and terminal is non-interactive", "⚠".yellow(), store_env);
                             }
-                            if let Some(key_env) = &android_prof.key_password_env {
-                                if let Ok(pwd) = std::env::var(key_env) {
-                                    gradle_envs.push(("JFFI_ANDROID_KEY_PASSWORD".to_string(), pwd));
-                                } else {
-                                    println!("  {} Warning: Env var {} not found for key password", "⚠".yellow(), key_env);
-                                }
+                        }
+                        if let Some(key_env) = &android_prof.key_password_env {
+                            if let Ok(pwd) = std::env::var(key_env) {
+                                gradle_envs.push(("JFFI_ANDROID_KEY_PASSWORD".to_string(), pwd));
+                            } else if std::io::stdin().is_terminal() {
+                                println!("  {} Env var {} not set. Key password is required for signing.", "🔑".cyan(), key_env);
+                                let pwd = dialoguer::Password::new()
+                                    .with_prompt(format!("Enter Android Key Password ({})", key_env))
+                                    .interact()
+                                    .context("Failed to read key password")?;
+                                gradle_envs.push(("JFFI_ANDROID_KEY_PASSWORD".to_string(), pwd));
+                            } else {
+                                println!("  {} Warning: Env var {} not found for key password and terminal is non-interactive", "⚠".yellow(), key_env);
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    for fmt in formats {
+        let gradle_task = match fmt.as_str() {
+            "aab" => "bundleRelease",
+            "apk" => "assembleRelease",
+            _ => anyhow::bail!("Unsupported Android format: {}", fmt),
+        };
+
+        let gradle_args = vec![gradle_task.to_string()];
+        let gradle_envs = gradle_envs.clone();
         
         println!("  {} Running gradlew {}...", "→".bright_blue(), gradle_task);
         
@@ -1009,3 +1028,139 @@ fn bundle_web(
     println!("{}", "  ✅ Web bundling complete!".green());
     Ok(())
 }
+
+pub fn validate_bundle_config(config: &Config, platform: &str, no_sign: bool) -> Result<()> {
+    println!("  {} Validating configuration for store-readiness...", "→".bright_blue());
+
+    let check_placeholder = |value: &str, field_name: &str| -> Result<()> {
+        if value.contains("com.example") || value.contains("example.app") {
+            anyhow::bail!(
+                "Store Rejection Risk: '{}' has value '{}'. You must customize this placeholder identifier in 'jffi.toml' before bundling for a store release.",
+                field_name.yellow(),
+                value.red()
+            );
+        }
+        Ok(())
+    };
+
+    if platform == "android" {
+        check_placeholder(&config.platforms.android.package, "platforms.android.package")?;
+    } else if platform == "ios" {
+        check_placeholder(&config.platforms.ios.bundle_id, "platforms.ios.bundle_id")?;
+    } else if platform == "macos" {
+        let bundle_id = config.bundle.as_ref()
+            .and_then(|b| b.identifier.clone())
+            .unwrap_or_else(|| config.platforms.ios.bundle_id.clone());
+        check_placeholder(&bundle_id, "bundle.identifier / platforms.ios.bundle_id")?;
+    }
+
+    if let Some(bundle) = &config.bundle {
+        if let Some(identifier) = &bundle.identifier {
+            check_placeholder(identifier, "bundle.identifier")?;
+        }
+
+        if platform == "linux" {
+            if let Some(linux_conf) = &bundle.linux {
+                if let Some(app_id) = &linux_conf.app_id {
+                    if app_id == "org.jffi.App" {
+                        anyhow::bail!("Store Rejection Risk: 'bundle.linux.app_id' is set to default '{}'. Change it in 'jffi.toml'.", app_id.red());
+                    }
+                }
+            }
+        }
+
+        if platform == "windows" {
+            if let Some(win_conf) = &bundle.windows {
+                if let Some(identity_name) = &win_conf.identity_name {
+                    if identity_name == "Jitpomi.JffiApp" {
+                        anyhow::bail!("Store Rejection Risk: 'bundle.windows.identity_name' is set to default '{}'. Change it in 'jffi.toml'.", identity_name.red());
+                    }
+                }
+                if let Some(publisher_id) = &win_conf.publisher_id {
+                    if publisher_id == "CN=Example" {
+                        anyhow::bail!("Store Rejection Risk: 'bundle.windows.publisher_id' is set to default '{}'. Change it in 'jffi.toml'.", publisher_id.red());
+                    }
+                }
+            }
+        }
+    }
+
+    if !no_sign {
+        match platform {
+            "android" => {
+                if let Some(bundle_conf) = &config.bundle {
+                    if let Some(signing) = &bundle_conf.signing {
+                        if let Some(profiles) = &signing.profiles {
+                            let active_profile = "release";
+                            if let Some(profile) = profiles.get(active_profile) {
+                                if let Some(android_prof) = &profile.android {
+                                    if let Some(keystore_path) = &android_prof.keystore_path {
+                                        if keystore_path.contains("placeholder") || keystore_path.is_empty() {
+                                            anyhow::bail!("Store Validation Error: Android keystore_path is placeholder or empty. Setup a release keystore in 'jffi.toml'.");
+                                        }
+                                        
+                                        let keystore_file = Path::new(keystore_path);
+                                        if !keystore_file.exists() {
+                                            anyhow::bail!(
+                                                "Store Validation Error: Keystore file not found at '{}'. Please ensure the release keystore exists or is correctly mapped in 'jffi.toml'.",
+                                                keystore_path.red()
+                                            );
+                                        }
+                                    } else {
+                                        anyhow::bail!("Store Validation Error: Android keystore_path is missing in 'signing.profiles.release.android'.");
+                                    }
+
+                                    if android_prof.key_alias.is_none() || android_prof.key_alias.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+                                        anyhow::bail!("Store Validation Error: Android key_alias is missing or empty in 'signing.profiles.release.android'.");
+                                    }
+
+                                    if android_prof.store_password_env.is_none() || android_prof.key_password_env.is_none() {
+                                        anyhow::bail!("Store Validation Error: Android store_password_env or key_password_env is missing in 'signing.profiles.release.android'.");
+                                    }
+                                } else {
+                                    anyhow::bail!("Store Validation Error: Android signing profile 'android' is missing in 'signing.profiles.release'.");
+                                }
+                            } else {
+                                println!("  {} Warning: No signing profile 'release' found in 'jffi.toml'. Bundle will build but may not be signed.", "⚠".yellow());
+                            }
+                        } else {
+                            println!("  {} Warning: No signing profiles found in 'jffi.toml'. Bundle will build but may not be signed.", "⚠".yellow());
+                        }
+                    } else {
+                        println!("  {} Warning: No signing configuration found in 'jffi.toml'. Bundle will build but may not be signed.", "⚠".yellow());
+                    }
+                }
+            }
+            "ios" | "macos" => {
+                if let Some(bundle_conf) = &config.bundle {
+                    if let Some(signing) = &bundle_conf.signing {
+                        if let Some(profiles) = &signing.profiles {
+                            let active_profile = "release";
+                            if let Some(profile) = profiles.get(active_profile) {
+                                if let Some(apple_prof) = &profile.apple {
+                                    if let Some(team_id) = &apple_prof.team_id {
+                                        if team_id.is_empty() || team_id.contains("placeholder") {
+                                            anyhow::bail!("Store Validation Error: Apple developer team_id is missing or placeholder. Provide your 10-character Apple Developer Team ID in 'jffi.toml'.");
+                                        }
+                                        if team_id.len() != 10 {
+                                            anyhow::bail!("Store Validation Error: Apple developer team_id '{}' must be exactly 10 characters.", team_id);
+                                        }
+                                    } else {
+                                        anyhow::bail!("Store Validation Error: Apple developer team_id is missing in 'signing.profiles.release.apple'.");
+                                    }
+                                } else {
+                                    anyhow::bail!("Store Validation Error: Apple signing profile 'apple' is missing in 'signing.profiles.release'.");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    println!("  {} Configuration is store-ready!", "✓".green());
+    Ok(())
+}
+

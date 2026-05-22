@@ -13,6 +13,7 @@ pub struct Config {
 pub struct PackageConfig {
     pub name: String,
     pub version: String,
+    pub version_code: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,6 +54,9 @@ pub struct AndroidConfig {
     #[serde(default = "default_android_min_sdk")]
     pub min_sdk: u32,
     pub package: String,
+    pub target_sdk: Option<u32>,
+    pub abis: Option<Vec<String>>,
+    pub rustflags: Option<String>,
 }
 
 impl Default for AndroidConfig {
@@ -60,6 +64,9 @@ impl Default for AndroidConfig {
         Self {
             min_sdk: 26,
             package: "com.example.app".to_string(),
+            target_sdk: None,
+            abis: None,
+            rustflags: None,
         }
     }
 }
