@@ -388,7 +388,21 @@ fn launch_windows_app() -> Result<()> {
             }
 
             Write-Host "Found manifest: $($manifest.FullName)"
-            Add-AppxPackage -Register $manifest.FullName -ForceApplicationShutdown
+            try {
+                Add-AppxPackage -Register $manifest.FullName -ForceApplicationShutdown
+            } catch {
+                Write-Host "Registration failed: $($_.Exception.Message)"
+                Write-Host "Attempting to remove existing package and retry..."
+                $xml = [xml](Get-Content $manifest.FullName)
+                $identity = $xml.Package.Identity.Name
+                $pkg = Get-AppxPackage -Name $identity
+                if ($pkg) {
+                    Remove-AppxPackage $pkg.PackageFullName -ErrorAction Stop
+                    Add-AppxPackage -Register $manifest.FullName -ForceApplicationShutdown
+                } else {
+                    throw $_
+                }
+            }
 
             # Get the Application ID from manifest
             $xml = [xml](Get-Content $manifest.FullName)
