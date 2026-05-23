@@ -675,6 +675,22 @@ fn bundle_ios(
     Ok(())
 }
 
+fn find_manifest_dir(dir: &Path) -> Option<PathBuf> {
+    if dir.join("AppxManifest.xml").exists() {
+        return Some(dir.to_path_buf());
+    }
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            if entry.path().is_dir() {
+                if let Some(found) = find_manifest_dir(&entry.path()) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
 fn bundle_windows(
     config: &Config,
     format: Option<&str>,
@@ -733,12 +749,13 @@ fn bundle_windows(
         if !dry_run {
             let bin_dir = Path::new("platforms/windows/bin").join(arch_dir);
             if bin_dir.exists() {
+                let package_source = find_manifest_dir(&bin_dir).unwrap_or_else(|| bin_dir.clone());
                 let makeappx_path = std::env::var("JFFI_MAKEAPPX").unwrap_or_else(|_| "MakeAppx".to_string());
                 let mut makeappx_cmd = Command::new(&makeappx_path);
                 makeappx_cmd.args([
                         "pack",
                         "/d",
-                        bin_dir.to_str().unwrap(),
+                        package_source.to_str().unwrap(),
                         "/p",
                         package_path.to_str().unwrap(),
                         "/o",
