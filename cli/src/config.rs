@@ -194,6 +194,7 @@ pub struct BundleMacosConfig {
     pub notarize: bool,
     #[serde(default = "default_true")]
     pub staple: bool,
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -204,6 +205,7 @@ pub struct BundleIosConfig {
     pub destination: String,
     #[serde(default = "default_ios_export_method")]
     pub export_method: String,
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -220,6 +222,7 @@ pub struct BundleAndroidConfig {
     pub build_type: String,
     #[serde(default = "default_true")]
     pub split_debug_symbols: bool,
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -230,6 +233,7 @@ pub struct BundleWindowsConfig {
     pub publisher_id: Option<String>,
     #[serde(default = "default_windows_targets")]
     pub targets: Vec<String>,
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -243,6 +247,7 @@ pub struct BundleLinuxConfig {
     pub runtime_version: String,
     #[serde(default = "default_linux_sdk")]
     pub sdk: String,
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

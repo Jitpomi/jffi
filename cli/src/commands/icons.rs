@@ -12,13 +12,28 @@ pub fn generate_icons(config: &Config, platform: &str) -> Result<()> {
         _ => return Ok(()), // Opt-out or not configured
     };
     
-    let source_path = Path::new(&icons_config.source);
+    // Check for platform-specific icon source override in config
+    let mut source_str = &icons_config.source;
+    if let Some(bundle) = &config.bundle {
+        if let Some(override_source) = match platform {
+            "windows" => bundle.windows.as_ref().and_then(|w| w.icon.as_ref()),
+            "macos" => bundle.macos.as_ref().and_then(|m| m.icon.as_ref()),
+            "ios" => bundle.ios.as_ref().and_then(|i| i.icon.as_ref()),
+            "android" => bundle.android.as_ref().and_then(|a| a.icon.as_ref()),
+            "linux" => bundle.linux.as_ref().and_then(|l| l.icon.as_ref()),
+            _ => None,
+        } {
+            source_str = override_source;
+        }
+    }
+    
+    let source_path = Path::new(source_str);
     if !source_path.exists() {
-        println!("  {} Warning: Icon source not found at {}, skipping icon generation", "⚠".yellow(), icons_config.source);
+        println!("  {} Warning: Icon source not found at {}, skipping icon generation", "⚠".yellow(), source_str);
         return Ok(());
     }
     
-    println!("  {} Generating icons from {}...", "→".bright_blue(), icons_config.source);
+    println!("  {} Generating icons from {}...", "→".bright_blue(), source_str);
     
     let img = image::open(source_path).context("Failed to open source icon image")?;
     

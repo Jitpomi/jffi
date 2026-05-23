@@ -78,6 +78,7 @@ fn bundle_android(
         compile_sdk: 36,
         build_type: "release".to_string(),
         split_debug_symbols: true,
+        icon: None,
     });
     
     let formats = if let Some(f) = format {
@@ -285,6 +286,7 @@ fn bundle_macos(
         hardened_runtime: true,
         notarize: true,
         staple: true,
+        icon: None,
     });
     
     let formats = if let Some(f) = format {
@@ -537,6 +539,7 @@ fn bundle_ios(
         format: "ipa".to_string(),
         destination: "generic/platform=iOS".to_string(),
         export_method: "app-store".to_string(),
+        icon: None,
     });
     
     println!("  {} Finding iOS Xcode project...", "→".bright_blue());
@@ -686,6 +689,7 @@ fn bundle_windows(
         identity_name: Some("Jitpomi.JffiApp".to_string()),
         publisher_id: Some("CN=Example".to_string()),
         targets: vec!["x86_64-pc-windows-msvc".to_string(), "aarch64-pc-windows-msvc".to_string()],
+        icon: None,
     });
     
     let formats = if let Some(f) = format {
@@ -825,6 +829,7 @@ fn bundle_linux(
         runtime: "org.gnome.Platform".to_string(),
         runtime_version: "48".to_string(),
         sdk: "org.gnome.Sdk".to_string(),
+        icon: None,
     });
     
     let formats = if let Some(f) = format {
