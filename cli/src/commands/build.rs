@@ -23,6 +23,43 @@ fn validate_project_structure() -> Result<()> {
         );
     }
     
+    // Auto-fix private modules in core/src/lib.rs that UniFFI silently drops
+    let _ = ensure_public_modules();
+    
+    Ok(())
+}
+
+fn ensure_public_modules() -> Result<()> {
+    let lib_rs_path = Path::new("core/src/lib.rs");
+    if !lib_rs_path.exists() {
+        return Ok(());
+    }
+
+    let content = fs::read_to_string(lib_rs_path)?;
+    let mut modified = false;
+    let mut new_lines = Vec::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        // UniFFI ignores exported types in private modules. 
+        // Automatically convert `mod name;` to `pub mod name;` (excluding internal android/tests).
+        if trimmed.starts_with("mod ") && trimmed.ends_with(';') 
+            && !trimmed.contains("android") && !trimmed.contains("tests") 
+        {
+            let new_line = line.replacen("mod ", "pub mod ", 1);
+            new_lines.push(new_line);
+            modified = true;
+            println!("  {} Auto-fixed private module: changed `{}` to `pub {}` in core/src/lib.rs", 
+                "ℹ".bright_blue(), trimmed, trimmed);
+        } else {
+            new_lines.push(line.to_string());
+        }
+    }
+
+    if modified {
+        fs::write(lib_rs_path, new_lines.join("\n") + "\n")?;
+    }
+
     Ok(())
 }
 
