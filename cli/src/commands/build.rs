@@ -1305,7 +1305,7 @@ fn build_windows_archs(archs: &[&str], platforms: &[&str], release: bool, profil
                 }
             }
             
-            let callback_name = &fixed_content[name_start..name_end];
+            let callback_name = fixed_content[name_start..name_end].to_string();
             if !callback_name.is_empty() {
                 let bad_internal = format!("internal interface I{}", callback_name);
                 let good_internal = format!("internal interface {}", callback_name);
