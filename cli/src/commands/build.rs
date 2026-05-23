@@ -1282,6 +1282,18 @@ fn build_windows_archs(archs: &[&str], platforms: &[&str], release: bool, profil
         anyhow::bail!("uniffi-bindgen-cs failed to generate C# bindings");
     }
     
+    // Auto-fix the uniffi-bindgen-cs v0.10.x interface prefix bug
+    let cs_file_path = format!("platforms/windows/Generated/{}_core.cs", lib_name);
+    if let Ok(content) = std::fs::read_to_string(&cs_file_path) {
+        // uniffi-bindgen-cs v0.10.x generates `internal interface IFoo` but expects `Foo` everywhere else.
+        // We simply remove the 'I' prefix to match the method signatures.
+        let fixed_content = content.replace("internal interface I", "internal interface ");
+        if fixed_content != content {
+            let _ = std::fs::write(&cs_file_path, fixed_content);
+            println!("  {} Auto-fixed uniffi-bindgen-cs interface prefix bug", "ℹ".bright_blue());
+        }
+    }
+    
     // Step 3: Copy DLL to Windows project root (BEFORE C# build - PostBuild target needs it)
     println!("  {} Copying DLL to project directory...", "→".bright_blue());
     let target = "x86_64-pc-windows-msvc"; // Default to x64
