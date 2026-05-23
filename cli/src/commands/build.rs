@@ -1285,10 +1285,46 @@ fn build_windows_archs(archs: &[&str], platforms: &[&str], release: bool, profil
     // Auto-fix the uniffi-bindgen-cs v0.10.x interface prefix bug
     let cs_file_path = format!("platforms/windows/Generated/{}_core.cs", lib_name);
     if let Ok(content) = std::fs::read_to_string(&cs_file_path) {
-        // uniffi-bindgen-cs v0.10.x generates `internal interface IFoo` but expects `Foo` everywhere else.
-        // We simply remove the 'I' prefix to match the method signatures.
-        let fixed_content = content.replace("internal interface I", "internal interface ");
-        if fixed_content != content {
+        // uniffi-bindgen-cs v0.10.x generates `internal interface IFoo` for callback interfaces
+        // but expects `Foo` everywhere else.
+        let mut fixed_content = content.clone();
+        
+        let marker = "class UniffiCallbackInterface";
+        let mut start_idx = 0;
+        let mut patched = false;
+        
+        while let Some(idx) = fixed_content[start_idx..].find(marker) {
+            let actual_idx = start_idx + idx;
+            let name_start = actual_idx + marker.len();
+            
+            let mut name_end = name_start;
+            for (i, c) in fixed_content[name_start..].char_indices() {
+                if !c.is_alphanumeric() && c != '_' {
+                    name_end = name_start + i;
+                    break;
+                }
+            }
+            
+            let callback_name = &fixed_content[name_start..name_end];
+            if !callback_name.is_empty() {
+                let bad_internal = format!("internal interface I{}", callback_name);
+                let good_internal = format!("internal interface {}", callback_name);
+                if fixed_content.contains(&bad_internal) {
+                    fixed_content = fixed_content.replace(&bad_internal, &good_internal);
+                    patched = true;
+                }
+                
+                let bad_public = format!("public interface I{}", callback_name);
+                let good_public = format!("public interface {}", callback_name);
+                if fixed_content.contains(&bad_public) {
+                    fixed_content = fixed_content.replace(&bad_public, &good_public);
+                    patched = true;
+                }
+            }
+            start_idx = name_end;
+        }
+        
+        if patched {
             let _ = std::fs::write(&cs_file_path, fixed_content);
             println!("  {} Auto-fixed uniffi-bindgen-cs interface prefix bug", "ℹ".bright_blue());
         }
