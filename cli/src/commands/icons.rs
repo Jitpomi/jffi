@@ -131,25 +131,43 @@ fn generate_windows_icons(img: &image::DynamicImage) -> Result<()> {
         fs::create_dir_all(dest_dir)?;
     }
     
+    // Generate app.ico for the compiled WinExe icon and titlebar use
+    let ico_path = dest_dir.join("app.ico");
+    let resized_256 = img.resize_exact(256, 256, FilterType::Lanczos3);
+    resized_256.save(&ico_path)?;
+
     let sizes = vec![
         ("Square44x44Logo.png", 44),
+        ("Square44x44Logo.scale-200.png", 88),
         ("Square150x150Logo.png", 150),
+        ("Square150x150Logo.scale-200.png", 300),
         ("StoreLogo.png", 50),
-        ("SplashScreen.png", 620), // Width 620, height 300
+        ("StoreLogo.scale-200.png", 100),
+        ("LockScreenLogo.scale-200.png", 48),
     ];
     
     for (filename, size) in sizes {
         let out_path = dest_dir.join(filename);
-        if filename == "SplashScreen.png" {
-            let resized = img.resize_exact(300, 300, FilterType::Lanczos3);
-            let mut bg = image::RgbaImage::new(620, 300);
-            // Put icon in middle
-            image::imageops::overlay(&mut bg, &resized, (620-300)/2, 0);
-            bg.save(&out_path)?;
-        } else {
-            let resized = img.resize_exact(size, size, FilterType::Lanczos3);
-            resized.save(&out_path)?;
-        }
+        let resized = img.resize_exact(size, size, FilterType::Lanczos3);
+        resized.save(&out_path)?;
+    }
+
+    // Wide logo and Splash screen generation
+    let splash_sizes = vec![
+        ("SplashScreen.png", 620, 300, 300),
+        ("SplashScreen.scale-200.png", 1240, 600, 600),
+        ("Wide310x150Logo.scale-200.png", 620, 300, 300),
+    ];
+
+    for (filename, canvas_w, canvas_h, logo_size) in splash_sizes {
+        let out_path = dest_dir.join(filename);
+        let resized = img.resize_exact(logo_size, logo_size, FilterType::Lanczos3);
+        let mut bg = image::RgbaImage::new(canvas_w, canvas_h);
+        // Center the logo inside the canvas
+        let x = i64::from((canvas_w - logo_size) / 2);
+        let y = i64::from((canvas_h - logo_size) / 2);
+        image::imageops::overlay(&mut bg, &resized, x, y);
+        bg.save(&out_path)?;
     }
     
     Ok(())

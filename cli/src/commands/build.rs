@@ -70,6 +70,15 @@ pub fn build_project(platform: Option<String>, all: bool, release: bool, device:
     let config = crate::config::load_config()?;
     sync_configs_to_platforms(&config)?;
     
+    // Generate icons for the building platforms if configured
+    if all {
+        for p in &config.platforms.enabled {
+            let _ = crate::commands::icons::generate_icons(&config, p);
+        }
+    } else if let Some(ref p) = platform {
+        let _ = crate::commands::icons::generate_icons(&config, p);
+    }
+    
     if all {
         build_all_platforms(release)?;
     } else if let Some(platform) = platform {
