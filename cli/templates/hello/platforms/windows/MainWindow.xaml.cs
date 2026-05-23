@@ -21,10 +21,18 @@ namespace {{name_pascal}}
             // Set window icon
             try
             {
-                var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-                var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hWnd);
-                var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
-                appWindow.SetIcon(System.IO.Path.Combine(System.AppContext.BaseDirectory, "Assets", "app.ico"));
+                var iconPath = FindIconPath();
+                if (iconPath != null)
+                {
+                    var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                    var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hWnd);
+                    var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+                    appWindow.SetIcon(iconPath);
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("Failed to find app.ico in any candidate path.");
+                }
             }
             catch (Exception ex)
             {
@@ -32,6 +40,26 @@ namespace {{name_pascal}}
             }
 
             ViewModel = new AppViewModel();
+        }
+
+        private string? FindIconPath()
+        {
+            var candidates = new[]
+            {
+                System.IO.Path.Combine(System.AppContext.BaseDirectory, "Assets", "app.ico"),
+                System.IO.Path.Combine(System.AppContext.BaseDirectory, "AppX", "Assets", "app.ico"),
+                System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "Assets", "app.ico"),
+                System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "platforms", "windows", "Assets", "app.ico")
+            };
+
+            foreach (var path in candidates)
+            {
+                if (System.IO.File.Exists(path))
+                {
+                    return path;
+                }
+            }
+            return null;
         }
     }
 }
