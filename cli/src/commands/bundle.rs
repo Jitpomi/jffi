@@ -691,6 +691,39 @@ fn find_manifest_dir(dir: &Path) -> Option<PathBuf> {
     None
 }
 
+fn find_sdk_tool(tool_name: &str) -> Option<String> {
+    // Check if tool is in PATH
+    let check_arg = if tool_name == "signtool" { "sign" } else { "/?" };
+    if Command::new(tool_name).arg(check_arg).output().is_ok() {
+        return Some(tool_name.to_string());
+    }
+    
+    // On Windows, check standard SDK paths
+    if cfg!(windows) {
+        let sdk_root = Path::new("C:\\Program Files (x86)\\Windows Kits\\10\\bin");
+        if sdk_root.exists() {
+            if let Ok(entries) = fs::read_dir(sdk_root) {
+                let mut versions = Vec::new();
+                for entry in entries.filter_map(|e| e.ok()) {
+                    if entry.path().is_dir() {
+                        versions.push(entry.path());
+                    }
+                }
+                // Sort descending to get the latest SDK
+                versions.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
+                
+                for v in versions {
+                    let tool_path = v.join("x64").join(format!("{}.exe", tool_name));
+                    if tool_path.exists() {
+                        return Some(tool_path.to_string_lossy().into_owned());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 fn bundle_windows(
     config: &Config,
     format: Option<&str>,
@@ -750,7 +783,7 @@ fn bundle_windows(
             let bin_dir = Path::new("platforms/windows/bin").join(arch_dir);
             if bin_dir.exists() {
                 let package_source = find_manifest_dir(&bin_dir).unwrap_or_else(|| bin_dir.clone());
-                let makeappx_path = std::env::var("JFFI_MAKEAPPX").unwrap_or_else(|_| "MakeAppx".to_string());
+                let makeappx_path = std::env::var("JFFI_MAKEAPPX").ok().or_else(|| find_sdk_tool("makeappx")).unwrap_or_else(|| "MakeAppx".to_string());
                 let mut makeappx_cmd = Command::new(&makeappx_path);
                 makeappx_cmd.args([
                         "pack",
@@ -790,7 +823,7 @@ fn bundle_windows(
             }
             
             if !thumbprint.is_empty() {
-                let signtool_path = std::env::var("JFFI_SIGNTOOL").unwrap_or_else(|_| "signtool".to_string());
+                let signtool_path = std::env::var("JFFI_SIGNTOOL").ok().or_else(|| find_sdk_tool("signtool")).unwrap_or_else(|| "signtool".to_string());
                 for pkg in &generated_packages {
                     let mut sign_cmd = Command::new(&signtool_path);
                     sign_cmd.args([
