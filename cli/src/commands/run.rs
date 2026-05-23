@@ -388,28 +388,26 @@ fn launch_windows_app() -> Result<()> {
             }
 
             Write-Host "Found manifest: $($manifest.FullName)"
-            try {
-                Add-AppxPackage -Register $manifest.FullName -ForceApplicationShutdown
-            } catch {
-                Write-Host "Registration failed: $($_.Exception.Message)"
-                Write-Host "Attempting to remove existing package and retry..."
-                $xml = [xml](Get-Content $manifest.FullName)
-                $identity = $xml.Package.Identity.Name
-                $pkg = Get-AppxPackage -Name $identity
-                if ($pkg) {
-                    Remove-AppxPackage $pkg.PackageFullName -ErrorAction Stop
-                    Add-AppxPackage -Register $manifest.FullName -ForceApplicationShutdown
-                } else {
-                    throw $_
-                }
+            
+            # Get the Package Name from the manifest
+            $xml = [xml](Get-Content $manifest.FullName)
+            $identity = $xml.Package.Identity.Name
+            
+            # ALWAYS remove any existing package to clear Windows package resource caches (icons, resources.pri)
+            $pkg = Get-AppxPackage -Name $identity
+            if ($pkg) {
+                Write-Host "Removing existing package to clear resource caches..."
+                Remove-AppxPackage $pkg.PackageFullName -ErrorAction SilentlyContinue
             }
 
+            # Register the new build
+            Write-Host "Registering package from manifest..."
+            Add-AppxPackage -Register $manifest.FullName -ForceApplicationShutdown
+
             # Get the Application ID from manifest
-            $xml = [xml](Get-Content $manifest.FullName)
             $appId = $xml.Package.Applications.Application.Id
             
             # Get PackageFamilyName from the registered package (not from manifest GUID)
-            $identity = $xml.Package.Identity.Name
             $package = Get-AppxPackage -Name $identity
             if (-not $package) {
                 throw "Package not found after registration. Identity: $identity"
@@ -439,26 +437,11 @@ fn launch_windows_app() -> Result<()> {
 }
 
 fn run_windows() -> Result<()> {
-    
-    // Check if this is first build or rebuild
-    let bin_dir = std::env::current_dir()?.join("platforms/windows/bin");
-    let is_first_build = !bin_dir.exists() || std::fs::read_dir(&bin_dir)?.next().is_none();
-    
-    if is_first_build {
-        // First build: build all architectures and C# project
-        println!("  {} Building Windows app (all architectures)...", "→".bright_blue());
-        crate::commands::build::build_project(Some("windows".to_string()), false, false, false, false)?;
-    } else {
-        // Rebuild: only build Rust for active architecture (faster)
-        println!("  {} Rebuilding Rust core...", "→".bright_blue());
-        crate::commands::dev::rebuild_windows_rust_only()?;
-        
-        // Copy updated DLL
-        let _ = crate::commands::dev::copy_windows_ffi_dll();
-    }
+    // Build project for host/active architecture (handles icons generation, uniffi cs, and msbuild)
+    println!("  {} Building Windows app (host architecture)...", "→".bright_blue());
+    crate::commands::build::build_project(Some("windows".to_string()), false, false, false, false)?;
 
     println!();
-    println!("{}", "  ✅ Build complete!".green());
     println!("{}", "  🚀 Deploying and launching Windows app...".bright_cyan());
     
     launch_windows_app()?;

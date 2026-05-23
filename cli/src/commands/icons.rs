@@ -7,25 +7,30 @@ use std::path::Path;
 use crate::config::Config;
 
 pub fn generate_icons(config: &Config, platform: &str) -> Result<()> {
-    let icons_config = match config.bundle.as_ref().and_then(|b| b.icons.as_ref()) {
-        Some(config) if config.generate => config,
-        _ => return Ok(()), // Opt-out or not configured
+    let bundle = match &config.bundle {
+        Some(b) => b,
+        None => return Ok(()),
+    };
+    if let Some(icons_config) = &bundle.icons {
+        if !icons_config.generate { return Ok(()); }
+    }
+    
+    let override_source = match platform {
+        "windows" => bundle.windows.as_ref().and_then(|w| w.icon.as_ref()),
+        "macos" => bundle.macos.as_ref().and_then(|m| m.icon.as_ref()),
+        "ios" => bundle.ios.as_ref().and_then(|i| i.icon.as_ref()),
+        "android" => bundle.android.as_ref().and_then(|a| a.icon.as_ref()),
+        "linux" => bundle.linux.as_ref().and_then(|l| l.icon.as_ref()),
+        _ => None,
     };
     
-    // Check for platform-specific icon source override in config
-    let mut source_str = &icons_config.source;
-    if let Some(bundle) = &config.bundle {
-        if let Some(override_source) = match platform {
-            "windows" => bundle.windows.as_ref().and_then(|w| w.icon.as_ref()),
-            "macos" => bundle.macos.as_ref().and_then(|m| m.icon.as_ref()),
-            "ios" => bundle.ios.as_ref().and_then(|i| i.icon.as_ref()),
-            "android" => bundle.android.as_ref().and_then(|a| a.icon.as_ref()),
-            "linux" => bundle.linux.as_ref().and_then(|l| l.icon.as_ref()),
-            _ => None,
-        } {
-            source_str = override_source;
+    let source_str = match override_source {
+        Some(src) => src,
+        None => match bundle.icons.as_ref().map(|i| &i.source) {
+            Some(src) => src,
+            None => return Ok(()),
         }
-    }
+    };
     
     let source_path = Path::new(source_str);
     if !source_path.exists() {
