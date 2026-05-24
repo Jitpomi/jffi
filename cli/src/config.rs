@@ -127,6 +127,19 @@ pub struct WebConfig {
     pub open: bool,
     #[serde(default = "default_true")]
     pub cors: bool,
+    // SEO & meta tags
+    pub title: Option<String>,
+    pub description: Option<String>,
+    #[serde(default = "default_web_lang")]
+    pub lang: String,
+    pub theme_color: Option<String>,
+    pub favicon: Option<String>,
+    pub og_image: Option<String>,
+    pub og_url: Option<String>,
+    pub og_type: Option<String>,
+    pub twitter_card: Option<String>,
+    pub keywords: Option<String>,
+    pub author: Option<String>,
 }
 
 impl Default for WebConfig {
@@ -138,6 +151,17 @@ impl Default for WebConfig {
             https: false,
             open: false,
             cors: true,
+            title: None,
+            description: None,
+            lang: "en".to_string(),
+            theme_color: None,
+            favicon: None,
+            og_image: None,
+            og_url: None,
+            og_type: None,
+            twitter_card: None,
+            keywords: None,
+            author: None,
         }
     }
 }
@@ -168,6 +192,10 @@ fn default_web_target() -> String {
 
 fn default_web_port() -> u16 {
     5173
+}
+
+fn default_web_lang() -> String {
+    "en".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

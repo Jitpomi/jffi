@@ -1999,6 +1999,114 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
         }
     }
 
+    // 3. Web - sync SEO & meta tags to index.html
+    let index_path = Path::new("platforms/web/index.html");
+    if index_path.exists() {
+        let web = &config.platforms.web;
+        let name_pascal = config.package.name
+            .split('-')
+            .map(|part| {
+                let mut chars = part.chars();
+                match chars.next() {
+                    None => String::new(),
+                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                }
+            })
+            .collect::<String>();
+        
+        let title = web.title.as_deref().unwrap_or(&name_pascal);
+        let lang = &web.lang;
+        
+        let content = fs::read_to_string(index_path)?;
+        let mut new_content = content.clone();
+        
+        // Sync lang attribute
+        if new_content.contains("<html lang=\"") {
+            let re_lang = format!("<html lang=\"{}\"", lang);
+            // Replace the existing lang value
+            if let Some(start) = new_content.find("<html lang=\"") {
+                if let Some(end) = new_content[start + 12..].find('"') {
+                    let old = &new_content[start..start + 12 + end + 1];
+                    new_content = new_content.replace(old, &re_lang);
+                }
+            }
+        }
+        
+        // Sync <title>
+        if let (Some(start), Some(end)) = (new_content.find("<title>"), new_content.find("</title>")) {
+            let old_title = &new_content[start..end + 8];
+            new_content = new_content.replace(old_title, &format!("<title>{}</title>", title));
+        }
+        
+        // Build meta tags to inject/replace inside <head>
+        let mut meta_tags = Vec::new();
+        
+        if let Some(desc) = &web.description {
+            meta_tags.push(format!("    <meta name=\"description\" content=\"{}\">", desc));
+        }
+        if let Some(keywords) = &web.keywords {
+            meta_tags.push(format!("    <meta name=\"keywords\" content=\"{}\">", keywords));
+        }
+        if let Some(author) = &web.author {
+            meta_tags.push(format!("    <meta name=\"author\" content=\"{}\">", author));
+        }
+        if let Some(theme_color) = &web.theme_color {
+            meta_tags.push(format!("    <meta name=\"theme-color\" content=\"{}\">", theme_color));
+        }
+        if let Some(favicon) = &web.favicon {
+            meta_tags.push(format!("    <link rel=\"icon\" href=\"{}\">", favicon));
+        }
+        
+        // Open Graph tags
+        meta_tags.push(format!("    <meta property=\"og:title\" content=\"{}\">", title));
+        if let Some(desc) = &web.description {
+            meta_tags.push(format!("    <meta property=\"og:description\" content=\"{}\">", desc));
+        }
+        if let Some(og_type) = &web.og_type {
+            meta_tags.push(format!("    <meta property=\"og:type\" content=\"{}\">", og_type));
+        }
+        if let Some(og_url) = &web.og_url {
+            meta_tags.push(format!("    <meta property=\"og:url\" content=\"{}\">", og_url));
+        }
+        if let Some(og_image) = &web.og_image {
+            meta_tags.push(format!("    <meta property=\"og:image\" content=\"{}\">", og_image));
+        }
+        
+        // Twitter Card tags
+        if let Some(twitter_card) = &web.twitter_card {
+            meta_tags.push(format!("    <meta name=\"twitter:card\" content=\"{}\">", twitter_card));
+            meta_tags.push(format!("    <meta name=\"twitter:title\" content=\"{}\">", title));
+            if let Some(desc) = &web.description {
+                meta_tags.push(format!("    <meta name=\"twitter:description\" content=\"{}\">", desc));
+            }
+            if let Some(og_image) = &web.og_image {
+                meta_tags.push(format!("    <meta name=\"twitter:image\" content=\"{}\">", og_image));
+            }
+        }
+        
+        // Remove existing JFFI-managed meta block (if present) and inject new one
+        let marker_start = "    <!-- jffi:meta:start -->";
+        let marker_end = "    <!-- jffi:meta:end -->";
+        
+        if let (Some(ms), Some(me)) = (new_content.find(marker_start), new_content.find(marker_end)) {
+            // Replace existing block
+            let old_block = &new_content[ms..me + marker_end.len()];
+            let new_block = format!("{}\n{}\n{}", marker_start, meta_tags.join("\n"), marker_end);
+            new_content = new_content.replace(old_block, &new_block);
+        } else if !meta_tags.is_empty() {
+            // Inject after the last <meta> tag in <head>, or before </head>
+            if let Some(head_end) = new_content.find("</head>") {
+                let new_block = format!("{}\n{}\n{}\n", marker_start, meta_tags.join("\n"), marker_end);
+                new_content.insert_str(head_end, &new_block);
+            }
+        }
+        
+        if new_content != content {
+            fs::write(index_path, new_content)?;
+            println!("    {} Synced web SEO & meta tags (title: {})", "✓".green(), title);
+        }
+    }
+
     Ok(())
 }
 

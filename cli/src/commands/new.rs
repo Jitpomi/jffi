@@ -347,7 +347,14 @@ impl FfiCore {{
 
 fn create_config_file(dir: &Path, name: &str, platforms: &[&str]) -> Result<()> {
     let platform_list: Vec<&str> = platforms.to_vec();
-    let config = format!(r#"[package]
+    let name_pascal: String = name.split('-').map(|part| {
+        let mut chars = part.chars();
+        match chars.next() {
+            None => String::new(),
+            Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        }
+    }).collect();
+    let config = format!(r##"[package]
 name = "{}"
 version = "0.1.0"
 
@@ -378,7 +385,18 @@ host = false
 https = false
 open = false
 cors = true
-"#, name, platform_list, name.replace("-", ""), name.replace("-", ""));
+title = "{}"
+description = "A cross-platform app built with JFFI"
+lang = "en"
+# theme_color = "#000000"
+# favicon = "/favicon.ico"
+# og_image = "/og-image.png"
+# og_url = "https://example.com"
+# og_type = "website"
+# twitter_card = "summary_large_image"
+# keywords = ""
+# author = ""
+"##, name, platform_list, name.replace("-", ""), name.replace("-", ""), name_pascal);
     fs::write(dir.join("jffi.toml"), config)?;
     
     // Create .cargo/config.toml for iOS deployment target (needed by crates like blake3/ring)
