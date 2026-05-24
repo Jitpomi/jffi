@@ -1735,6 +1735,14 @@ fn build_web(release: bool) -> Result<()> {
         .map(|e| e.path())
         .context("Could not find WASM file")?;
     
+    // Derive the out-name from the .wasm filename to match wasm-pack conventions
+    // e.g. "bena_ffi_web.wasm" -> "bena_ffi_web"
+    let out_name = wasm_file
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("wasm")
+        .to_string();
+    
     // Ensure wasm-bindgen-cli is installed with exact version matching the resolved library
     ensure_wasm_bindgen_cli()?;
     
@@ -1746,7 +1754,7 @@ fn build_web(release: bool) -> Result<()> {
         .arg("--target")
         .arg("web")
         .arg("--out-name")
-        .arg("wasm")
+        .arg(&out_name)
         .status()
         .context("Failed to run wasm-bindgen")?;
     

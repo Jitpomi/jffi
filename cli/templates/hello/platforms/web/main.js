@@ -1,4 +1,4 @@
-import init, { Core } from './pkg/wasm.js';
+import init, { Core } from './pkg/{{name_snake}}_ffi_web.js';
 
 let core = null;
 

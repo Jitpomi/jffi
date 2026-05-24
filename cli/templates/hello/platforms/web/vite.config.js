@@ -22,10 +22,6 @@ function wasmHotReload() {
 
 export default defineConfig({
   plugins: [wasmHotReload()],
-  server: {
-    port: 3000,
-    open: true
-  },
   build: {
     outDir: 'dist',
     sourcemap: true
