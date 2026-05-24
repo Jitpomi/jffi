@@ -373,6 +373,11 @@ gtk_version = "4.0"
 
 [platforms.web]
 target = "es2020"
+port = 5173
+host = false
+https = false
+open = false
+cors = true
 "#, name, platform_list, name.replace("-", ""), name.replace("-", ""));
     fs::write(dir.join("jffi.toml"), config)?;
     

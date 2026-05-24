@@ -580,6 +580,10 @@ fn run_web() -> Result<()> {
         anyhow::bail!("npm is not installed. Please install Node.js and npm first.");
     }
     
+    let config = crate::config::load_config()?;
+    let web_config = config.platforms.web;
+    let port = web_config.port;
+    
     use std::process::Stdio;
     let verbose = std::env::var("JFFI_VERBOSE").is_ok();
     
@@ -602,12 +606,35 @@ fn run_web() -> Result<()> {
     }
     
     // Start Vite dev server
+    let protocol = if web_config.https { "https" } else { "http" };
+    let host_str = if web_config.host { "0.0.0.0" } else { "localhost" };
+    
     println!("  {} Starting Vite dev server...", "→".bright_blue());
-    println!("  {} Server will open at http://localhost:3000", "→".bright_blue());
+    println!("  {} Server will open at {}://{}:{}", "→".bright_blue(), protocol, host_str, port);
     
     let mut vite_cmd = Command::new("npm");
-    vite_cmd.arg("run")
-        .arg("dev")
+    let mut args = vec![
+        "run".to_string(),
+        "dev".to_string(),
+        "--".to_string(),
+        "--port".to_string(),
+        port.to_string(),
+    ];
+    
+    if web_config.host {
+        args.push("--host".to_string());
+    }
+    if web_config.https {
+        args.push("--https".to_string());
+    }
+    if web_config.open {
+        args.push("--open".to_string());
+    }
+    if web_config.cors {
+        args.push("--cors".to_string());
+    }
+    
+    vite_cmd.args(&args)
         .current_dir("platforms/web");
     if !verbose {
         vite_cmd.stdout(Stdio::null()).stderr(Stdio::null());

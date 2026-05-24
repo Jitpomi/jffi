@@ -583,6 +583,10 @@ fn touch_xcframework(platform: &str) -> Result<()> {
 fn start_web_dev_server() -> Result<()> {
     use std::process::Stdio;
     
+    let config = crate::config::load_config()?;
+    let web_config = config.platforms.web;
+    let port = web_config.port;
+    
     let verbose = std::env::var("JFFI_VERBOSE").is_ok();
     
     // Install npm dependencies if needed
@@ -605,7 +609,28 @@ fn start_web_dev_server() -> Result<()> {
     
     // Start Vite dev server in background
     let mut vite_cmd = Command::new("npm");
-    vite_cmd.args(["run", "dev"])
+    let mut args = vec![
+        "run".to_string(),
+        "dev".to_string(),
+        "--".to_string(),
+        "--port".to_string(),
+        port.to_string(),
+    ];
+    
+    if web_config.host {
+        args.push("--host".to_string());
+    }
+    if web_config.https {
+        args.push("--https".to_string());
+    }
+    if web_config.open {
+        args.push("--open".to_string());
+    }
+    if web_config.cors {
+        args.push("--cors".to_string());
+    }
+    
+    vite_cmd.args(&args)
         .current_dir("platforms/web");
     if !verbose {
         vite_cmd.stdout(Stdio::null()).stderr(Stdio::null());
@@ -616,8 +641,11 @@ fn start_web_dev_server() -> Result<()> {
     // Give it a moment to start
     std::thread::sleep(Duration::from_millis(1500));
     
+    let protocol = if web_config.https { "https" } else { "http" };
+    let host_str = if web_config.host { "0.0.0.0" } else { "localhost" };
+    
     println!();
-    println!("  {} Vite dev server running at {}", "✓".green(), "http://localhost:3000".bright_cyan().underline());
+    println!("  {} Vite dev server running at {}", "✓".green(), format!("{}://{}:{}", protocol, host_str, port).bright_cyan().underline());
     println!();
     
     Ok(())

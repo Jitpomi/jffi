@@ -117,12 +117,27 @@ impl Default for LinuxConfig {
 pub struct WebConfig {
     #[serde(default = "default_web_target")]
     pub target: String,
+    #[serde(default = "default_web_port")]
+    pub port: u16,
+    #[serde(default = "default_false")]
+    pub host: bool,
+    #[serde(default = "default_false")]
+    pub https: bool,
+    #[serde(default = "default_false")]
+    pub open: bool,
+    #[serde(default = "default_true")]
+    pub cors: bool,
 }
 
 impl Default for WebConfig {
     fn default() -> Self {
         Self {
             target: "es2020".to_string(),
+            port: 5173,
+            host: false,
+            https: false,
+            open: false,
+            cors: true,
         }
     }
 }
@@ -149,6 +164,10 @@ fn default_gtk_version() -> String {
 
 fn default_web_target() -> String {
     "es2020".to_string()
+}
+
+fn default_web_port() -> u16 {
+    5173
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -297,6 +316,7 @@ pub struct AndroidSigningProfile {
 }
 
 fn default_true() -> bool { true }
+fn default_false() -> bool { false }
 fn default_macos_formats() -> Vec<String> { vec!["app".to_string(), "dmg".to_string()] }
 fn default_macos_targets() -> Vec<String> { vec!["aarch64-apple-darwin".to_string(), "x86_64-apple-darwin".to_string()] }
 fn default_ios_format() -> String { "ipa".to_string() }
