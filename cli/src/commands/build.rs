@@ -1379,12 +1379,16 @@ fn build_windows_archs(archs: &[&str], platforms: &[&str], release: bool, profil
             build_args.push("build".to_string());
             build_args.push(csproj_file.to_string_lossy().into_owned());
             build_args.push(format!("-p:Platform={}", platform));
+            build_args.push("-p:PublishReadyToRun=false".to_string());
+            build_args.push("-p:PublishTrimmed=false".to_string());
             if release {
                 build_args.extend(["-c".to_string(), "Release".to_string()]);
             }
         } else {
             build_args.push(csproj_file.to_string_lossy().into_owned());
             build_args.push(format!("/p:Platform={}", platform));
+            build_args.push("/p:PublishReadyToRun=false".to_string());
+            build_args.push("/p:PublishTrimmed=false".to_string());
             if release {
                 build_args.extend(["/p:Configuration=Release".to_string()]);
             }
