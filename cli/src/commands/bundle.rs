@@ -680,7 +680,7 @@ fn bundle_ios(
         
         plist_content.push_str("    <key>manageAppVersionAndBuildNumber</key>\n    <false/>\n");
         plist_content.push_str("    <key>generateAppStoreInformation</key>\n    <false/>\n");
-        if let Some(cert) = signing_cert_val {
+        if let Some(ref cert) = signing_cert_val {
             plist_content.push_str(&format!("    <key>signingCertificate</key>\n    <string>{}</string>\n", cert));
         }
         if let Some(icert) = installer_cert_val {
@@ -738,6 +738,7 @@ fn bundle_ios(
             &ios_config.destination,
             "-archivePath",
             archive_path.to_str().unwrap(),
+            "-allowProvisioningUpdates",
         ]);
         
         if no_sign {
@@ -746,8 +747,18 @@ fn bundle_ios(
                 "CODE_SIGNING_REQUIRED=NO",
                 "CODE_SIGNING_ALLOWED=NO",
             ]);
-        } else if !team_id_val.is_empty() {
-            archive_cmd.arg(format!("DEVELOPMENT_TEAM={}", team_id_val));
+        } else {
+            if !team_id_val.is_empty() {
+                archive_cmd.arg(format!("DEVELOPMENT_TEAM={}", team_id_val));
+            }
+            if let Some(cert) = &signing_cert_val {
+                archive_cmd.arg(format!("CODE_SIGN_IDENTITY={}", cert));
+            }
+            let prof_to_use = provisioning_profile_override.as_ref().or(ios_config.provisioning_profile.as_ref());
+            if let Some(prof) = prof_to_use {
+                archive_cmd.arg(format!("PROVISIONING_PROFILE_SPECIFIER={}", prof));
+                archive_cmd.arg("CODE_SIGN_STYLE=Manual");
+            }
         }
         
         let status = archive_cmd.status().context("Failed to create xcarchive")?;
