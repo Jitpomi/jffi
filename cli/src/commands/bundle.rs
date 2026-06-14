@@ -24,6 +24,8 @@ pub fn bundle_project(
     
     let config = crate::config::load_config()?;
     
+    crate::commands::build::sync_configs_to_platforms(&config)?;
+    
     // Validate configurations for store compatibility
     validate_bundle_config(&config, platform, profile, no_sign)?;
     

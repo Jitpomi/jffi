@@ -2166,6 +2166,55 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
         }
     }
 
+    // 4. Rust Core Cargo.toml
+    let cargo_path = Path::new("core/Cargo.toml");
+    if cargo_path.exists() {
+        let content = fs::read_to_string(cargo_path)?;
+        let lines: Vec<String> = content.lines().map(|line| {
+            if line.starts_with("version = \"") {
+                format!("version = \"{}\"", version_name)
+            } else {
+                line.to_string()
+            }
+        }).collect();
+        let new_content = lines.join("\n");
+        if new_content != content {
+            fs::write(cargo_path, new_content)?;
+            println!("    {} Synced Rust core Cargo.toml version", "✓".green());
+        }
+    }
+
+    // 5. Windows Package.appxmanifest
+    let windows_path = Path::new("platforms/windows/Package.appxmanifest");
+    if windows_path.exists() {
+        let content = fs::read_to_string(windows_path)?;
+        let parts: Vec<&str> = version_name.split('.').collect();
+        let windows_version = if parts.len() == 3 {
+            format!("{}.0", version_name)
+        } else {
+            version_name.to_string()
+        };
+        let lines: Vec<String> = content.lines().map(|line| {
+            if line.trim_start().starts_with("Version=\"") {
+                if let Some(start) = line.find("Version=\"") {
+                    if let Some(end) = line[start + 9..].find('"') {
+                        let prefix = &line[..start + 9];
+                        let suffix = &line[start + 9 + end + 1..];
+                        return format!("{}{}\"{}", prefix, windows_version, suffix);
+                    }
+                }
+                line.to_string()
+            } else {
+                line.to_string()
+            }
+        }).collect();
+        let new_content = lines.join("\n");
+        if new_content != content {
+            fs::write(windows_path, new_content)?;
+            println!("    {} Synced Windows Package.appxmanifest version", "✓".green());
+        }
+    }
+
     Ok(())
 }
 
