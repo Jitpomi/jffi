@@ -1941,6 +1941,22 @@ fn patch_swift_file(path: &Path) -> Result<()> {
 pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
     println!("  {} Syncing jffi.toml configurations to native platform builds...", "→".bright_blue());
 
+    let version_name = config.bundle.as_ref()
+        .and_then(|b| b.version.as_ref())
+        .unwrap_or(&config.package.version);
+
+    let mut version_code = config.bundle.as_ref()
+        .and_then(|b| b.build_number)
+        .unwrap_or_else(|| config.package.version_code.unwrap_or(1));
+
+    // CI/CD Build Number Override
+    if let Ok(run_number) = std::env::var("GITHUB_RUN_NUMBER") {
+        if let Ok(num) = run_number.parse::<u32>() {
+            version_code = num;
+            println!("    {} Detected CI Environment. Auto-injecting build number: {}", "★".bright_magenta(), num);
+        }
+    }
+
     // 1. Android
     let gradle_path = Path::new("platforms/android/app/build.gradle.kts");
     if gradle_path.exists() {
@@ -1949,12 +1965,6 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
         let package = &config.platforms.android.package;
         let min_sdk = config.platforms.android.min_sdk;
         let target_sdk = config.platforms.android.target_sdk.unwrap_or(35);
-        let version_name = config.bundle.as_ref()
-            .and_then(|b| b.version.as_ref())
-            .unwrap_or(&config.package.version);
-        let version_code = config.bundle.as_ref()
-            .and_then(|b| b.build_number)
-            .unwrap_or_else(|| config.package.version_code.unwrap_or(1));
         
         let lines: Vec<String> = content.lines().map(|line| {
             let trimmed = line.trim();
@@ -1992,14 +2002,6 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
     let bundle_id = config.bundle.as_ref()
         .and_then(|b| b.identifier.clone())
         .unwrap_or_else(|| config.platforms.ios.bundle_id.clone());
-
-    let version_name = config.bundle.as_ref()
-        .and_then(|b| b.version.as_ref())
-        .unwrap_or(&config.package.version);
-
-    let version_code = config.bundle.as_ref()
-        .and_then(|b| b.build_number)
-        .unwrap_or_else(|| config.package.version_code.unwrap_or(1));
 
     let platforms = vec!["ios", "macos"];
     for platform_str in platforms {
