@@ -242,6 +242,7 @@ pub struct BundleMacosConfig {
     #[serde(default = "default_true")]
     pub staple: bool,
     pub icon: Option<String>,
+    pub provisioning_profile: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -253,6 +254,7 @@ pub struct BundleIosConfig {
     #[serde(default = "default_ios_export_method")]
     pub export_method: String,
     pub icon: Option<String>,
+    pub provisioning_profile: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -333,6 +335,21 @@ pub struct AppleSigningProfile {
     pub method: Option<String>,
     pub team_id: Option<String>,
     pub entitlements: Option<String>,
+    pub signing_certificate: Option<String>,
+    pub installer_signing_certificate: Option<String>,
+    
+    // Notarytool Authentication
+    pub apple_id: Option<String>,
+    pub apple_id_env: Option<String>,
+    pub app_specific_password_env: Option<String>,
+    pub api_key_path: Option<String>,
+    pub api_key_id: Option<String>,
+    pub api_key_issuer_id: Option<String>,
+    
+    // Profile-level overrides
+    pub notarize: Option<bool>,
+    pub formats: Option<Vec<String>>,
+    pub provisioning_profile: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

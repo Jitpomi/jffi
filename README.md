@@ -306,6 +306,8 @@ jffi dev --platform web
 # 2. Edit Rust files → Watcher rebuilds WASM → Refresh browser
 ```
 
+> **Note on Web Builds & C Compilers:** `jffi` automatically unsets `CC_wasm32_unknown_unknown` to prevent build failures if you have it set in your shell profile (e.g. for `esp32` development). If you need to override it, you can run: `CC_wasm32_unknown_unknown=clang jffi dev --platform web`
+
 ### How It Works
 
 **Native UI Changes:**

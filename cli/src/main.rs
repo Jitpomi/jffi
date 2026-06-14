@@ -168,6 +168,11 @@ enum Commands {
 }
 
 fn main() -> anyhow::Result<()> {
+    // Automatically unset CC_wasm32_unknown_unknown to prevent it from breaking the web build.
+    // If it's in your shell profile, you can temporarily override it inline:
+    // CC_wasm32_unknown_unknown=clang jffi dev --platform web
+    std::env::remove_var("CC_wasm32_unknown_unknown");
+
     let cli = Cli::parse();
     
     match cli.command {

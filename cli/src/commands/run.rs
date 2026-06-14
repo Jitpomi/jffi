@@ -45,7 +45,7 @@ fn run_ios_device() -> Result<()> {
     println!("{}", "  You may need to configure code signing in Xcode first.".yellow());
     println!();
     
-    project.build("generic/platform=iOS")
+    project.build("generic/platform=iOS", &[])
         .context("Build failed. Make sure code signing is configured in Xcode.")?;
     
     println!();
@@ -74,7 +74,7 @@ fn run_ios() -> Result<()> {
     println!("  {} Building and launching in simulator...", "→".bright_blue());
     
     let destination = format!("platform=iOS Simulator,id={}", simulator_id);
-    project.build(&destination)?;
+    project.build(&destination, &["CODE_SIGN_IDENTITY=-"])?;
     
     let app_name = &project.scheme;
     
@@ -327,7 +327,7 @@ fn run_macos() -> Result<()> {
     let project = XcodeProject::find(crate::platform::Platform::Macos)?;
     
     println!("  {} Building and launching macOS app...", "→".bright_blue());
-    project.build("")?; // No destination needed for macOS
+    project.build("", &["CODE_SIGN_IDENTITY=-"])?; // No destination needed for macOS
     
     println!("  {} Launching app...", "→".bright_blue());
     let home = std::env::var("HOME").unwrap();

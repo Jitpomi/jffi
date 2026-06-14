@@ -1688,7 +1688,24 @@ fn build_web(release: bool) -> Result<()> {
         // Verbose mode: no progress bar, just plain output
         println!("  {} Building WASM...", "→".bright_blue());
         
-        let status = Command::new("cargo")
+        let mut cmd = Command::new("cargo");
+        
+        // Auto-fix for macOS Apple Clang lacking WASM support
+        if std::env::consts::OS == "macos" && std::env::var("CC_wasm32_unknown_unknown").is_err() {
+            if let Ok(output) = Command::new("brew").args(["--prefix", "llvm"]).output() {
+                if output.status.success() {
+                    let prefix = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    let clang = format!("{}/bin/clang", prefix);
+                    let ar = format!("{}/bin/llvm-ar", prefix);
+                    if std::path::Path::new(&clang).exists() {
+                        cmd.env("CC_wasm32_unknown_unknown", clang);
+                        cmd.env("AR_wasm32_unknown_unknown", ar);
+                    }
+                }
+            }
+        }
+        
+        let status = cmd
             .args(&args)
             .status()
             .context("Failed to build Rust library for WASM")?;
@@ -1707,7 +1724,24 @@ fn build_web(release: bool) -> Result<()> {
         pb.set_message("Building WASM");
         pb.enable_steady_tick(std::time::Duration::from_millis(100));
         
-        let status = Command::new("cargo")
+        let mut cmd = Command::new("cargo");
+        
+        // Auto-fix for macOS Apple Clang lacking WASM support
+        if std::env::consts::OS == "macos" && std::env::var("CC_wasm32_unknown_unknown").is_err() {
+            if let Ok(output) = Command::new("brew").args(["--prefix", "llvm"]).output() {
+                if output.status.success() {
+                    let prefix = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    let clang = format!("{}/bin/clang", prefix);
+                    let ar = format!("{}/bin/llvm-ar", prefix);
+                    if std::path::Path::new(&clang).exists() {
+                        cmd.env("CC_wasm32_unknown_unknown", clang);
+                        cmd.env("AR_wasm32_unknown_unknown", ar);
+                    }
+                }
+            }
+        }
+        
+        let status = cmd
             .args(&args)
             .status()
             .context("Failed to build Rust library for WASM")?;
@@ -1959,6 +1993,14 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
         .and_then(|b| b.identifier.clone())
         .unwrap_or_else(|| config.platforms.ios.bundle_id.clone());
 
+    let version_name = config.bundle.as_ref()
+        .and_then(|b| b.version.as_ref())
+        .unwrap_or(&config.package.version);
+
+    let version_code = config.bundle.as_ref()
+        .and_then(|b| b.build_number)
+        .unwrap_or_else(|| config.package.version_code.unwrap_or(1));
+
     let platforms = vec!["ios", "macos"];
     for platform_str in platforms {
         let platform_dir = format!("platforms/{}", platform_str);
@@ -1975,11 +2017,28 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
                         let content = fs::read_to_string(&pbxproj_path)?;
                         
                         let lines: Vec<String> = content.lines().map(|line| {
-                            if line.contains("PRODUCT_BUNDLE_IDENTIFIER = ") {
+                            let trimmed = line.trim_start();
+                            if trimmed.starts_with("PRODUCT_BUNDLE_IDENTIFIER = ") {
                                 let parts: Vec<&str> = line.split('=').collect();
                                 if parts.len() == 2 {
-                                    let indent = line.len() - line.trim_start().len();
+                                    let indent = line.len() - trimmed.len();
                                     format!("{:width$}PRODUCT_BUNDLE_IDENTIFIER = {};", "", bundle_id, width = indent)
+                                } else {
+                                    line.to_string()
+                                }
+                            } else if trimmed.starts_with("MARKETING_VERSION = ") {
+                                let parts: Vec<&str> = line.split('=').collect();
+                                if parts.len() == 2 {
+                                    let indent = line.len() - trimmed.len();
+                                    format!("{:width$}MARKETING_VERSION = {};", "", version_name, width = indent)
+                                } else {
+                                    line.to_string()
+                                }
+                            } else if trimmed.starts_with("CURRENT_PROJECT_VERSION = ") {
+                                let parts: Vec<&str> = line.split('=').collect();
+                                if parts.len() == 2 {
+                                    let indent = line.len() - trimmed.len();
+                                    format!("{:width$}CURRENT_PROJECT_VERSION = {};", "", version_code, width = indent)
                                 } else {
                                     line.to_string()
                                 }
@@ -1991,7 +2050,7 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
                         let new_content = lines.join("\n");
                         if new_content != content {
                             fs::write(&pbxproj_path, new_content)?;
-                            println!("    {} Synced {} Xcode bundle identifier ({})", "✓".green(), platform_str, bundle_id);
+                            println!("    {} Synced {} Xcode bundle settings (id: {}, version: {}, build: {})", "✓".green(), platform_str, bundle_id, version_name, version_code);
                         }
                     }
                 }

@@ -43,8 +43,8 @@ pub fn generate_icons(config: &Config, platform: &str) -> Result<()> {
     let img = image::open(source_path).context("Failed to open source icon image")?;
     
     match platform {
-        "macos" => generate_apple_icons(&img, "platforms/macos/App/Assets.xcassets/AppIcon.appiconset", true)?,
-        "ios" => generate_apple_icons(&img, "platforms/ios/App/Assets.xcassets/AppIcon.appiconset", false)?,
+        "macos" => generate_apple_icons(&img, "platforms/macos/Assets.xcassets/AppIcon.appiconset", true)?,
+        "ios" => generate_apple_icons(&img, "platforms/ios/Assets.xcassets/AppIcon.appiconset", false)?,
         "android" => generate_android_icons(&img)?,
         "windows" => generate_windows_icons(&img)?,
         "linux" => generate_linux_icons(&img)?,

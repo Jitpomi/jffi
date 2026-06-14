@@ -91,7 +91,7 @@ fn doctor_bundle(platform: Option<&str>, release: bool) -> Result<()> {
             Ok(config) => {
                 for p in &platforms_to_check {
                     println!("\nChecking store-readiness for platform: {}", p.to_uppercase());
-                    if let Err(e) = crate::commands::bundle::validate_bundle_config(&config, p, !release) {
+                    if let Err(e) = crate::commands::bundle::validate_bundle_config(&config, p, "release", !release) {
                         println!("  {} {}", "✗".red(), e);
                     }
                 }

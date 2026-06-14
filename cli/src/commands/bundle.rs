@@ -25,7 +25,7 @@ pub fn bundle_project(
     let config = crate::config::load_config()?;
     
     // Validate configurations for store compatibility
-    validate_bundle_config(&config, platform, no_sign)?;
+    validate_bundle_config(&config, platform, profile, no_sign)?;
     
     if print_plan {
         println!("{}", "📋 Bundle Plan:".bright_cyan().bold());
@@ -287,9 +287,10 @@ fn bundle_macos(
         notarize: true,
         staple: true,
         icon: None,
+        provisioning_profile: None,
     });
     
-    let formats = if let Some(f) = format {
+    let mut formats = if let Some(f) = format {
         vec![f.to_string()]
     } else {
         macos_config.formats.clone()
@@ -307,6 +308,17 @@ fn bundle_macos(
     
     let mut method_val = "developer-id".to_string();
     let mut team_id_val = String::new();
+    let mut signing_cert_val = None;
+    let mut installer_cert_val = None;
+    let mut apple_id_val = None;
+    let mut apple_id_env_val = None;
+    let mut app_specific_password_env_val = None;
+    let mut api_key_path_val = None;
+    let mut api_key_id_val = None;
+    let mut api_key_issuer_id_val = None;
+    let mut notarize_override = None;
+    let mut formats_override = None;
+    let mut provisioning_profile_override = None;
     
     if no_sign {
         method_val = "mac-application".to_string();
@@ -317,12 +329,29 @@ fn bundle_macos(
                     if let Some(apple) = &prof.apple {
                         if let Some(m) = &apple.method { method_val = m.clone(); }
                         if let Some(t) = &apple.team_id { team_id_val = t.clone(); }
+                        if let Some(c) = &apple.signing_certificate { signing_cert_val = Some(c.clone()); }
+                        if let Some(ic) = &apple.installer_signing_certificate { installer_cert_val = Some(ic.clone()); }
+                        if let Some(c) = &apple.apple_id { apple_id_val = Some(c.clone()); }
+                        if let Some(c) = &apple.apple_id_env { apple_id_env_val = Some(c.clone()); }
+                        if let Some(c) = &apple.app_specific_password_env { app_specific_password_env_val = Some(c.clone()); }
+                        if let Some(c) = &apple.api_key_path { api_key_path_val = Some(c.clone()); }
+                        if let Some(c) = &apple.api_key_id { api_key_id_val = Some(c.clone()); }
+                        if let Some(c) = &apple.api_key_issuer_id { api_key_issuer_id_val = Some(c.clone()); }
+                        if let Some(n) = &apple.notarize { notarize_override = Some(*n); }
+                        if let Some(f) = &apple.formats { formats_override = Some(f.clone()); }
+                        if let Some(p) = &apple.provisioning_profile { provisioning_profile_override = Some(p.clone()); }
                     }
                 }
             }
         }
     }
-    
+    // Override formats if specified in the profile
+    if let Some(f) = formats_override {
+        if format.is_none() {
+            formats = f;
+        }
+    }
+
     let generated_dir = PathBuf::from("target/jffi/generated/apple");
     let export_plist_path = generated_dir.join("ExportOptions.plist");
     
@@ -344,6 +373,29 @@ fn bundle_macos(
                 "    <key>teamID</key>\n\
                  <string>{}</string>\n",
                 team_id_val
+            ));
+        }
+        
+        plist_content.push_str("    <key>manageAppVersionAndBuildNumber</key>\n    <false/>\n");
+        plist_content.push_str("    <key>generateAppStoreInformation</key>\n    <false/>\n");
+        if let Some(ref cert) = signing_cert_val {
+            plist_content.push_str(&format!("    <key>signingCertificate</key>\n    <string>{}</string>\n", cert));
+        }
+        if let Some(icert) = installer_cert_val {
+            plist_content.push_str(&format!("    <key>installerSigningCertificate</key>\n    <string>{}</string>\n", icert));
+        }
+        
+        let prof_to_use = provisioning_profile_override.as_ref().or(macos_config.provisioning_profile.as_ref());
+        if let Some(prof) = prof_to_use {
+            let identifier = config.bundle.as_ref().and_then(|b| b.identifier.clone()).unwrap_or_else(|| config.platforms.ios.bundle_id.clone());
+            plist_content.push_str(&format!(
+                "    <key>provisioningProfiles</key>\n\
+                 <dict>\n\
+                     <key>{}</key>\n\
+                     <string>{}</string>\n\
+                 </dict>\n",
+                identifier,
+                prof
             ));
         }
         
@@ -382,6 +434,7 @@ fn bundle_macos(
             "Release",
             "-archivePath",
             archive_path.to_str().unwrap(),
+            "-allowProvisioningUpdates",
         ]);
         
         // Universal binary handling
@@ -399,8 +452,18 @@ fn bundle_macos(
                 "CODE_SIGNING_REQUIRED=NO",
                 "CODE_SIGNING_ALLOWED=NO",
             ]);
-        } else if !team_id_val.is_empty() {
-            archive_cmd.arg(format!("DEVELOPMENT_TEAM={}", team_id_val));
+        } else {
+            if !team_id_val.is_empty() {
+                archive_cmd.arg(format!("DEVELOPMENT_TEAM={}", team_id_val));
+            }
+            if let Some(cert) = &signing_cert_val {
+                archive_cmd.arg(format!("CODE_SIGN_IDENTITY={}", cert));
+            }
+            let prof_to_use = provisioning_profile_override.as_ref().or(macos_config.provisioning_profile.as_ref());
+            if let Some(prof) = prof_to_use {
+                archive_cmd.arg(format!("PROVISIONING_PROFILE_SPECIFIER={}", prof));
+                archive_cmd.arg("CODE_SIGN_STYLE=Manual");
+            }
         }
         
         if print_commands {
@@ -426,6 +489,7 @@ fn bundle_macos(
             export_path.to_str().unwrap(),
             "-exportOptionsPlist",
             export_plist_path.to_str().unwrap(),
+            "-allowProvisioningUpdates",
         ]);
         
         if print_commands {
@@ -474,7 +538,7 @@ fn bundle_macos(
         }
     }
     
-    let do_notarize = notarize || macos_config.notarize;
+    let do_notarize = notarize_override.unwrap_or(notarize || macos_config.notarize);
     if do_notarize && !no_sign && !dry_run {
         println!("  {} Notarizing application...", "→".bright_blue());
         
@@ -491,20 +555,33 @@ fn bundle_macos(
         };
         
         if path_to_notarize.exists() {
-            let keychain_profile = std::env::var("JFFI_APPLE_NOTARY_PROFILE")
-                .unwrap_or_else(|_| "AC_PASSWORD".to_string());
-                
             let mut notary_cmd = Command::new("xcrun");
-            notary_cmd.args([
-                    "notarytool",
-                    "submit",
-                    path_to_notarize.to_str().unwrap(),
-                    "--keychain-profile",
-                    &keychain_profile,
-                    "--wait",
-                ]);
+            notary_cmd.args(["notarytool", "submit", path_to_notarize.to_str().unwrap()]);
+            
+            let mut auth_provided = false;
+            
+            if let (Some(key_path), Some(key_id), Some(issuer)) = (&api_key_path_val, &api_key_id_val, &api_key_issuer_id_val) {
+                notary_cmd.args(["--key", key_path, "--key-id", key_id, "--issuer", issuer]);
+                auth_provided = true;
+            } else {
+                let pwd = app_specific_password_env_val.as_ref().and_then(|e| std::env::var(e).ok());
+                let aid = apple_id_val.clone().or_else(|| apple_id_env_val.as_ref().and_then(|e| std::env::var(e).ok()));
+                
+                if let (Some(password), Some(apple_id)) = (pwd, aid) {
+                    notary_cmd.args(["--apple-id", &apple_id, "--password", &password, "--team-id", &team_id_val]);
+                    auth_provided = true;
+                }
+            }
+            
+            if !auth_provided {
+                let keychain_profile = std::env::var("JFFI_APPLE_NOTARY_PROFILE")
+                    .unwrap_or_else(|_| "AC_PASSWORD".to_string());
+                notary_cmd.args(["--keychain-profile", &keychain_profile]);
+            }
+            
+            notary_cmd.arg("--wait");
             if print_commands {
-                println!("  $ xcrun notarytool submit {} --keychain-profile *** --wait", path_to_notarize.to_str().unwrap());
+                println!("  $ xcrun notarytool submit {} [auth_args] --wait", path_to_notarize.to_str().unwrap());
             }
             let status = notary_cmd.status().context("Failed to submit to notarytool");
                 
@@ -540,6 +617,7 @@ fn bundle_ios(
         destination: "generic/platform=iOS".to_string(),
         export_method: "app-store".to_string(),
         icon: None,
+        provisioning_profile: None,
     });
     
     println!("  {} Finding iOS Xcode project...", "→".bright_blue());
@@ -554,6 +632,9 @@ fn bundle_ios(
     
     let mut method_val = ios_config.export_method.clone();
     let mut team_id_val = String::new();
+    let mut signing_cert_val = None;
+    let mut installer_cert_val = None;
+    let mut provisioning_profile_override = None;
     
     if !no_sign {
         if let Some(signing) = &bundle_config.signing {
@@ -562,6 +643,9 @@ fn bundle_ios(
                     if let Some(apple) = &prof.apple {
                         if let Some(m) = &apple.method { method_val = m.clone(); }
                         if let Some(t) = &apple.team_id { team_id_val = t.clone(); }
+                        if let Some(c) = &apple.signing_certificate { signing_cert_val = Some(c.clone()); }
+                        if let Some(ic) = &apple.installer_signing_certificate { installer_cert_val = Some(ic.clone()); }
+                        if let Some(p) = &apple.provisioning_profile { provisioning_profile_override = Some(p.clone()); }
                     }
                 }
             }
@@ -591,6 +675,29 @@ fn bundle_ios(
                 "    <key>teamID</key>\n\
                  <string>{}</string>\n",
                 team_id_val
+            ));
+        }
+        
+        plist_content.push_str("    <key>manageAppVersionAndBuildNumber</key>\n    <false/>\n");
+        plist_content.push_str("    <key>generateAppStoreInformation</key>\n    <false/>\n");
+        if let Some(cert) = signing_cert_val {
+            plist_content.push_str(&format!("    <key>signingCertificate</key>\n    <string>{}</string>\n", cert));
+        }
+        if let Some(icert) = installer_cert_val {
+            plist_content.push_str(&format!("    <key>installerSigningCertificate</key>\n    <string>{}</string>\n", icert));
+        }
+        
+        let prof_to_use = provisioning_profile_override.as_ref().or(ios_config.provisioning_profile.as_ref());
+        if let Some(prof) = prof_to_use {
+            let identifier = config.bundle.as_ref().and_then(|b| b.identifier.clone()).unwrap_or_else(|| config.package.name.clone());
+            plist_content.push_str(&format!(
+                "    <key>provisioningProfiles</key>\n\
+                 <dict>\n\
+                     <key>{}</key>\n\
+                     <string>{}</string>\n\
+                 </dict>\n",
+                identifier,
+                prof
             ));
         }
         
@@ -1084,7 +1191,7 @@ fn bundle_web(
     Ok(())
 }
 
-pub fn validate_bundle_config(config: &Config, platform: &str, no_sign: bool) -> Result<()> {
+pub fn validate_bundle_config(config: &Config, platform: &str, profile: &str, no_sign: bool) -> Result<()> {
     println!("  {} Validating configuration for store-readiness...", "→".bright_blue());
 
     let check_placeholder = |value: &str, field_name: &str| -> Result<()> {
@@ -1146,7 +1253,7 @@ pub fn validate_bundle_config(config: &Config, platform: &str, no_sign: bool) ->
                 if let Some(bundle_conf) = &config.bundle {
                     if let Some(signing) = &bundle_conf.signing {
                         if let Some(profiles) = &signing.profiles {
-                            let active_profile = "release";
+                            let active_profile = profile;
                             if let Some(profile) = profiles.get(active_profile) {
                                 if let Some(android_prof) = &profile.android {
                                     if let Some(keystore_path) = &android_prof.keystore_path {
@@ -1162,21 +1269,21 @@ pub fn validate_bundle_config(config: &Config, platform: &str, no_sign: bool) ->
                                             );
                                         }
                                     } else {
-                                        anyhow::bail!("Store Validation Error: Android keystore_path is missing in 'signing.profiles.release.android'.");
+                                        anyhow::bail!("Store Validation Error: Android keystore_path is missing in 'signing.profiles.{}.android'.", active_profile);
                                     }
 
                                     if android_prof.key_alias.is_none() || android_prof.key_alias.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
-                                        anyhow::bail!("Store Validation Error: Android key_alias is missing or empty in 'signing.profiles.release.android'.");
+                                        anyhow::bail!("Store Validation Error: Android key_alias is missing or empty in 'signing.profiles.{}.android'.", active_profile);
                                     }
 
                                     if android_prof.store_password_env.is_none() || android_prof.key_password_env.is_none() {
-                                        anyhow::bail!("Store Validation Error: Android store_password_env or key_password_env is missing in 'signing.profiles.release.android'.");
+                                        anyhow::bail!("Store Validation Error: Android store_password_env or key_password_env is missing in 'signing.profiles.{}.android'.", active_profile);
                                     }
                                 } else {
-                                    anyhow::bail!("Store Validation Error: Android signing profile 'android' is missing in 'signing.profiles.release'.");
+                                    anyhow::bail!("Store Validation Error: Android signing profile 'android' is missing in 'signing.profiles{}'.", active_profile);
                                 }
                             } else {
-                                println!("  {} Warning: No signing profile 'release' found in 'jffi.toml'. Bundle will build but may not be signed.", "⚠".yellow());
+                                println!("  {} Warning: No signing profile '{}' found in 'jffi.toml'. Bundle will build but may not be signed.", "⚠".yellow(), active_profile);
                             }
                         } else {
                             println!("  {} Warning: No signing profiles found in 'jffi.toml'. Bundle will build but may not be signed.", "⚠".yellow());
@@ -1190,7 +1297,7 @@ pub fn validate_bundle_config(config: &Config, platform: &str, no_sign: bool) ->
                 if let Some(bundle_conf) = &config.bundle {
                     if let Some(signing) = &bundle_conf.signing {
                         if let Some(profiles) = &signing.profiles {
-                            let active_profile = "release";
+                            let active_profile = profile;
                             if let Some(profile) = profiles.get(active_profile) {
                                 if let Some(apple_prof) = &profile.apple {
                                     if let Some(team_id) = &apple_prof.team_id {
@@ -1201,10 +1308,10 @@ pub fn validate_bundle_config(config: &Config, platform: &str, no_sign: bool) ->
                                             anyhow::bail!("Store Validation Error: Apple developer team_id '{}' must be exactly 10 characters.", team_id);
                                         }
                                     } else {
-                                        anyhow::bail!("Store Validation Error: Apple developer team_id is missing in 'signing.profiles.release.apple'.");
+                                        anyhow::bail!("Store Validation Error: Apple developer team_id is missing in 'signing.profiles.{}.apple'.", active_profile);
                                     }
                                 } else {
-                                    anyhow::bail!("Store Validation Error: Apple signing profile 'apple' is missing in 'signing.profiles.release'.");
+                                    anyhow::bail!("Store Validation Error: Apple signing profile 'apple' is missing in 'signing.profiles.{}'.", active_profile);
                                 }
                             }
                         }

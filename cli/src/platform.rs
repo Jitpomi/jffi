@@ -79,7 +79,7 @@ impl XcodeProject {
         })
     }
 
-    pub fn build(&self, destination: &str) -> Result<()> {
+    pub fn build(&self, destination: &str, extra_args: &[&str]) -> Result<()> {
         use std::process::Stdio;
         
         let verbose = std::env::var("JFFI_VERBOSE").is_ok();
@@ -110,6 +110,7 @@ impl XcodeProject {
             build_cmd.args(["-destination", destination]);
         }
         build_cmd.arg("build");
+        build_cmd.args(extra_args);
         if !verbose {
             build_cmd.stdout(Stdio::null()).stderr(Stdio::null());
         }
