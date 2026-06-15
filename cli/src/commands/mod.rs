@@ -7,3 +7,4 @@ pub mod remove;
 pub mod bundle;
 pub mod doctor;
 pub mod icons;
+pub mod screenshots;

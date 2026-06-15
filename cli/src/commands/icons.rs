@@ -62,29 +62,40 @@ fn generate_apple_icons(img: &image::DynamicImage, dest_dir: &str, is_macos: boo
   "images" : [
 "#.to_string();
 
-    let sizes = if is_macos {
+    // Tuple: (size, scale, idiom)
+    let sizes: Vec<(f32, u8, &'static str)> = if is_macos {
         vec![
-            (16, 1), (16, 2),
-            (32, 1), (32, 2),
-            (128, 1), (128, 2),
-            (256, 1), (256, 2),
-            (512, 1), (512, 2)
+            (16.0, 1, "mac"), (16.0, 2, "mac"),
+            (32.0, 1, "mac"), (32.0, 2, "mac"),
+            (128.0, 1, "mac"), (128.0, 2, "mac"),
+            (256.0, 1, "mac"), (256.0, 2, "mac"),
+            (512.0, 1, "mac"), (512.0, 2, "mac"),
         ]
     } else {
         vec![
-            (20, 2), (20, 3),
-            (29, 2), (29, 3),
-            (40, 2), (40, 3),
-            (60, 2), (60, 3),
-            (76, 2), (83, 2), // iPad
-            (1024, 1) // App Store
+            (20.0, 2, "iphone"), (20.0, 3, "iphone"),
+            (29.0, 2, "iphone"), (29.0, 3, "iphone"),
+            (40.0, 2, "iphone"), (40.0, 3, "iphone"),
+            (60.0, 2, "iphone"), (60.0, 3, "iphone"),
+            (20.0, 1, "ipad"), (20.0, 2, "ipad"),
+            (29.0, 1, "ipad"), (29.0, 2, "ipad"),
+            (40.0, 1, "ipad"), (40.0, 2, "ipad"),
+            (76.0, 1, "ipad"), (76.0, 2, "ipad"),
+            (83.5, 2, "ipad"),
+            (1024.0, 1, "ios-marketing"),
         ]
     };
 
     let mut is_first = true;
-    for (base_size, scale) in sizes {
-        let actual_size = base_size * scale;
-        let filename = format!("icon_{}x{}@{}.png", base_size, base_size, scale);
+    for (base_size, scale, idiom) in sizes {
+        let actual_size = (base_size * scale as f32).round() as u32;
+        let size_str = if base_size.fract() == 0.0 {
+            format!("{0}x{0}", base_size as u32)
+        } else {
+            format!("{0}x{0}", base_size)
+        };
+        
+        let filename = format!("icon_{}_{}@{}.png", size_str, idiom, scale);
         let out_path = dest_path.join(&filename);
         
         let resized = img.resize_exact(actual_size, actual_size, FilterType::Lanczos3);
@@ -95,10 +106,9 @@ fn generate_apple_icons(img: &image::DynamicImage, dest_dir: &str, is_macos: boo
         }
         is_first = false;
         
-        let idiom = if is_macos { "mac" } else if base_size == 1024 { "ios-marketing" } else { "universal" };
         contents.push_str(&format!(
-            "    {{\n      \"size\" : \"{}x{}\",\n      \"idiom\" : \"{}\",\n      \"filename\" : \"{}\",\n      \"scale\" : \"{}x\"\n    }}",
-            base_size, base_size, idiom, filename, scale
+            "    {{\n      \"size\" : \"{}\",\n      \"idiom\" : \"{}\",\n      \"filename\" : \"{}\",\n      \"scale\" : \"{}x\"\n    }}",
+            size_str, idiom, filename, scale
         ));
     }
 

@@ -172,6 +172,9 @@ enum Commands {
         #[arg(short, long, default_value = "all")]
         platform: String,
     },
+    
+    /// Generate Apple App Store and Google Play screenshots
+    Screenshots,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -226,7 +229,7 @@ fn main() -> anyhow::Result<()> {
             commands::doctor::run_doctor(subcommand.as_deref(), platform.as_deref(), release)?;
         }
         Commands::Icons { platform } => {
-            let config = crate::config::load_config()?;
+            let config = config::load_config().unwrap_or_else(|_| config::JffiConfig::default());
             if platform == "all" {
                 let platforms = vec!["ios", "android", "macos", "windows", "linux", "web"];
                 for p in platforms {
@@ -235,6 +238,9 @@ fn main() -> anyhow::Result<()> {
             } else {
                 crate::commands::icons::generate_icons(&config, &platform)?;
             }
+        }
+        Commands::Screenshots => {
+            crate::commands::screenshots::generate_screenshots()?;
         }
     }
     
