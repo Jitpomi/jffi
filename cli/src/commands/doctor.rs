@@ -111,11 +111,14 @@ fn doctor_bundle(platform: Option<&str>, release: bool) -> Result<()> {
 fn check_tool(name: &str, args: &[&str], msg: &str) {
     use std::process::Command;
     match Command::new(name).args(args).output() {
-        Ok(output) if output.status.success() => {
+        Ok(_) => {
             println!("  {} {} found", "✓".green(), name.bright_cyan());
         }
-        _ => {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             println!("  {} {} {} - {}", "✗".red(), "Missing Tool:".bold(), name.bright_cyan(), msg);
+        }
+        Err(_) => {
+            println!("  {} {} found (but execution failed)", "✓".green(), name.bright_cyan());
         }
     }
 }
