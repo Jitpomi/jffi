@@ -229,7 +229,7 @@ fn main() -> anyhow::Result<()> {
             commands::doctor::run_doctor(subcommand.as_deref(), platform.as_deref(), release)?;
         }
         Commands::Icons { platform } => {
-            let config = config::load_config().unwrap_or_else(|_| config::JffiConfig::default());
+            let config = crate::config::load_config()?;
             if platform == "all" {
                 let platforms = vec!["ios", "android", "macos", "windows", "linux", "web"];
                 for p in platforms {
