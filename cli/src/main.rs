@@ -165,6 +165,13 @@ enum Commands {
         #[arg(long)]
         release: bool,
     },
+    
+    /// Generate icons for all platforms
+    Icons {
+        /// Platform to generate icons for (or all)
+        #[arg(short, long, default_value = "all")]
+        platform: String,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -217,6 +224,17 @@ fn main() -> anyhow::Result<()> {
         }
         Commands::Doctor { subcommand, platform, release } => {
             commands::doctor::run_doctor(subcommand.as_deref(), platform.as_deref(), release)?;
+        }
+        Commands::Icons { platform } => {
+            let config = crate::config::load_config()?;
+            if platform == "all" {
+                let platforms = vec!["ios", "android", "macos", "windows", "linux", "web"];
+                for p in platforms {
+                    crate::commands::icons::generate_icons(&config, p)?;
+                }
+            } else {
+                crate::commands::icons::generate_icons(&config, &platform)?;
+            }
         }
     }
     
