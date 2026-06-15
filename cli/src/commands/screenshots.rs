@@ -21,6 +21,12 @@ pub fn generate_screenshots() -> Result<()> {
         if path.is_file() && path.extension().unwrap_or_default() == "png" {
             found = true;
             let filename = path.file_name().unwrap().to_string_lossy();
+            
+            // Skip non-screenshot assets
+            if filename == "app_icon.png" || filename == "feature_graphic.png" {
+                continue;
+            }
+
             println!("  {} Processing screenshot {}...", "→".bright_blue(), filename);
             let img = image::open(&path).context("Failed to open screenshot")?;
             
