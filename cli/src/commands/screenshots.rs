@@ -67,6 +67,9 @@ fn pad_and_save(img: &image::DynamicImage, target_w: u32, target_h: u32, out_pat
     let y_offset = (th - new_h) / 2;
     
     imageops::overlay(&mut bg, &resized.to_rgba8(), x_offset as i64, y_offset as i64);
-    bg.save(out_path)?;
+    
+    // Convert to RGB to strip alpha channel for Apple validation
+    let rgb_bg = image::DynamicImage::ImageRgba8(bg).into_rgb8();
+    rgb_bg.save(out_path)?;
     Ok(())
 }
