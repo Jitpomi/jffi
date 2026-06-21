@@ -839,6 +839,7 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
     
     let profile = if release { "release" } else { "debug" };
     let verbose = std::env::var("JFFI_VERBOSE").is_ok();
+    let config = crate::config::load_config()?;
     
     // Always build for both architectures to ensure compatibility
     let targets = vec![
@@ -858,11 +859,17 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
             }
             args.extend(&["--manifest-path", "core/Cargo.toml", "--target", target]);
             
-            let status = Command::new("cargo")
-                .env("CARGO_TARGET_DIR", "target")
+            let mut cmd = Command::new("cargo");
+            cmd.env("CARGO_TARGET_DIR", "target")
                 .env("MACOSX_DEPLOYMENT_TARGET", "13.0")
-                .args(&args)
-                .status()
+                .args(&args);
+            
+            if let Some(rustflags) = &config.platforms.macos.rustflags {
+                let env_var_name = format!("CARGO_TARGET_{}_RUSTFLAGS", target.to_uppercase().replace("-", "_"));
+                cmd.env(env_var_name, rustflags);
+            }
+            
+            let status = cmd.status()
                 .context(format!("Failed to build Rust library for {}", target))?;
             
             if !status.success() {
@@ -889,11 +896,17 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
             }
             args.extend(&["--manifest-path", "core/Cargo.toml", "--target", target]);
             
-            let status = Command::new("cargo")
-                .env("CARGO_TARGET_DIR", "target")
+            let mut cmd = Command::new("cargo");
+            cmd.env("CARGO_TARGET_DIR", "target")
                 .env("MACOSX_DEPLOYMENT_TARGET", "13.0")
-                .args(&args)
-                .status()
+                .args(&args);
+            
+            if let Some(rustflags) = &config.platforms.macos.rustflags {
+                let env_var_name = format!("CARGO_TARGET_{}_RUSTFLAGS", target.to_uppercase().replace("-", "_"));
+                cmd.env(env_var_name, rustflags);
+            }
+            
+            let status = cmd.status()
                 .context(format!("Failed to build Rust library for {}", target))?;
             
             if !status.success() {
@@ -1965,6 +1978,8 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
         let package = &config.platforms.android.package;
         let min_sdk = config.platforms.android.min_sdk;
         let target_sdk = config.platforms.android.target_sdk.unwrap_or(35);
+        let obfuscate = config.platforms.android.obfuscate;
+        let shrink_resources = config.platforms.android.shrink_resources;
         
         let lines: Vec<String> = content.lines().map(|line| {
             let trimmed = line.trim();
@@ -1986,6 +2001,12 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
             } else if trimmed.starts_with("versionCode =") {
                 let indent = line.len() - line.trim_start().len();
                 format!("{:width$}versionCode = {}", "", version_code, width = indent)
+            } else if trimmed.starts_with("isMinifyEnabled =") {
+                let indent = line.len() - line.trim_start().len();
+                format!("{:width$}isMinifyEnabled = {}", "", obfuscate, width = indent)
+            } else if trimmed.starts_with("isShrinkResources =") {
+                let indent = line.len() - line.trim_start().len();
+                format!("{:width$}isShrinkResources = {}", "", shrink_resources, width = indent)
             } else {
                 line.to_string()
             }

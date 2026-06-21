@@ -57,6 +57,10 @@ pub struct AndroidConfig {
     pub target_sdk: Option<u32>,
     pub abis: Option<Vec<String>>,
     pub rustflags: Option<String>,
+    #[serde(default = "default_false")]
+    pub obfuscate: bool,
+    #[serde(default = "default_false")]
+    pub shrink_resources: bool,
 }
 
 impl Default for AndroidConfig {
@@ -67,6 +71,8 @@ impl Default for AndroidConfig {
             target_sdk: None,
             abis: None,
             rustflags: None,
+            obfuscate: false,
+            shrink_resources: false,
         }
     }
 }
@@ -75,12 +81,14 @@ impl Default for AndroidConfig {
 pub struct MacosConfig {
     #[serde(default = "default_macos_deployment_target")]
     pub deployment_target: String,
+    pub rustflags: Option<String>,
 }
 
 impl Default for MacosConfig {
     fn default() -> Self {
         Self {
             deployment_target: "13.0".to_string(),
+            rustflags: None,
         }
     }
 }
