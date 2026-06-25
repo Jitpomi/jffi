@@ -36,6 +36,8 @@ pub fn generate_screenshots() -> Result<()> {
             pad_and_save(&img, 1242, 2208, &dest_dir.join(format!("5.5_iphone_{}", filename)))?;
             // Generate 12.9" iPad (2048 x 2732)
             pad_and_save(&img, 2048, 2732, &dest_dir.join(format!("12.9_ipad_{}", filename)))?;
+            // Generate Mac (2880 x 1800)
+            pad_and_save(&img, 2880, 1800, &dest_dir.join(format!("mac_{}", filename)))?;
         }
     }
     

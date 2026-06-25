@@ -12,6 +12,7 @@
 		{{UUID5}} /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = {{UUID6}} /* AppState.swift */; };
 		{{UUID24}} /* {{name_snake}}_core.swift in Sources */ = {isa = PBXBuildFile; fileRef = {{UUID25}} /* {{name_snake}}_core.swift */; };
 		{{UUID26}} /* {{name_snake}}_core.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = {{UUID27}} /* {{name_snake}}_core.xcframework */; };
+		{{UUID28}} /* {{name_snake}}_core.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = {{UUID27}} /* {{name_snake}}_core.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy,); }; };
 
 		{{UUID21}} /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = {{UUID22}} /* Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -38,6 +39,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		{{UUID29}} /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				{{UUID28}} /* {{name_snake}}_core.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXGroup section */
 		{{UUID11}} = {
@@ -80,7 +95,7 @@
 				{{UUID16}} /* Sources */,
 				{{UUID10}} /* Frameworks */,
 				{{UUID23}} /* Resources */,
-
+				{{UUID29}} /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
