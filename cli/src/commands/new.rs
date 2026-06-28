@@ -273,8 +273,8 @@ pub fn create_workspace_cargo_toml(dir: &Path, platforms: &[&str]) -> Result<()>
         r#"["core"]"#
     };
     
-    // Web projects optimize release build for size ("z"), others optimize for speed ("3")
-    let release_opt = if platforms.contains(&"web") { "z" } else { "3" };
+    // Web projects optimize release build for size ("z"), others optimize for speed (3)
+    let release_opt = if platforms.contains(&"web") { "\"z\"" } else { "3" };
     
     let cargo_toml = format!(
         r#"[workspace]
@@ -290,7 +290,7 @@ opt-level = 3
 opt-level = 3
 
 [profile.release]
-opt-level = "{}"
+opt-level = {}
 lto = true
 "#,
         members, release_opt
@@ -527,7 +527,7 @@ mod tests {
         assert!(cargo_toml_content.contains("[profile.dev.package.\"*\"]"));
         assert!(cargo_toml_content.contains("opt-level = 3"));
         assert!(cargo_toml_content.contains("[profile.release]"));
-        assert!(cargo_toml_content.contains("opt-level = \"3\""));
+        assert!(cargo_toml_content.contains("opt-level = 3"));
         assert!(cargo_toml_content.contains("lto = true"));
 
         fs::remove_dir_all(temp_dir).ok();
