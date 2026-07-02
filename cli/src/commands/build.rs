@@ -881,8 +881,7 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
                 }
                 rustflags_val.push_str(&format!("-C link-arg=-Wl,-install_name,@rpath/lib{}.dylib", lib_name));
             }
-            let env_var_name = format!("CARGO_TARGET_{}_RUSTFLAGS", target.to_uppercase().replace("-", "_"));
-            cmd.env(env_var_name, rustflags_val);
+            cmd.env("RUSTFLAGS", rustflags_val);
             
             let status = cmd.status()
                 .context(format!("Failed to build Rust library for {}", target))?;
@@ -923,8 +922,7 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
                 }
                 rustflags_val.push_str(&format!("-C link-arg=-Wl,-install_name,@rpath/lib{}.dylib", lib_name));
             }
-            let env_var_name = format!("CARGO_TARGET_{}_RUSTFLAGS", target.to_uppercase().replace("-", "_"));
-            cmd.env(env_var_name, rustflags_val);
+            cmd.env("RUSTFLAGS", rustflags_val);
             
             let status = cmd.status()
                 .context(format!("Failed to build Rust library for {}", target))?;
