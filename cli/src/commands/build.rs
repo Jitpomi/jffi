@@ -841,6 +841,16 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
     let verbose = std::env::var("JFFI_VERBOSE").is_ok();
     let config = crate::config::load_config()?;
     
+    // Get project name for library name from core/Cargo.toml
+    let cargo_toml = std::fs::read_to_string("core/Cargo.toml")
+        .context("Failed to read core/Cargo.toml")?;
+    let lib_name = cargo_toml
+        .lines()
+        .find(|line| line.starts_with("name"))
+        .and_then(|line| line.split('"').nth(1))
+        .context("Could not find project name in Cargo.toml")?
+        .replace("-", "_");
+    
     // Always build for both architectures to ensure compatibility
     let targets = vec![
         ("aarch64-apple-darwin", "macOS Apple Silicon"),
@@ -864,10 +874,15 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
                 .env("MACOSX_DEPLOYMENT_TARGET", "13.0")
                 .args(&args);
             
-            if let Some(rustflags) = &config.platforms.macos.rustflags {
-                let env_var_name = format!("CARGO_TARGET_{}_RUSTFLAGS", target.to_uppercase().replace("-", "_"));
-                cmd.env(env_var_name, rustflags);
+            let mut rustflags_val = config.platforms.macos.rustflags.clone().unwrap_or_default();
+            if !rustflags_val.contains("-install_name") {
+                if !rustflags_val.is_empty() {
+                    rustflags_val.push(' ');
+                }
+                rustflags_val.push_str(&format!("-C link-arg=-Wl,-install_name,@rpath/lib{}.dylib", lib_name));
             }
+            let env_var_name = format!("CARGO_TARGET_{}_RUSTFLAGS", target.to_uppercase().replace("-", "_"));
+            cmd.env(env_var_name, rustflags_val);
             
             let status = cmd.status()
                 .context(format!("Failed to build Rust library for {}", target))?;
@@ -901,10 +916,15 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
                 .env("MACOSX_DEPLOYMENT_TARGET", "13.0")
                 .args(&args);
             
-            if let Some(rustflags) = &config.platforms.macos.rustflags {
-                let env_var_name = format!("CARGO_TARGET_{}_RUSTFLAGS", target.to_uppercase().replace("-", "_"));
-                cmd.env(env_var_name, rustflags);
+            let mut rustflags_val = config.platforms.macos.rustflags.clone().unwrap_or_default();
+            if !rustflags_val.contains("-install_name") {
+                if !rustflags_val.is_empty() {
+                    rustflags_val.push(' ');
+                }
+                rustflags_val.push_str(&format!("-C link-arg=-Wl,-install_name,@rpath/lib{}.dylib", lib_name));
             }
+            let env_var_name = format!("CARGO_TARGET_{}_RUSTFLAGS", target.to_uppercase().replace("-", "_"));
+            cmd.env(env_var_name, rustflags_val);
             
             let status = cmd.status()
                 .context(format!("Failed to build Rust library for {}", target))?;
