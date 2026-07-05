@@ -1,0 +1,15 @@
+# Required for Android 15+ (API 35+) and Google Play compliance.
+# All native libraries must be aligned to 16 KB memory page boundaries.
+# See: https://developer.android.com/ndk/guides/16kb-page-size
+
+[target.aarch64-linux-android]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
+
+[target.armv7-linux-androideabi]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
+
+[target.x86_64-linux-android]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
+
+[target.i686-linux-android]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
