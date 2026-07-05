@@ -112,7 +112,16 @@ fn bundle_android(
                         if let Some(android_prof) = &prof.android {
                             gradle_glue.push_str("    signingConfigs {\n        release {\n");
                             if let Some(keystore) = &android_prof.keystore_path {
-                                gradle_glue.push_str(&format!("            storeFile file(\"{}\")\n", keystore));
+                                // jffi.toml paths are relative to project root.
+                                // Gradle runs from platforms/android/ so strip that prefix
+                                // and use rootProject.file() to resolve from the Gradle root.
+                                let gradle_root = "platforms/android/";
+                                let keystore_from_gradle_root = if keystore.starts_with(gradle_root) {
+                                    keystore[gradle_root.len()..].to_string()
+                                } else {
+                                    keystore.clone()
+                                };
+                                gradle_glue.push_str(&format!("            storeFile rootProject.file(\"{}\")\n", keystore_from_gradle_root));
                             }
                             if android_prof.store_password_env.is_some() {
                                 gradle_glue.push_str("            storePassword System.getenv(\"JFFI_ANDROID_STORE_PASSWORD\")\n");
