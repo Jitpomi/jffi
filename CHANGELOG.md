@@ -1,3 +1,13 @@
+# `jffi` Changelog
+
+## v0.3.3 — Bug Fix
+
+### 🐛 Android ABI Fix
+- **Fixed x86 crash bug**: Removed `x86` from the `hello` template's `abiFilters` in `build.gradle.kts`. The Rust core was never compiled for x86, causing a crash on x86 devices (and emulators) because the x86 `.so` directory existed in the AAB without `libseyfr_core.so`.
+- **Hardened generated gradle**: `jffi-bundle.gradle` now uses `abiFilters.clear()` + `abiFilters.addAll([...])` instead of the additive `abiFilters` Groovy method, ensuring the correct ABI list from `jffi.toml` is applied definitively.
+
+---
+
 # `jffi` v1.0.0 Comprehensive Changelog
 
 This release marks the first stable `1.0.0` version of the `jffi` framework. We have completely transformed the framework from a local development tool into a robust, production-grade release orchestrator. 
