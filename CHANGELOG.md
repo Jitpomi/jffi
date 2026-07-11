@@ -1,5 +1,14 @@
 # `jffi` Changelog
 
+## v0.3.7 — Bug Fix
+
+### 🐛 Windows MSIX Version Fix
+- **Fixed Windows MSIX package identity always being `X.Y.Z.0`**: The 4th component of the MSIX version was hardcoded to `.0` regardless of `build_number` or `GITHUB_RUN_NUMBER`. This caused Microsoft Store submissions to fail with a "duplicate package identity" error whenever you tried to submit a new build with the same semver but a different CI run number.
+- **Fix**: The 4th MSIX version component now uses `version_code` (which is auto-injected from `GITHUB_RUN_NUMBER` in CI). A build tagged `v1.6.1-b78` on CI run #78 will now produce `MSIX version 1.6.1.78` — unique and accepted by Partner Center.
+- All other platforms (Android `versionCode`, iOS/macOS `CURRENT_PROJECT_VERSION`) were already correct and are unaffected.
+
+---
+
 ## v0.3.3 — Bug Fix
 
 ### 🐛 Android ABI Fix

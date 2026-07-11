@@ -2231,7 +2231,7 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
         let content = fs::read_to_string(windows_path)?;
         let parts: Vec<&str> = version_name.split('.').collect();
         let windows_version = if parts.len() == 3 {
-            format!("{}.0", version_name)
+            format!("{}.{}", version_name, version_code)
         } else {
             version_name.to_string()
         };
