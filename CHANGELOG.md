@@ -1,5 +1,13 @@
 # `jffi` Changelog
 
+## v0.3.8 — Bug Fix
+
+### 🐛 Windows MSIX Version Format Corrected
+- **Fixed MSIX revision rejection by Microsoft Store**: v0.3.7 placed `version_code` (CI run number) as the 4th MSIX version component (e.g. `1.6.1.97`). Microsoft Store rejects any package where the revision (4th component) is non-zero: *"Apps are not allowed to have a Version with a revision number other than zero"*.
+- **Correct format is `Major.Minor.{version_code}.0`**: CI build number is now placed in the **3rd (Build) component**; 4th is always `0`. e.g. version `1.6.1`, CI run `#99` → MSIX `1.6.99.0` ✅
+
+---
+
 ## v0.3.7 — Bug Fix
 
 ### 🐛 Windows MSIX Version Fix

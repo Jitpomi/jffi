@@ -2231,7 +2231,11 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
         let content = fs::read_to_string(windows_path)?;
         let parts: Vec<&str> = version_name.split('.').collect();
         let windows_version = if parts.len() == 3 {
-            format!("{}.{}", version_name, version_code)
+            // Microsoft Store requires the revision (4th component) to always be 0.
+            // Use version_code (GITHUB_RUN_NUMBER in CI) as the Build (3rd) component
+            // so each CI run produces a unique, accepted version: Major.Minor.Build.0
+            // e.g. version "1.6.1", CI run 97 → "1.6.97.0"
+            format!("{}.{}.{}.0", parts[0], parts[1], version_code)
         } else {
             version_name.to_string()
         };
