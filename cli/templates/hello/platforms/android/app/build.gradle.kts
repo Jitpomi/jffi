@@ -10,12 +10,12 @@ if (file("../../../target/jffi/generated/android/jffi-bundle.gradle").exists()) 
 
 android {
     namespace = "com.example.{{name_package}}"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.{{name_package}}"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 

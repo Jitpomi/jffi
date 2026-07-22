@@ -1969,6 +1969,27 @@ fn patch_swift_file(path: &Path) -> Result<()> {
     Ok(())
 }
 
+fn resolve_version_code(
+    configured_build_number: Option<u32>,
+    package_version_code: Option<u32>,
+    ci_run_number: Option<&str>,
+) -> (u32, bool) {
+    if let Some(number) = configured_build_number {
+        return (number, false);
+    }
+    if let Some(number) = ci_run_number.and_then(|value| value.parse::<u32>().ok()) {
+        return (number, true);
+    }
+    (package_version_code.unwrap_or(1), false)
+}
+
+fn resolve_android_target_sdk(
+    configured_target_sdk: Option<u32>,
+    bundle_compile_sdk: Option<u32>,
+) -> u32 {
+    configured_target_sdk.or(bundle_compile_sdk).unwrap_or(36)
+}
+
 pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
     println!("  {} Syncing jffi.toml configurations to native platform builds...", "→".bright_blue());
 
@@ -1976,16 +1997,16 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
         .and_then(|b| b.version.as_ref())
         .unwrap_or(&config.package.version);
 
-    let mut version_code = config.bundle.as_ref()
-        .and_then(|b| b.build_number)
-        .unwrap_or_else(|| config.package.version_code.unwrap_or(1));
+    let configured_build_number = config.bundle.as_ref().and_then(|b| b.build_number);
+    let ci_run_number = std::env::var("GITHUB_RUN_NUMBER").ok();
+    let (version_code, used_ci_run_number) = resolve_version_code(
+        configured_build_number,
+        config.package.version_code,
+        ci_run_number.as_deref(),
+    );
 
-    // CI/CD Build Number Override
-    if let Ok(run_number) = std::env::var("GITHUB_RUN_NUMBER") {
-        if let Ok(num) = run_number.parse::<u32>() {
-            version_code = num;
-            println!("    {} Detected CI Environment. Auto-injecting build number: {}", "★".bright_magenta(), num);
-        }
+    if used_ci_run_number {
+        println!("    {} No build_number configured. Using CI run number: {}", "★".bright_magenta(), version_code);
     }
 
     // 1. Android
@@ -1995,7 +2016,13 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
         
         let package = &config.platforms.android.package;
         let min_sdk = config.platforms.android.min_sdk;
-        let target_sdk = config.platforms.android.target_sdk.unwrap_or(35);
+        let bundle_compile_sdk = config.bundle.as_ref()
+            .and_then(|bundle| bundle.android.as_ref())
+            .map(|android| android.compile_sdk);
+        let target_sdk = resolve_android_target_sdk(
+            config.platforms.android.target_sdk,
+            bundle_compile_sdk,
+        );
         let obfuscate = config.platforms.android.obfuscate;
         let shrink_resources = config.platforms.android.shrink_resources;
         
@@ -2323,3 +2350,29 @@ fn find_libcxx_shared(ndk_dir: &Path, target: &str) -> Option<std::path::PathBuf
     None
 }
 
+#[cfg(test)]
+mod config_sync_tests {
+    use super::{resolve_android_target_sdk, resolve_version_code};
+
+    #[test]
+    fn explicit_build_number_wins_over_ci_run_number() {
+        assert_eq!(resolve_version_code(Some(83), Some(7), Some("91")), (83, false));
+    }
+
+    #[test]
+    fn ci_run_number_is_a_fallback_when_build_number_is_absent() {
+        assert_eq!(resolve_version_code(None, Some(7), Some("91")), (91, true));
+    }
+
+    #[test]
+    fn invalid_ci_run_number_falls_back_to_package_version_code() {
+        assert_eq!(resolve_version_code(None, Some(7), Some("not-a-number")), (7, false));
+    }
+
+    #[test]
+    fn android_target_prefers_explicit_target_then_compile_sdk() {
+        assert_eq!(resolve_android_target_sdk(Some(34), Some(36)), 34);
+        assert_eq!(resolve_android_target_sdk(None, Some(36)), 36);
+        assert_eq!(resolve_android_target_sdk(None, None), 36);
+    }
+}

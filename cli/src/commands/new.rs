@@ -367,6 +367,7 @@ bundle_id = "com.example.{}"
 
 [platforms.android]
 min_sdk = 26
+target_sdk = 36
 package = "com.example.{}"
 
 [platforms.macos]
@@ -553,4 +554,3 @@ mod tests {
         fs::remove_dir_all(temp_dir).ok();
     }
 }
-

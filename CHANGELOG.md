@@ -1,5 +1,13 @@
 # `jffi` Changelog
 
+## v0.3.9 — Android Release Configuration Fix
+
+- Android config sync now uses `platforms.android.target_sdk`, then falls back to `bundle.android.compile_sdk`, instead of silently targeting API 35.
+- An explicit `bundle.build_number` now wins over `GITHUB_RUN_NUMBER`. The CI run number is used only when no build number is configured.
+- New Android projects now compile and target API 36 by default.
+
+---
+
 ## v0.3.8 — Bug Fix
 
 ### 🐛 Windows MSIX Version Format Corrected
