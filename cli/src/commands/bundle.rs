@@ -4,6 +4,7 @@ use std::process::Command;
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::IsTerminal;
+use std::io::{Read, Write};
 
 use crate::config::{Config, BundleAndroidConfig};
 
@@ -133,12 +134,29 @@ fn bundle_android(
                                 gradle_glue.push_str("            keyPassword System.getenv(\"JFFI_ANDROID_KEY_PASSWORD\")\n");
                             }
                             gradle_glue.push_str("        }\n    }\n");
-                            gradle_glue.push_str("    buildTypes {\n        release {\n            signingConfig signingConfigs.release\n        }\n    }\n");
                         }
                     }
                 }
             }
         }
+
+        // Ask the Android Gradle Plugin to package native symbols separately.
+        // Google Play uses this archive to symbolicate native Rust/C/C++ crashes,
+        // while the libraries delivered to users remain optimized for release.
+        gradle_glue.push_str("    buildTypes {\n        release {\n");
+        if android_config.split_debug_symbols {
+            gradle_glue.push_str("            ndk.debugSymbolLevel = 'SYMBOL_TABLE'\n");
+        }
+        if !no_sign {
+            if let Some(signing) = &bundle_config.signing {
+                if let Some(profiles) = &signing.profiles {
+                    if profiles.get(profile).and_then(|p| p.android.as_ref()).is_some() {
+                        gradle_glue.push_str("            signingConfig signingConfigs.release\n");
+                    }
+                }
+            }
+        }
+        gradle_glue.push_str("        }\n    }\n");
         
         gradle_glue.push_str("}\n");
         
@@ -299,9 +317,110 @@ fn bundle_android(
             }
         }
     }
+
+    if !dry_run && android_config.split_debug_symbols {
+        let gradle_symbols = Path::new(
+            "platforms/android/app/build/outputs/native-debug-symbols/release/native-debug-symbols.zip",
+        );
+        let output_dir = Path::new("target/bundle/android");
+        fs::create_dir_all(output_dir)?;
+        let output = output_dir.join("native-debug-symbols.zip");
+        if gradle_symbols.exists() {
+            fs::copy(gradle_symbols, &output).with_context(|| {
+                format!("Failed to copy native debug symbols to {}", output.display())
+            })?;
+        } else {
+            // Rust libraries are prebuilt before Gradle runs, so AGP may not emit
+            // its own archive even when debugSymbolLevel is enabled. Package the
+            // original, symbol-bearing ELF files in Play Console's ABI layout.
+            create_android_native_symbols_archive(
+                Path::new("platforms/android/app/src/main/jniLibs"),
+                &output,
+            )?;
+        }
+        println!("  {} Native debug symbols: {}", "✓".green(), output.display());
+    }
     
     println!("{}", "  ✅ Android bundling complete!".green());
     Ok(())
+}
+
+fn create_android_native_symbols_archive(jni_libs: &Path, output: &Path) -> Result<()> {
+    let file = fs::File::create(output)
+        .with_context(|| format!("Failed to create {}", output.display()))?;
+    let mut archive = zip::ZipWriter::new(file);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .unix_permissions(0o644);
+    let mut count = 0usize;
+
+    for abi_entry in fs::read_dir(jni_libs)
+        .with_context(|| format!("Failed to read {}", jni_libs.display()))?
+    {
+        let abi_entry = abi_entry?;
+        if !abi_entry.file_type()?.is_dir() {
+            continue;
+        }
+        let abi = abi_entry.file_name().to_string_lossy().into_owned();
+        for library_entry in fs::read_dir(abi_entry.path())? {
+            let library_entry = library_entry?;
+            let path = library_entry.path();
+            let file_name = path.file_name().and_then(|name| name.to_str());
+            if !library_entry.file_type()?.is_file()
+                || path.extension().and_then(|ext| ext.to_str()) != Some("so")
+                || !file_name
+                    .is_some_and(|name| name.starts_with("lib") && name.ends_with("core.so"))
+            {
+                continue;
+            }
+
+            let name = file_name.context(
+                "Android native library path contains an unsupported file name",
+            )?;
+            archive.start_file(format!("{abi}/{name}"), options)?;
+            let mut library = fs::File::open(&path)?;
+            let mut buffer = [0u8; 64 * 1024];
+            loop {
+                let read = library.read(&mut buffer)?;
+                if read == 0 {
+                    break;
+                }
+                archive.write_all(&buffer[..read])?;
+            }
+            count += 1;
+        }
+    }
+
+    archive.finish()?;
+    if count == 0 {
+        anyhow::bail!(
+            "Native debug symbols were requested, but no .so libraries were found in {}",
+            jni_libs.display()
+        );
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod android_symbols_tests {
+    use super::*;
+
+    #[test]
+    fn archives_only_jffi_core_libraries_in_abi_layout() {
+        let root = std::env::temp_dir().join(format!("jffi-symbols-{}", uuid::Uuid::new_v4()));
+        let libs = root.join("jniLibs/arm64-v8a");
+        fs::create_dir_all(&libs).unwrap();
+        fs::write(libs.join("libsample_core.so"), b"symbols").unwrap();
+        fs::write(libs.join("libdependency.so"), b"dependency").unwrap();
+        let output = root.join("native-debug-symbols.zip");
+
+        create_android_native_symbols_archive(&root.join("jniLibs"), &output).unwrap();
+
+        let mut archive = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
+        assert_eq!(archive.len(), 1);
+        assert_eq!(archive.by_index(0).unwrap().name(), "arm64-v8a/libsample_core.so");
+        fs::remove_dir_all(root).unwrap();
+    }
 }
 
 fn bundle_macos(
@@ -1375,4 +1494,3 @@ pub fn validate_bundle_config(config: &Config, platform: &str, profile: &str, no
     println!("  {} Configuration is store-ready!", "✓".green());
     Ok(())
 }
-

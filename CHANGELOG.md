@@ -1,5 +1,10 @@
 # `jffi` Changelog
 
+## v0.3.10 — Android Native Debug Symbols
+
+- `jffi bundle --platform android` now honors `bundle.android.split_debug_symbols` and produces `target/bundle/android/native-debug-symbols.zip` for Google Play native crash and ANR symbolication.
+- Prebuilt Rust `.so` libraries are archived directly when Gradle cannot generate the symbol archive itself.
+
 ## v0.3.9 — Android Release Configuration Fix
 
 - Android config sync now uses `platforms.android.target_sdk`, then falls back to `bundle.android.compile_sdk`, instead of silently targeting API 35.
