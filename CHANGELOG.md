@@ -1,5 +1,11 @@
 # `jffi` Changelog
 
+## v0.3.11 — Package Sync & Rename Across All Platforms
+
+- Implemented automatic, end-to-end Kotlin/Java source package and directory refactoring on Android when the package name changes.
+- Implemented Linux GTK application ID synchronization in `app.py`.
+- Implemented Windows Package.appxmanifest `<Identity Name="..." />` synchronization.
+
 ## v0.3.10 — Android Native Debug Symbols
 
 - `jffi bundle --platform android` now honors `bundle.android.split_debug_symbols` and produces `target/bundle/android/native-debug-symbols.zip` for Google Play native crash and ANR symbolication.
