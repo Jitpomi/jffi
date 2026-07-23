@@ -2015,6 +2015,26 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
         let content = fs::read_to_string(gradle_path)?;
         
         let package = &config.platforms.android.package;
+        
+        // Parse the old package name from build.gradle.kts BEFORE rewriting it
+        let old_package = content.lines()
+            .find(|line| line.trim().starts_with("namespace ="))
+            .and_then(|line| {
+                let parts: Vec<&str> = line.split('=').collect();
+                if parts.len() == 2 {
+                    let val = parts[1].trim();
+                    let trimmed_val = val.trim_matches(|c| c == '"' || c == '\'' || c == ' ' || c == ';' || c == ',');
+                    Some(trimmed_val.to_string())
+                } else {
+                    None
+                }
+            });
+
+        if let Some(ref old_pkg) = old_package {
+            if old_pkg != package {
+                rename_android_package(old_pkg, package)?;
+            }
+        }
         let min_sdk = config.platforms.android.min_sdk;
         let bundle_compile_sdk = config.bundle.as_ref()
             .and_then(|bundle| bundle.android.as_ref())
@@ -2266,24 +2286,72 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
         } else {
             version_name.to_string()
         };
+        let windows_app_id = get_windows_app_id(config);
+        let mut inside_identity = false;
         let lines: Vec<String> = content.lines().map(|line| {
-            if line.trim_start().starts_with("Version=\"") {
-                if let Some(start) = line.find("Version=\"") {
-                    if let Some(end) = line[start + 9..].find('"') {
-                        let prefix = &line[..start + 9];
-                        let suffix = &line[start + 9 + end + 1..];
+            let trimmed = line.trim();
+            if trimmed.starts_with("<Identity") {
+                inside_identity = true;
+            }
+            
+            let mut result = line.to_string();
+            
+            if inside_identity {
+                if trimmed.starts_with("Name=\"") {
+                    if let Some(start) = line.find("Name=\"") {
+                        if let Some(end) = line[start + 6..].find('"') {
+                            let prefix = &line[..start + 6];
+                            let suffix = &line[start + 6 + end + 1..];
+                            result = format!("{}{}\"{}", prefix, windows_app_id, suffix);
+                        }
+                    }
+                }
+                if trimmed.ends_with("/>") || trimmed.contains("</Identity>") {
+                    inside_identity = false;
+                }
+            }
+            
+            if result.trim_start().starts_with("Version=\"") {
+                if let Some(start) = result.find("Version=\"") {
+                    if let Some(end) = result[start + 9..].find('"') {
+                        let prefix = &result[..start + 9];
+                        let suffix = &result[start + 9 + end + 1..];
                         return format!("{}{}\"{}", prefix, windows_version, suffix);
                     }
                 }
-                line.to_string()
-            } else {
-                line.to_string()
             }
+            result
         }).collect();
         let new_content = lines.join("\n");
         if new_content != content {
             fs::write(windows_path, new_content)?;
-            println!("    {} Synced Windows Package.appxmanifest version", "✓".green());
+            println!("    {} Synced Windows Package.appxmanifest identity & version (id: {})", "✓".green(), windows_app_id);
+        }
+    }
+
+    // 6. Linux GTK Application ID
+    let linux_app_py = Path::new("platforms/linux/app.py");
+    if linux_app_py.exists() {
+        let content = fs::read_to_string(linux_app_py)?;
+        let app_id = get_linux_app_id(config);
+        
+        let lines: Vec<String> = content.lines().map(|line| {
+            let trimmed = line.trim();
+            if trimmed.starts_with("application_id=") || trimmed.starts_with("application_id =") {
+                if let Some(start) = line.find("application_id") {
+                    if let Some(_eq_pos) = line[start..].find('=') {
+                        let indent = line.len() - line.trim_start().len();
+                        return format!("{:width$}application_id='{}',", "", app_id, width = indent);
+                    }
+                }
+            }
+            line.to_string()
+        }).collect();
+        
+        let new_content = lines.join("\n");
+        if new_content != content {
+            fs::write(linux_app_py, new_content)?;
+            println!("    {} Synced Linux application ID (id: {})", "✓".green(), app_id);
         }
     }
 
@@ -2348,6 +2416,149 @@ fn find_libcxx_shared(ndk_dir: &Path, target: &str) -> Option<std::path::PathBuf
         }
     }
     None
+}
+
+fn get_linux_app_id(config: &crate::config::Config) -> String {
+    if let Some(ref bundle) = config.bundle {
+        if let Some(ref linux) = bundle.linux {
+            if let Some(ref app_id) = linux.app_id {
+                return app_id.clone();
+            }
+        }
+        if let Some(ref id) = bundle.identifier {
+            return id.clone();
+        }
+    }
+    if !config.platforms.android.package.is_empty() && config.platforms.android.package != "com.example.app" {
+        return config.platforms.android.package.clone();
+    }
+    if !config.platforms.ios.bundle_id.is_empty() && config.platforms.ios.bundle_id != "com.example.app" {
+        return config.platforms.ios.bundle_id.clone();
+    }
+    format!("com.example.{}", config.package.name.replace("-", ""))
+}
+
+fn get_windows_app_id(config: &crate::config::Config) -> String {
+    if let Some(ref bundle) = config.bundle {
+        if let Some(ref windows) = bundle.windows {
+            if let Some(ref identity_name) = windows.identity_name {
+                return identity_name.clone();
+            }
+        }
+        if let Some(ref id) = bundle.identifier {
+            return id.clone();
+        }
+    }
+    if !config.platforms.android.package.is_empty() && config.platforms.android.package != "com.example.app" {
+        return config.platforms.android.package.clone();
+    }
+    if !config.platforms.ios.bundle_id.is_empty() && config.platforms.ios.bundle_id != "com.example.app" {
+        return config.platforms.ios.bundle_id.clone();
+    }
+    format!("com.example.{}", config.package.name.replace("-", ""))
+}
+
+fn rename_android_package(old_pkg: &str, new_pkg: &str) -> Result<()> {
+    use std::path::PathBuf;
+    let src_dir = Path::new("platforms/android/app/src");
+    if !src_dir.exists() {
+        return Ok(());
+    }
+
+    println!("    {} Android package name change detected: {} → {}", "→".bright_blue(), old_pkg, new_pkg);
+
+    // 1. Walk the directory and find all .kt and .java and .xml files
+    let walk_dir = |dir: &Path| -> Result<Vec<PathBuf>> {
+        let mut files = Vec::new();
+        let mut queue = vec![dir.to_path_buf()];
+        while let Some(path) = queue.pop() {
+            if path.is_dir() {
+                for entry in fs::read_dir(path)? {
+                    let entry = entry?;
+                    queue.push(entry.path());
+                }
+            } else {
+                let ext = path.extension().and_then(|s| s.to_str());
+                if ext == Some("kt") || ext == Some("java") || ext == Some("xml") {
+                    files.push(path);
+                }
+            }
+        }
+        Ok(files)
+    };
+
+    let files = walk_dir(src_dir)?;
+    for file in &files {
+        let content = fs::read_to_string(file)?;
+        if content.contains(old_pkg) {
+            let new_content = content.replace(old_pkg, new_pkg);
+            fs::write(file, new_content)?;
+        }
+    }
+
+    // 2. Relocate files.
+    if let Ok(entries) = fs::read_dir(src_dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.is_dir() {
+                for lang_dir_name in &["java", "kotlin"] {
+                    let lang_dir = path.join(lang_dir_name);
+                    if lang_dir.is_dir() {
+                        let old_pkg_dir = lang_dir.join(old_pkg.replace('.', "/"));
+                        let new_pkg_dir = lang_dir.join(new_pkg.replace('.', "/"));
+                        
+                        if old_pkg_dir.exists() && old_pkg_dir != new_pkg_dir {
+                            fs::create_dir_all(&new_pkg_dir)?;
+                            move_dir_contents(&old_pkg_dir, &new_pkg_dir)?;
+                            clean_empty_parent_directories(&old_pkg_dir, &lang_dir)?;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn move_dir_contents(src: &Path, dst: &Path) -> Result<()> {
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let name = entry.file_name();
+        let target = dst.join(name);
+        
+        if path.is_dir() {
+            fs::create_dir_all(&target)?;
+            move_dir_contents(&path, &target)?;
+            fs::remove_dir(&path)?;
+        } else {
+            if target.exists() {
+                fs::remove_file(&target)?;
+            }
+            fs::rename(&path, &target)?;
+        }
+    }
+    Ok(())
+}
+
+fn clean_empty_parent_directories(leaf: &Path, stop_at: &Path) -> Result<()> {
+    let mut current = leaf.to_path_buf();
+    while current != stop_at {
+        if current.exists() && current.is_dir() {
+            if fs::read_dir(&current)?.next().is_none() {
+                fs::remove_dir(&current)?;
+            } else {
+                break;
+            }
+        }
+        if let Some(parent) = current.parent() {
+            current = parent.to_path_buf();
+        } else {
+            break;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
