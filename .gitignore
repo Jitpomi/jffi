@@ -16,3 +16,8 @@ ios-app/DerivedData/
 # Test directory with build artifacts
 test/
 t/
+
+# Gradle build directories
+.gradle/
+build/
+
