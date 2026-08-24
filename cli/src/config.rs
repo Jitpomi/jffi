@@ -38,6 +38,7 @@ pub struct IosConfig {
     #[serde(default = "default_ios_deployment_target")]
     pub deployment_target: String,
     pub bundle_id: String,
+    pub app_groups: Option<Vec<String>>,
 }
 
 impl Default for IosConfig {
@@ -45,6 +46,7 @@ impl Default for IosConfig {
         Self {
             deployment_target: "16.0".to_string(),
             bundle_id: "com.example.app".to_string(),
+            app_groups: None,
         }
     }
 }
@@ -82,6 +84,7 @@ pub struct MacosConfig {
     #[serde(default = "default_macos_deployment_target")]
     pub deployment_target: String,
     pub rustflags: Option<String>,
+    pub app_groups: Option<Vec<String>>,
 }
 
 impl Default for MacosConfig {
@@ -89,6 +92,7 @@ impl Default for MacosConfig {
         Self {
             deployment_target: "13.0".to_string(),
             rustflags: None,
+            app_groups: None,
         }
     }
 }

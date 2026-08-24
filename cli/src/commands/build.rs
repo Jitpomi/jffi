@@ -2104,13 +2104,40 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
                     if pbxproj_path.exists() {
                         let content = fs::read_to_string(&pbxproj_path)?;
                         
+                        // Extract base bundle identifier to preserve extension suffixes
+                        let mut all_ids = Vec::new();
+                        for line in content.lines() {
+                            let trimmed = line.trim();
+                            if trimmed.starts_with("PRODUCT_BUNDLE_IDENTIFIER = ") {
+                                if let Some(val) = trimmed.split('=').nth(1) {
+                                    let id = val.trim().trim_end_matches(';').trim_matches('"').to_string();
+                                    if !id.is_empty() {
+                                        all_ids.push(id);
+                                    }
+                                }
+                            }
+                        }
+                        all_ids.sort_by_key(|id| id.len());
+                        let base_id = all_ids.first().cloned();
+
                         let lines: Vec<String> = content.lines().map(|line| {
                             let trimmed = line.trim_start();
                             if trimmed.starts_with("PRODUCT_BUNDLE_IDENTIFIER = ") {
                                 let parts: Vec<&str> = line.split('=').collect();
                                 if parts.len() == 2 {
                                     let indent = line.len() - trimmed.len();
-                                    format!("{:width$}PRODUCT_BUNDLE_IDENTIFIER = {};", "", bundle_id, width = indent)
+                                    let existing_id = parts[1].trim().trim_end_matches(';').trim_matches('"');
+                                    let final_id = if let Some(ref base) = base_id {
+                                        if existing_id.starts_with(base) && existing_id.len() > base.len() {
+                                            let suffix = &existing_id[base.len()..];
+                                            format!("{}{}", bundle_id, suffix)
+                                        } else {
+                                            bundle_id.clone()
+                                        }
+                                    } else {
+                                        bundle_id.clone()
+                                    };
+                                    format!("{:width$}PRODUCT_BUNDLE_IDENTIFIER = {};", "", final_id, width = indent)
                                 } else {
                                     line.to_string()
                                 }
@@ -2142,6 +2169,16 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
                         }
                     }
                 }
+            }
+        }
+        if platform_str == "ios" {
+            if let Some(ref groups) = config.platforms.ios.app_groups {
+                let _ = sync_entitlements(Path::new("platforms/ios"), groups);
+            }
+        }
+        if platform_str == "macos" {
+            if let Some(ref groups) = config.platforms.macos.app_groups {
+                let _ = sync_entitlements(Path::new("platforms/macos"), groups);
             }
         }
     }
@@ -2557,6 +2594,65 @@ fn clean_empty_parent_directories(leaf: &Path, stop_at: &Path) -> Result<()> {
         } else {
             break;
         }
+    }
+    Ok(())
+}
+
+fn sync_entitlements(dir: &Path, groups: &[String]) -> Result<()> {
+    if dir.is_dir() {
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                sync_entitlements(&path, groups)?;
+            } else if path.extension().and_then(|s| s.to_str()) == Some("entitlements") {
+                update_entitlements_file(&path, groups)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn update_entitlements_file(path: &Path, app_groups: &[String]) -> Result<()> {
+    let content = fs::read_to_string(path)?;
+    let mut groups_xml = String::new();
+    groups_xml.push_str("\t<key>com.apple.security.application-groups</key>\n\t<array>\n");
+    for group in app_groups {
+        groups_xml.push_str(&format!("\t\t<string>{}</string>\n", group));
+    }
+    groups_xml.push_str("\t</array>\n");
+
+    let new_content = if content.contains("com.apple.security.application-groups") {
+        if let Some(key_idx) = content.find("<key>com.apple.security.application-groups</key>") {
+            if let Some(array_start) = content[key_idx..].find("<array>") {
+                if let Some(array_end) = content[key_idx + array_start..].find("</array>") {
+                    let end_pos = key_idx + array_start + array_end + "</array>".len();
+                    let mut res = content[..key_idx].to_string();
+                    res.push_str(&groups_xml);
+                    res.push_str(&content[end_pos..]);
+                    res
+                } else {
+                    content.clone()
+                }
+            } else {
+                content.clone()
+            }
+        } else {
+            content.clone()
+        }
+    } else {
+        if let Some(dict_end) = content.rfind("</dict>") {
+            let mut res = content[..dict_end].to_string();
+            res.push_str(&groups_xml);
+            res.push_str(&content[dict_end..]);
+            res
+        } else {
+            content.clone()
+        }
+    };
+
+    if new_content != content {
+        fs::write(path, new_content)?;
     }
     Ok(())
 }
