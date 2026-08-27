@@ -450,7 +450,15 @@ pub fn setup_platform(platform: &Platform) -> Result<()> {
             if !tool_succeeds("dotnet", &["--version"]) {
                 anyhow::bail!(".NET SDK is required for Windows builds. Please install it from https://dotnet.microsoft.com/");
             }
-            ensure_rust_targets(&["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"])?;
+            let configured = crate::config::load_config().ok();
+            let targets = windows_rust_targets(
+                configured
+                    .as_ref()
+                    .and_then(|value| value.bundle.as_ref())
+                    .and_then(|bundle| bundle.windows.as_ref())
+                    .map(|windows| windows.targets.as_slice()),
+            )?;
+            ensure_rust_targets(&targets)?;
             crate::commands::build::ensure_uniffi_bindgen_cs()?;
         }
         Platform::Web => {
@@ -501,6 +509,33 @@ fn android_rust_targets(abis: Option<&[String]>) -> Result<Vec<&'static str>> {
     Ok(targets)
 }
 
+fn windows_rust_targets(targets: Option<&[String]>) -> Result<Vec<&'static str>> {
+    let supported = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"];
+    let Some(targets) = targets else {
+        return Ok(supported.to_vec());
+    };
+
+    let unknown: Vec<&str> = targets
+        .iter()
+        .map(String::as_str)
+        .filter(|target| !supported.contains(target))
+        .collect();
+    if !unknown.is_empty() {
+        anyhow::bail!(
+            "Unsupported Windows targets in jffi.toml: {}",
+            unknown.join(", ")
+        );
+    }
+    if targets.is_empty() {
+        anyhow::bail!("bundle.windows.targets must enable at least one supported target");
+    }
+    Ok(supported
+        .iter()
+        .filter(|target| targets.iter().any(|configured| configured == *target))
+        .copied()
+        .collect())
+}
+
 pub fn install_platform(platform: &Platform) -> Result<()> {
     std::env::set_var("JFFI_INSTALL_MISSING", "1");
     setup_platform(platform)
@@ -508,7 +543,7 @@ pub fn install_platform(platform: &Platform) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{android_rust_targets, parse_uniffi_bindgen_version};
+    use super::{android_rust_targets, parse_uniffi_bindgen_version, windows_rust_targets};
 
     #[test]
     fn parses_uniffi_bindgen_version() {
@@ -537,5 +572,20 @@ mod tests {
     fn android_setup_rejects_unknown_abis() {
         let abis = vec!["mips".to_string()];
         assert!(android_rust_targets(Some(&abis)).is_err());
+    }
+
+    #[test]
+    fn windows_setup_honors_bundle_targets() {
+        let targets = vec!["x86_64-pc-windows-msvc".to_string()];
+        assert_eq!(
+            windows_rust_targets(Some(&targets)).unwrap(),
+            vec!["x86_64-pc-windows-msvc"]
+        );
+    }
+
+    #[test]
+    fn windows_setup_rejects_unknown_targets() {
+        let targets = vec!["i686-pc-windows-msvc".to_string()];
+        assert!(windows_rust_targets(Some(&targets)).is_err());
     }
 }

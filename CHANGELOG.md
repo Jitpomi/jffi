@@ -1,5 +1,10 @@
 # `jffi` Changelog
 
+## v0.4.6 — Configuration-Driven Windows Setup
+
+- Windows requirement checks now validate only the Rust targets selected by `bundle.windows.targets`.
+- Unsupported or empty Windows target selections fail before compilation.
+
 ## v0.4.5 — Configuration-Driven Android Setup
 
 - Android requirement checks now install and validate only the Rust targets selected by `platforms.android.abis`.
