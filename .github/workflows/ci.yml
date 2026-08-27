@@ -43,6 +43,7 @@ jobs:
           "$RUNNER_TEMP/jffi-install/bin/jffi" setup --platform web
           "$RUNNER_TEMP/jffi-install/bin/jffi" build --platform web
           cd platforms/web
+          npm install --package-lock-only --ignore-scripts
           npm audit --audit-level=high
 
   cross-platform-compile:
