@@ -137,12 +137,13 @@ Use this sequence before committing a configuration change:
 jffi doctor config
 jffi doctor bundle --platform ios --release --profile release
 jffi bundle --platform ios --profile release --dry-run --print-plan
-jffi bundle --platform ios --profile release --dry-run --print-commands
 ```
 
-Repeat the bundle checks for each release platform. `--print-commands` redacts
-secrets. A dry run validates and explains the planned work without producing or
-uploading a release artifact.
+Repeat the bundle checks for each release platform. A dry run validates and
+explains the planned work without synchronizing native project files, producing
+an artifact, or uploading a release. Use `--print-commands` during an actual
+bundle operation when native command diagnostics are required; secrets are
+redacted.
 
 In controlled or disconnected environments, use the global options before the
 subcommand:

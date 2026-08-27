@@ -106,7 +106,6 @@ assets installed:
 jffi doctor config
 jffi doctor bundle --platform ios --release --profile ios-appstore
 jffi bundle --platform ios --profile ios-appstore --dry-run --print-plan
-jffi bundle --platform ios --profile ios-appstore --dry-run --print-commands
 ```
 
 For macOS, repeat with `--platform macos` and the matching profile. Before

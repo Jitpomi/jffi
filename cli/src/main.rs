@@ -154,7 +154,7 @@ enum Commands {
 
     /// Bundle the app for distribution
     Bundle {
-        /// Platform to bundle (ios, android, macos, windows, linux, web, all)
+        /// Platform to bundle (ios, android, macos, windows, linux, web)
         #[arg(short, long)]
         platform: String,
 
@@ -366,4 +366,83 @@ fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::{Cli, Commands};
+    use clap::Parser;
+
+    #[test]
+    fn parses_native_development_commands() {
+        assert!(matches!(
+            Cli::try_parse_from(["jffi", "run", "--platform", "windows"])
+                .unwrap()
+                .command,
+            Commands::Run { platform, .. } if platform == "windows"
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["jffi", "debug", "--platform", "ios", "--device"])
+                .unwrap()
+                .command,
+            Commands::Debug { platform, device: true, .. } if platform == "ios"
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["jffi", "dev", "--platform", "linux"])
+                .unwrap()
+                .command,
+            Commands::Dev { platform, .. } if platform == "linux"
+        ));
+    }
+
+    #[test]
+    fn parses_project_and_asset_commands() {
+        assert!(matches!(
+            Cli::try_parse_from(["jffi", "add", "web"]).unwrap().command,
+            Commands::Add { platform } if platform == "web"
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["jffi", "remove", "web"])
+                .unwrap()
+                .command,
+            Commands::Remove { platform } if platform == "web"
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["jffi", "icons", "--platform", "all"])
+                .unwrap()
+                .command,
+            Commands::Icons { platform } if platform == "all"
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["jffi", "screenshots"])
+                .unwrap()
+                .command,
+            Commands::Screenshots
+        ));
+    }
+
+    #[test]
+    fn parses_read_only_bundle_preflight() {
+        assert!(matches!(
+            Cli::try_parse_from([
+                "jffi",
+                "bundle",
+                "--platform",
+                "ios",
+                "--profile",
+                "release",
+                "--dry-run",
+                "--print-commands"
+            ])
+            .unwrap()
+            .command,
+            Commands::Bundle {
+                platform,
+                profile,
+                dry_run: true,
+                print_commands: true,
+                ..
+            } if platform == "ios" && profile == "release"
+        ));
+    }
 }

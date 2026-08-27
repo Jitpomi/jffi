@@ -1,7 +1,23 @@
 # `jffi` Changelog
 
-## Unreleased
+## v0.4.8 — Release Diagnostics and Preview Safety
 
+- Make bundle dry runs and plan printing non-mutating by skipping native project
+  synchronization and icon generation.
+- Reject unknown, disabled, and aggregate bundle targets before planning;
+  distribution remains one explicit platform per invocation.
+- Make bundle doctor default to enabled platforms supported by the current host
+  instead of attempting every native SDK on one machine.
+- Make release diagnostics fail on missing configured signing credentials,
+  certificates, identities, and tools instead of producing warning-only green
+  results.
+- Use the selected signing profile's configured environment-variable names
+  during Android release validation.
+- Add regression coverage for CLI command parsing, doctor platform selection,
+  preview purity, enabled bundle targets, and documentation TOML examples.
+- Audit generated web projects in CI, pin their Vite version, and default CORS
+  to disabled for new projects.
+- Upgrade the pinned checkout action to its Node 24-based release.
 - Document `jffi.toml` ownership, supported configuration fields, secret
   boundaries, and safe bundle-plan inspection.
 - Document the recommended native CI runner matrix and separation between

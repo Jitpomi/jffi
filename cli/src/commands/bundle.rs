@@ -20,6 +20,10 @@ pub struct BundleOptions<'a> {
     pub print_commands: bool,
 }
 
+fn should_sync_native_configs(dry_run: bool, print_plan: bool) -> bool {
+    !dry_run && !print_plan
+}
+
 pub fn bundle_project(options: BundleOptions<'_>) -> Result<()> {
     let BundleOptions {
         platform,
@@ -39,7 +43,14 @@ pub fn bundle_project(options: BundleOptions<'_>) -> Result<()> {
     let config = crate::config::load_config()?;
 
     validate_requested_format(platform, format)?;
-    crate::commands::build::sync_configs_to_platforms(&config)?;
+    validate_enabled_platform(&config, platform)?;
+
+    // Planning and dry-run modes must be safe to use as read-only CI
+    // preflights. Native project synchronization can rewrite generated files,
+    // so perform it only for an actual bundle operation.
+    if should_sync_native_configs(dry_run, print_plan) {
+        crate::commands::build::sync_configs_to_platforms(&config)?;
+    }
 
     // Validate configurations for store compatibility
     validate_bundle_config(&config, platform, profile, no_sign)?;
@@ -87,17 +98,27 @@ pub fn bundle_project(options: BundleOptions<'_>) -> Result<()> {
         "windows" => bundle_windows(&config, format, profile, no_sign, dry_run, print_commands),
         "linux" => bundle_linux(&config, format, profile, dry_run, print_commands),
         "web" => bundle_web(&config, dry_run, print_commands),
-        "all" => anyhow::bail!(
-            "`jffi bundle --platform all` is not implemented; bundle each platform explicitly"
-        ),
+        "all" => {
+            anyhow::bail!("Bundle each platform explicitly; `--platform all` is not supported")
+        }
         _ => anyhow::bail!("Unknown platform: {}", platform),
     }
 }
 
+fn validate_enabled_platform(config: &Config, platform: &str) -> Result<()> {
+    if config
+        .platforms
+        .enabled
+        .iter()
+        .any(|enabled| enabled == platform)
+    {
+        Ok(())
+    } else {
+        anyhow::bail!("Platform '{}' is not enabled in jffi.toml", platform)
+    }
+}
+
 fn validate_requested_format(platform: &str, format: Option<&str>) -> Result<()> {
-    let Some(format) = format else {
-        return Ok(());
-    };
     let supported: &[&str] = match platform {
         "android" => &["aab", "apk"],
         "macos" => &["app", "dmg", "pkg"],
@@ -105,8 +126,13 @@ fn validate_requested_format(platform: &str, format: Option<&str>) -> Result<()>
         "windows" => &["msix"],
         "linux" => &["flatpak"],
         "web" => &["web"],
-        "all" => &[],
+        "all" => {
+            anyhow::bail!("Bundle each platform explicitly; `--platform all` is not supported")
+        }
         _ => anyhow::bail!("Unknown platform: {}", platform),
+    };
+    let Some(format) = format else {
+        return Ok(());
     };
     if supported.contains(&format) {
         Ok(())
@@ -639,6 +665,98 @@ mod android_symbols_tests {
             let error = validate_requested_format(platform, Some(format)).unwrap_err();
             assert!(error.to_string().contains("Unsupported bundle format"));
         }
+    }
+
+    #[test]
+    fn preview_modes_never_sync_native_projects() {
+        assert!(!should_sync_native_configs(true, false));
+        assert!(!should_sync_native_configs(false, true));
+        assert!(!should_sync_native_configs(true, true));
+        assert!(should_sync_native_configs(false, false));
+    }
+
+    #[test]
+    fn rejects_unknown_and_all_platforms_even_without_a_format() {
+        assert!(validate_requested_format("all", None).is_err());
+        assert!(validate_requested_format("plan9", None).is_err());
+    }
+
+    #[test]
+    fn bundles_only_enabled_platforms() {
+        let config: Config = toml::from_str(
+            r#"
+schema_version = 1
+[package]
+name = "test"
+version = "0.1.0"
+[platforms]
+enabled = ["web"]
+"#,
+        )
+        .unwrap();
+        assert!(validate_enabled_platform(&config, "web").is_ok());
+        assert!(validate_enabled_platform(&config, "android").is_err());
+    }
+
+    #[test]
+    fn ios_profile_mapping_must_include_main_bundle_identifier() {
+        let config: Config = toml::from_str(
+            r#"
+schema_version = 1
+[package]
+name = "test"
+version = "0.1.0"
+[platforms]
+enabled = ["ios"]
+[platforms.ios]
+bundle_id = "com.acme.app"
+[bundle]
+identifier = "com.acme.app"
+[bundle.signing.profiles.release.apple]
+team_id = "1234567890"
+signing_certificate = "Apple Distribution"
+provisioning_profiles = { "com.acme.app.ShareExtension" = "Share Profile" }
+"#,
+        )
+        .unwrap();
+        let error = validate_bundle_config(&config, "ios", "release", false).unwrap_err();
+        assert!(error.to_string().contains("main iOS bundle identifier"));
+    }
+
+    #[test]
+    fn android_validation_reports_configured_environment_variable() {
+        let root = std::env::temp_dir().join(format!("jffi-signing-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let keystore = root.join("release.jks");
+        fs::write(&keystore, b"test").unwrap();
+        let input = format!(
+            r#"
+schema_version = 1
+[package]
+name = "test"
+version = "0.1.0"
+[platforms]
+enabled = ["android"]
+[platforms.android]
+package = "com.acme.app"
+min_sdk = 26
+[bundle.android]
+min_sdk = 26
+build_type = "release"
+[bundle.signing.profiles.release.android]
+keystore_path = "{}"
+key_alias = "release"
+store_password_env = "JFFI_TEST_CUSTOM_STORE_PASSWORD"
+key_password_env = "JFFI_TEST_CUSTOM_KEY_PASSWORD"
+"#,
+            keystore.to_string_lossy().replace('\\', "\\\\")
+        );
+        let config: Config = toml::from_str(&input).unwrap();
+        let error = validate_bundle_config(&config, "android", "release", false).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("JFFI_TEST_CUSTOM_STORE_PASSWORD"));
+        fs::remove_dir_all(root).unwrap();
     }
 }
 
@@ -2001,6 +2119,47 @@ pub fn validate_bundle_config(
                         "Store Validation Error: Apple developer team_id '{}' must be a valid 10-character team ID",
                         team_id
                     );
+                }
+                let certificate = apple
+                    .signing_certificate
+                    .as_deref()
+                    .context("Store Validation Error: Apple signing_certificate is missing")?;
+                if certificate.trim().is_empty() {
+                    anyhow::bail!("Store Validation Error: Apple signing_certificate is empty");
+                }
+                if platform == "ios" {
+                    let singular_profile = apple.provisioning_profile.as_deref().or_else(|| {
+                        config
+                            .bundle
+                            .as_ref()
+                            .and_then(|bundle| bundle.ios.as_ref())
+                            .and_then(|ios| ios.provisioning_profile.as_deref())
+                    });
+                    if apple.provisioning_profiles.is_empty()
+                        && singular_profile.is_none_or(|value| value.trim().is_empty())
+                    {
+                        anyhow::bail!(
+                            "Store Validation Error: iOS signing profile '{}' needs provisioning_profile or provisioning_profiles",
+                            profile
+                        );
+                    }
+                    for (identifier, provisioning_profile) in &apple.provisioning_profiles {
+                        if identifier.trim().is_empty() || provisioning_profile.trim().is_empty() {
+                            anyhow::bail!(
+                                "Store Validation Error: iOS provisioning profile mappings cannot contain empty identifiers or profile names"
+                            );
+                        }
+                    }
+                    if !apple.provisioning_profiles.is_empty()
+                        && !apple
+                            .provisioning_profiles
+                            .contains_key(&config.platforms.ios.bundle_id)
+                    {
+                        anyhow::bail!(
+                            "Store Validation Error: provisioning_profiles does not map the main iOS bundle identifier '{}'",
+                            config.platforms.ios.bundle_id
+                        );
+                    }
                 }
             }
             "windows" => {

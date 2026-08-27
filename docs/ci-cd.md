@@ -34,11 +34,11 @@ For every intended distribution target, add:
 ```bash
 jffi doctor bundle --platform <platform> --release --profile release
 jffi bundle --platform <platform> --profile release --dry-run --print-plan
-jffi bundle --platform <platform> --profile release --dry-run --print-commands
 ```
 
 The dry run confirms the bundle plan without creating or uploading a release.
-Printed native commands have secrets redacted.
+It also leaves generated native projects unchanged. For troubleshooting an
+actual bundle, `--print-commands` prints native commands with secrets redacted.
 
 ## Runner matrix
 

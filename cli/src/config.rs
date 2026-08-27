@@ -149,7 +149,7 @@ pub struct WebConfig {
     pub https: bool,
     #[serde(default = "default_false")]
     pub open: bool,
-    #[serde(default = "default_true")]
+    #[serde(default = "default_false")]
     pub cors: bool,
     // SEO & meta tags
     pub title: Option<String>,
@@ -174,7 +174,7 @@ impl Default for WebConfig {
             host: false,
             https: false,
             open: false,
-            cors: true,
+            cors: false,
             title: None,
             description: None,
             lang: "en".to_string(),
@@ -525,6 +525,7 @@ enabled = []
     fn accepts_schema_version_one() {
         let config: Config = toml::from_str(MINIMAL).unwrap();
         assert_eq!(config.schema_version, 1);
+        assert!(!config.platforms.web.cors);
     }
 
     #[test]
@@ -551,5 +552,27 @@ enabled = []
             .provisioning_profiles;
         assert_eq!(profiles.len(), 2);
         assert_eq!(profiles["com.example.app.ShareExtension"], "Share Profile");
+    }
+
+    #[test]
+    fn documentation_toml_blocks_are_valid_toml() {
+        for (name, document) in [
+            ("configuration", include_str!("../../docs/configuration.md")),
+            ("apple-signing", include_str!("../../docs/apple-signing.md")),
+        ] {
+            let mut blocks = 0;
+            let mut remainder = document;
+            while let Some((_, after_open)) = remainder.split_once("```toml\n") {
+                let (snippet, after_close) = after_open
+                    .split_once("\n```")
+                    .expect("documentation TOML fence must be closed");
+                toml::from_str::<toml::Value>(snippet).unwrap_or_else(|error| {
+                    panic!("invalid TOML example in {name}: {error}\n{snippet}")
+                });
+                blocks += 1;
+                remainder = after_close;
+            }
+            assert!(blocks > 0, "{name} must contain a TOML example");
+        }
     }
 }

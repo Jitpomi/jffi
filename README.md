@@ -16,8 +16,8 @@ A cross-platform framework for building native applications with Rust business l
 ### Installation
 
 ```bash
-# Install JFFI CLI
-cargo install --path cli
+# Install the released JFFI CLI
+cargo install jffi --locked
 ```
 
 ### Create Your First App
@@ -43,7 +43,7 @@ That's it! The app builds, compiles Rust, generates platform bindings, and launc
 Before building or bundling for new platforms, use `jffi doctor` to verify that your development environment has all the required tools, SDKs, and compilers installed.
 
 ```bash
-# Check environment readiness for all supported platforms
+# Check enabled platforms that this host can build
 jffi doctor bundle
 
 # Validate jffi.toml without checking SDKs or development tools
@@ -86,6 +86,10 @@ jffi bundle --platform android
 # Advanced options (code signing, notarization, specific formats)
 jffi bundle --platform macos --format app --profile release --notarize
 ```
+
+Bundle one platform per invocation. This keeps native-host requirements and
+release artifacts explicit; `jffi bundle --platform all` is intentionally not
+supported.
 
 ## 📱 Supported Platforms
 
@@ -378,7 +382,11 @@ jffi remove <platform>
 jffi --help
 ```
 
-`jffi build`, `jffi run`, and `jffi doctor` do not install system packages or development tools. Use `jffi setup --platform <platform>` when you want JFFI to install missing tools. Use `jffi new ... --no-build` to scaffold a project without installing tools or running its initial build.
+`jffi build`, `jffi run`, and `jffi doctor` do not install system packages. JFFI
+may reconcile managed Rust tools such as `uniffi-bindgen` unless `--no-setup` or
+`--offline` is set. Use `jffi setup --platform <platform>` when you want JFFI to
+install missing platform tools. Use `jffi new ... --no-build` to scaffold a
+project without installing tools or running its initial build.
 
 New configuration files declare `schema_version = 1`. Unknown configuration fields are rejected so misspelled settings cannot be silently ignored.
 
