@@ -423,6 +423,24 @@ deployment_target = "16.0"
 bundle_id = "com.example.myapp"
 ```
 
+Apps containing extensions must map every signed bundle identifier to its own
+provisioning profile. JFFI writes this mapping into the iOS export options and
+lets the Xcode project retain target-specific archive signing settings:
+
+```toml
+[bundle.signing.profiles.ios-appstore.apple]
+team_id = "YOUR_TEAM_ID"
+method = "app-store-connect"
+signing_certificate = "Apple Distribution"
+provisioning_profiles = {
+  "com.example.myapp" = "My App Store Profile",
+  "com.example.myapp.ShareExtension" = "My Share Extension Profile"
+}
+```
+
+`provisioning_profile = "Profile Name"` remains supported for single-target
+apps. Do not use both forms unless the mapping is intended to take precedence.
+
 ##  Why JFFI?
 
 | Feature | JFFI | Flutter | React Native |

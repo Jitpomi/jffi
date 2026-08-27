@@ -1131,6 +1131,7 @@ fn bundle_ios(
     let mut signing_cert_val = None;
     let mut installer_cert_val = None;
     let mut provisioning_profile_override = None;
+    let mut provisioning_profiles = std::collections::BTreeMap::new();
 
     if !no_sign {
         if let Some(signing) = &bundle_config.signing {
@@ -1152,6 +1153,7 @@ fn bundle_ios(
                         if let Some(p) = &apple.provisioning_profile {
                             provisioning_profile_override = Some(p.clone());
                         }
+                        provisioning_profiles = apple.provisioning_profiles.clone();
                     }
                 }
             }
@@ -1202,7 +1204,16 @@ fn bundle_ios(
         let prof_to_use = provisioning_profile_override
             .as_ref()
             .or(ios_config.provisioning_profile.as_ref());
-        if let Some(prof) = prof_to_use {
+        if !provisioning_profiles.is_empty() {
+            plist_content.push_str("    <key>provisioningProfiles</key>\n    <dict>\n");
+            for (identifier, profile) in &provisioning_profiles {
+                plist_content.push_str(&format!(
+                    "        <key>{}</key>\n        <string>{}</string>\n",
+                    identifier, profile
+                ));
+            }
+            plist_content.push_str("    </dict>\n");
+        } else if let Some(prof) = prof_to_use {
             let identifier = config
                 .bundle
                 .as_ref()
@@ -1276,9 +1287,11 @@ fn bundle_ios(
             let prof_to_use = provisioning_profile_override
                 .as_ref()
                 .or(ios_config.provisioning_profile.as_ref());
-            if let Some(prof) = prof_to_use {
-                archive_cmd.arg(format!("PROVISIONING_PROFILE_SPECIFIER={}", prof));
-                archive_cmd.arg("CODE_SIGN_STYLE=Manual");
+            if provisioning_profiles.is_empty() {
+                if let Some(prof) = prof_to_use {
+                    archive_cmd.arg(format!("PROVISIONING_PROFILE_SPECIFIER={}", prof));
+                    archive_cmd.arg("CODE_SIGN_STYLE=Manual");
+                }
             }
         }
 

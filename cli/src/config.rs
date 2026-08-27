@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fs;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -389,6 +390,8 @@ pub struct AppleSigningProfile {
     pub notarize: Option<bool>,
     pub formats: Option<Vec<String>>,
     pub provisioning_profile: Option<String>,
+    #[serde(default)]
+    pub provisioning_profiles: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -422,7 +425,7 @@ fn default_ios_destination() -> String {
     "generic/platform=iOS".to_string()
 }
 fn default_ios_export_method() -> String {
-    "app-store".to_string()
+    "app-store-connect".to_string()
 }
 fn default_android_formats() -> Vec<String> {
     vec!["aab".to_string(), "apk".to_string()]
@@ -528,5 +531,25 @@ enabled = []
     fn rejects_unknown_configuration_fields() {
         let invalid = format!("{}\nunknown_setting = true\n", MINIMAL);
         assert!(toml::from_str::<Config>(&invalid).is_err());
+    }
+
+    #[test]
+    fn accepts_apple_profile_mapping_for_app_extensions() {
+        let input = format!(
+            "{}\n[bundle]\nidentifier = \"com.example.app\"\n\
+             [bundle.signing.profiles.release.apple]\n\
+             provisioning_profiles = {{ \"com.example.app\" = \"Main Profile\", \
+             \"com.example.app.ShareExtension\" = \"Share Profile\" }}\n",
+            MINIMAL
+        );
+        let config: Config = toml::from_str(&input).unwrap();
+        let signing_profiles = config.bundle.unwrap().signing.unwrap().profiles.unwrap();
+        let profiles = &signing_profiles["release"]
+            .apple
+            .as_ref()
+            .unwrap()
+            .provisioning_profiles;
+        assert_eq!(profiles.len(), 2);
+        assert_eq!(profiles["com.example.app.ShareExtension"], "Share Profile");
     }
 }
