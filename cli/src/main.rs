@@ -13,6 +13,14 @@ mod templating;
 #[command(about = "JFFI - Cross-platform app framework with Rust + native UIs", long_about = None)]
 #[command(version)]
 struct Cli {
+    /// Do not automatically install or reconcile managed build tools
+    #[arg(long, global = true)]
+    no_setup: bool,
+
+    /// Disable network access and automatic tool setup
+    #[arg(long, global = true)]
+    offline: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -215,6 +223,13 @@ fn main() -> anyhow::Result<()> {
     std::env::remove_var("CC_wasm32_unknown_unknown");
 
     let cli = Cli::parse();
+
+    if cli.no_setup || cli.offline {
+        std::env::set_var("JFFI_NO_SETUP", "1");
+    }
+    if cli.offline {
+        std::env::set_var("CARGO_NET_OFFLINE", "true");
+    }
 
     match cli.command {
         Commands::New {

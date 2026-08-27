@@ -7,6 +7,18 @@ pub(crate) fn installation_allowed() -> bool {
     std::env::var("JFFI_INSTALL_MISSING").as_deref() == Ok("1")
 }
 
+fn managed_tool_reconciliation_allowed() -> bool {
+    if installation_allowed() {
+        return true;
+    }
+
+    std::env::var("JFFI_NO_SETUP").as_deref() != Ok("1")
+        && !matches!(
+            std::env::var("CARGO_NET_OFFLINE").as_deref(),
+            Ok("1") | Ok("true")
+        )
+}
+
 fn tool_succeeds(name: &str, args: &[&str]) -> bool {
     Command::new(name)
         .args(args)
@@ -46,22 +58,54 @@ fn resolved_uniffi_version() -> Result<String> {
     Ok(requirement.trim_start_matches(['=', '^', '~']).to_string())
 }
 
+fn parse_uniffi_bindgen_version(output: &str) -> Option<&str> {
+    let mut fields = output.split_whitespace();
+    (fields.next()? == "uniffi-bindgen")
+        .then(|| fields.next())
+        .flatten()
+}
+
+fn installed_uniffi_bindgen_version() -> Option<String> {
+    let output = Command::new("uniffi-bindgen")
+        .arg("--version")
+        .output()
+        .ok()?;
+    output.status.success().then_some(())?;
+    parse_uniffi_bindgen_version(&String::from_utf8_lossy(&output.stdout)).map(str::to_string)
+}
+
 pub fn ensure_uniffi_bindgen() -> Result<()> {
     let required = resolved_uniffi_version()?;
-    let installed = Command::new("uniffi-bindgen").arg("--version").output();
-    if installed.as_ref().is_ok_and(|output| {
-        output.status.success() && String::from_utf8_lossy(&output.stdout).contains(&required)
-    }) {
+    let installed = installed_uniffi_bindgen_version();
+    if installed.as_deref() == Some(required.as_str()) {
         println!("  {} uniffi-bindgen {}", "✓".green(), required);
         return Ok(());
     }
-    if !installation_allowed() {
+
+    if !managed_tool_reconciliation_allowed() {
+        let found = installed.as_deref().unwrap_or("not installed");
         anyhow::bail!(
-            "uniffi-bindgen {} is required. Run `jffi setup --platform {}`",
+            "uniffi-bindgen {} is required (found {}). Automatic setup is disabled; run `jffi setup --platform {}`",
             required,
+            found,
             std::env::var("JFFI_SETUP_PLATFORM").unwrap_or_else(|_| "<platform>".to_string())
         );
     }
+
+    match installed {
+        Some(version) => println!(
+            "  {} Reconciling uniffi-bindgen {} → {}...",
+            "→".bright_blue(),
+            version,
+            required
+        ),
+        None => println!(
+            "  {} Installing required uniffi-bindgen {}...",
+            "→".bright_blue(),
+            required
+        ),
+    }
+
     let exact = format!("={}", required);
     let status = Command::new("cargo")
         .args([
@@ -81,6 +125,16 @@ pub fn ensure_uniffi_bindgen() -> Result<()> {
     if !status.success() {
         anyhow::bail!("Failed to install uniffi-bindgen {}", required);
     }
+
+    let reconciled = installed_uniffi_bindgen_version();
+    if reconciled.as_deref() != Some(required.as_str()) {
+        anyhow::bail!(
+            "Installed uniffi-bindgen did not resolve to {} (found {})",
+            required,
+            reconciled.as_deref().unwrap_or("not installed")
+        );
+    }
+    println!("  {} uniffi-bindgen {} ready", "✓".green(), required);
     Ok(())
 }
 
@@ -380,4 +434,23 @@ pub fn setup_platform(platform: &Platform) -> Result<()> {
 pub fn install_platform(platform: &Platform) -> Result<()> {
     std::env::set_var("JFFI_INSTALL_MISSING", "1");
     setup_platform(platform)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_uniffi_bindgen_version;
+
+    #[test]
+    fn parses_uniffi_bindgen_version() {
+        assert_eq!(
+            parse_uniffi_bindgen_version("uniffi-bindgen 0.31.1\n"),
+            Some("0.31.1")
+        );
+    }
+
+    #[test]
+    fn rejects_unrelated_or_incomplete_version_output() {
+        assert_eq!(parse_uniffi_bindgen_version("uniffi 0.31.1"), None);
+        assert_eq!(parse_uniffi_bindgen_version("uniffi-bindgen"), None);
+    }
 }

@@ -1,5 +1,12 @@
 # `jffi` Changelog
 
+## v0.4.2 — Managed UniFFI Toolchain Reconciliation
+
+- Automatically install or replace `uniffi-bindgen` when its version does not exactly match the project's resolved UniFFI dependency.
+- Continue the original `jffi build`, `run`, `debug`, or `dev` operation after reconciliation succeeds.
+- Add global `--no-setup` and `--offline` controls for CI and other environments where automatic tool installation is not appropriate.
+- Verify the installed binary after reconciliation and fail clearly if Cargo did not produce the required exact version.
+
 ## v0.4.1 — Release Trust & Framework Hardening
 
 - Added `jffi debug` for verbose debug builds with Rust backtraces.

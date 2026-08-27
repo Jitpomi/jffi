@@ -54,7 +54,15 @@ jffi doctor bundle --platform android
 
 # Explicitly install missing development tools for a platform
 jffi setup --platform android
+
+# Keep builds non-mutating in controlled environments
+jffi build --platform ios --no-setup
+
+# Disable network access and automatic managed-tool setup
+jffi build --platform ios --offline
 ```
+
+JFFI automatically reconciles `uniffi-bindgen` to the exact UniFFI version resolved by the project's `Cargo.lock`, then resumes `build`, `run`, `debug`, or `dev`. Use `--no-setup`, `--offline`, or `JFFI_NO_SETUP=1` when tool installation must remain explicit.
 
 ### Bundle Your App for Distribution
 
