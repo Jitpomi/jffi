@@ -2,6 +2,8 @@
 
 ## v0.4.4 — Native Release Hygiene
 
+- Upgrade the generated web template to Vite 8.2.2 and declare its Node.js
+  runtime floor, removing three known Vite development-server vulnerabilities.
 - Generate Linux icons using `bundle.linux.app_id` instead of leaving obsolete
   `org.jffi.App` assets in branded applications.
 - Generate Android signing configuration with assignment syntax supported by
