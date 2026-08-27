@@ -408,6 +408,17 @@ New configuration files declare `schema_version = 1`. Unknown configuration fiel
 
 ##  Configuration
 
+`jffi.toml` is the checked-in source of truth for application metadata,
+enabled platforms, native target settings, bundle formats, icons, and signing
+*references*. Credentials and private signing material stay in the platform
+keychain, CI secret store, or environment variables.
+
+See the focused guides for the complete operating model:
+
+- [Configuration reference and ownership](https://github.com/Jitpomi/jffi/blob/main/docs/configuration.md)
+- [CI/CD and release pipelines](https://github.com/Jitpomi/jffi/blob/main/docs/ci-cd.md)
+- [Apple signing and multi-target applications](https://github.com/Jitpomi/jffi/blob/main/docs/apple-signing.md)
+
 `jffi.toml`:
 
 ```toml
@@ -432,10 +443,7 @@ lets the Xcode project retain target-specific archive signing settings:
 team_id = "YOUR_TEAM_ID"
 method = "app-store-connect"
 signing_certificate = "Apple Distribution"
-provisioning_profiles = {
-  "com.example.myapp" = "My App Store Profile",
-  "com.example.myapp.ShareExtension" = "My Share Extension Profile"
-}
+provisioning_profiles = { "com.example.myapp" = "My App Store Profile", "com.example.myapp.ShareExtension" = "My Share Extension Profile" }
 ```
 
 `provisioning_profile = "Profile Name"` remains supported for single-target

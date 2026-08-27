@@ -1,5 +1,22 @@
 # `jffi` Changelog
 
+## Unreleased
+
+- Document `jffi.toml` ownership, supported configuration fields, secret
+  boundaries, and safe bundle-plan inspection.
+- Document the recommended native CI runner matrix and separation between
+  quality gates and protected tag releases.
+- Document Apple single-target and multi-target signing, including dedicated
+  provisioning-profile mappings for app extensions.
+- Link the focused guides from the packaged README using URLs that work from
+  both GitHub and crates.io.
+
+## v0.4.7 — Multi-Target Apple Signing
+
+- Support provisioning-profile mappings keyed by bundle identifier so iOS
+  applications and their extensions can be archived and exported together.
+- Preserve the singular `provisioning_profile` setting for single-target apps.
+
 ## v0.4.6 — Configuration-Driven Windows Setup
 
 - Windows requirement checks now validate only the Rust targets selected by `bundle.windows.targets`.
