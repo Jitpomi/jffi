@@ -561,17 +561,24 @@ enabled = []
             ("apple-signing", include_str!("../../docs/apple-signing.md")),
         ] {
             let mut blocks = 0;
-            let mut remainder = document;
-            while let Some((_, after_open)) = remainder.split_once("```toml\n") {
-                let (snippet, after_close) = after_open
-                    .split_once("\n```")
-                    .expect("documentation TOML fence must be closed");
-                toml::from_str::<toml::Value>(snippet).unwrap_or_else(|error| {
-                    panic!("invalid TOML example in {name}: {error}\n{snippet}")
-                });
-                blocks += 1;
-                remainder = after_close;
+            let mut in_toml = false;
+            let mut snippet = String::new();
+            for line in document.lines() {
+                if !in_toml && line.trim_end() == "```toml" {
+                    in_toml = true;
+                    snippet.clear();
+                } else if in_toml && line.trim_end() == "```" {
+                    toml::from_str::<toml::Value>(&snippet).unwrap_or_else(|error| {
+                        panic!("invalid TOML example in {name}: {error}\n{snippet}")
+                    });
+                    blocks += 1;
+                    in_toml = false;
+                } else if in_toml {
+                    snippet.push_str(line);
+                    snippet.push('\n');
+                }
             }
+            assert!(!in_toml, "{name} contains an unclosed TOML fence");
             assert!(blocks > 0, "{name} must contain a TOML example");
         }
     }
