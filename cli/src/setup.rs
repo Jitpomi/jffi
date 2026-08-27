@@ -323,11 +323,13 @@ pub fn setup_platform(platform: &Platform) -> Result<()> {
         }
         Platform::Android => {
             ensure_cargo_ndk()?;
-            ensure_rust_targets(&[
-                "aarch64-linux-android",
-                "armv7-linux-androideabi",
-                "x86_64-linux-android",
-            ])?;
+            let configured = crate::config::load_config().ok();
+            let targets = android_rust_targets(
+                configured
+                    .as_ref()
+                    .and_then(|value| value.platforms.android.abis.as_deref()),
+            )?;
+            ensure_rust_targets(&targets)?;
         }
         Platform::Linux => {
             if !tool_succeeds("cc", &["--version"]) {
@@ -461,6 +463,44 @@ pub fn setup_platform(platform: &Platform) -> Result<()> {
     Ok(())
 }
 
+fn android_rust_targets(abis: Option<&[String]>) -> Result<Vec<&'static str>> {
+    let supported = [
+        ("arm64-v8a", "aarch64-linux-android"),
+        ("armeabi-v7a", "armv7-linux-androideabi"),
+        ("x86_64", "x86_64-linux-android"),
+    ];
+
+    let Some(abis) = abis else {
+        return Ok(supported.iter().map(|(_, target)| *target).collect());
+    };
+
+    let unknown: Vec<&str> = abis
+        .iter()
+        .map(String::as_str)
+        .filter(|abi| {
+            !supported
+                .iter()
+                .any(|(supported_abi, _)| abi == supported_abi)
+        })
+        .collect();
+    if !unknown.is_empty() {
+        anyhow::bail!(
+            "Unsupported Android ABIs in jffi.toml: {}",
+            unknown.join(", ")
+        );
+    }
+
+    let targets: Vec<&'static str> = supported
+        .iter()
+        .filter(|(abi, _)| abis.iter().any(|configured_abi| configured_abi == abi))
+        .map(|(_, target)| *target)
+        .collect();
+    if targets.is_empty() {
+        anyhow::bail!("platforms.android.abis must enable at least one supported ABI");
+    }
+    Ok(targets)
+}
+
 pub fn install_platform(platform: &Platform) -> Result<()> {
     std::env::set_var("JFFI_INSTALL_MISSING", "1");
     setup_platform(platform)
@@ -468,7 +508,7 @@ pub fn install_platform(platform: &Platform) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_uniffi_bindgen_version;
+    use super::{android_rust_targets, parse_uniffi_bindgen_version};
 
     #[test]
     fn parses_uniffi_bindgen_version() {
@@ -482,5 +522,20 @@ mod tests {
     fn rejects_unrelated_or_incomplete_version_output() {
         assert_eq!(parse_uniffi_bindgen_version("uniffi 0.31.1"), None);
         assert_eq!(parse_uniffi_bindgen_version("uniffi-bindgen"), None);
+    }
+
+    #[test]
+    fn android_setup_honors_configured_abis() {
+        let abis = vec!["arm64-v8a".to_string(), "armeabi-v7a".to_string()];
+        assert_eq!(
+            android_rust_targets(Some(&abis)).unwrap(),
+            vec!["aarch64-linux-android", "armv7-linux-androideabi"]
+        );
+    }
+
+    #[test]
+    fn android_setup_rejects_unknown_abis() {
+        let abis = vec!["mips".to_string()];
+        assert!(android_rust_targets(Some(&abis)).is_err());
     }
 }

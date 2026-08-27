@@ -1,5 +1,11 @@
 # `jffi` Changelog
 
+## v0.4.5 — Configuration-Driven Android Setup
+
+- Android requirement checks now install and validate only the Rust targets selected by `platforms.android.abis`.
+- Unknown or empty Android ABI selections fail with an actionable configuration error.
+- This keeps `jffi setup`, `jffi build`, and `jffi bundle` on one ABI source of truth.
+
 ## v0.4.4 — Native Release Hygiene
 
 - Upgrade the generated web template to Vite 8.2.2 and declare its Node.js
