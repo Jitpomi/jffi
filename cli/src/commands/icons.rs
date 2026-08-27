@@ -12,9 +12,11 @@ pub fn generate_icons(config: &Config, platform: &str) -> Result<()> {
         None => return Ok(()),
     };
     if let Some(icons_config) = &bundle.icons {
-        if !icons_config.generate { return Ok(()); }
+        if !icons_config.generate {
+            return Ok(());
+        }
     }
-    
+
     let override_source = match platform {
         "windows" => bundle.windows.as_ref().and_then(|w| w.icon.as_ref()),
         "macos" => bundle.macos.as_ref().and_then(|m| m.icon.as_ref()),
@@ -23,64 +25,89 @@ pub fn generate_icons(config: &Config, platform: &str) -> Result<()> {
         "linux" => bundle.linux.as_ref().and_then(|l| l.icon.as_ref()),
         _ => None,
     };
-    
+
     let source_str = match override_source {
         Some(src) => src,
         None => match bundle.icons.as_ref().map(|i| &i.source) {
             Some(src) => src,
             None => return Ok(()),
-        }
+        },
     };
-    
+
     let source_path = Path::new(source_str);
     if !source_path.exists() {
-        println!("  {} Warning: Icon source not found at {}, skipping icon generation", "⚠".yellow(), source_str);
-        return Ok(());
+        anyhow::bail!("Configured icon source was not found: {}", source_str);
     }
-    
-    println!("  {} Generating icons from {}...", "→".bright_blue(), source_str);
-    
+
+    println!(
+        "  {} Generating icons from {}...",
+        "→".bright_blue(),
+        source_str
+    );
+
     let img = image::open(source_path).context("Failed to open source icon image")?;
-    
+
     match platform {
-        "macos" => generate_apple_icons(&img, "platforms/macos/Assets.xcassets/AppIcon.appiconset", true)?,
-        "ios" => generate_apple_icons(&img, "platforms/ios/Assets.xcassets/AppIcon.appiconset", false)?,
+        "macos" => generate_apple_icons(
+            &img,
+            "platforms/macos/Assets.xcassets/AppIcon.appiconset",
+            true,
+        )?,
+        "ios" => generate_apple_icons(
+            &img,
+            "platforms/ios/Assets.xcassets/AppIcon.appiconset",
+            false,
+        )?,
         "android" => generate_android_icons(&img)?,
         "windows" => generate_windows_icons(&img)?,
         "linux" => generate_linux_icons(&img)?,
         _ => {}
     }
-    
+
     Ok(())
 }
 
 fn generate_apple_icons(img: &image::DynamicImage, dest_dir: &str, is_macos: bool) -> Result<()> {
     let dest_path = Path::new(dest_dir);
     fs::create_dir_all(dest_path)?;
-    
+
     let mut contents = r#"{
   "images" : [
-"#.to_string();
+"#
+    .to_string();
 
     // Tuple: (size, scale, idiom)
     let sizes: Vec<(f32, u8, &'static str)> = if is_macos {
         vec![
-            (16.0, 1, "mac"), (16.0, 2, "mac"),
-            (32.0, 1, "mac"), (32.0, 2, "mac"),
-            (128.0, 1, "mac"), (128.0, 2, "mac"),
-            (256.0, 1, "mac"), (256.0, 2, "mac"),
-            (512.0, 1, "mac"), (512.0, 2, "mac"),
+            (16.0, 1, "mac"),
+            (16.0, 2, "mac"),
+            (32.0, 1, "mac"),
+            (32.0, 2, "mac"),
+            (128.0, 1, "mac"),
+            (128.0, 2, "mac"),
+            (256.0, 1, "mac"),
+            (256.0, 2, "mac"),
+            (512.0, 1, "mac"),
+            (512.0, 2, "mac"),
         ]
     } else {
         vec![
-            (20.0, 2, "iphone"), (20.0, 3, "iphone"),
-            (29.0, 2, "iphone"), (29.0, 3, "iphone"),
-            (40.0, 2, "iphone"), (40.0, 3, "iphone"),
-            (60.0, 2, "iphone"), (60.0, 3, "iphone"),
-            (20.0, 1, "ipad"), (20.0, 2, "ipad"),
-            (29.0, 1, "ipad"), (29.0, 2, "ipad"),
-            (40.0, 1, "ipad"), (40.0, 2, "ipad"),
-            (76.0, 1, "ipad"), (76.0, 2, "ipad"),
+            (20.0, 2, "iphone"),
+            (20.0, 3, "iphone"),
+            (29.0, 2, "iphone"),
+            (29.0, 3, "iphone"),
+            (40.0, 2, "iphone"),
+            (40.0, 3, "iphone"),
+            (60.0, 2, "iphone"),
+            (60.0, 3, "iphone"),
+            (20.0, 1, "ipad"),
+            (20.0, 2, "ipad"),
+            (29.0, 1, "ipad"),
+            (29.0, 2, "ipad"),
+            (40.0, 1, "ipad"),
+            (40.0, 2, "ipad"),
+            (76.0, 1, "ipad"),
+            (76.0, 2, "ipad"),
             (83.5, 2, "ipad"),
             (1024.0, 1, "ios-marketing"),
         ]
@@ -94,31 +121,33 @@ fn generate_apple_icons(img: &image::DynamicImage, dest_dir: &str, is_macos: boo
         } else {
             format!("{0}x{0}", base_size)
         };
-        
+
         let filename = format!("icon_{}_{}@{}.png", size_str, idiom, scale);
         let out_path = dest_path.join(&filename);
-        
+
         let resized = img.resize_exact(actual_size, actual_size, FilterType::Lanczos3);
         resized.save(&out_path)?;
-        
+
         if !is_first {
             contents.push_str(",\n");
         }
         is_first = false;
-        
+
         contents.push_str(&format!(
             "    {{\n      \"size\" : \"{}\",\n      \"idiom\" : \"{}\",\n      \"filename\" : \"{}\",\n      \"scale\" : \"{}x\"\n    }}",
             size_str, idiom, filename, scale
         ));
     }
 
-    contents.push_str(r#"
+    contents.push_str(
+        r#"
   ],
   "info" : {
     "version" : 1,
     "author" : "xcode"
   }
-}"#);
+}"#,
+    );
 
     fs::write(dest_path.join("Contents.json"), contents)?;
     Ok(())
@@ -126,7 +155,7 @@ fn generate_apple_icons(img: &image::DynamicImage, dest_dir: &str, is_macos: boo
 
 fn generate_android_icons(img: &image::DynamicImage) -> Result<()> {
     let base_dir = Path::new("platforms/android/app/src/main/res");
-    
+
     let densities = vec![
         ("mipmap-mdpi", 48),
         ("mipmap-hdpi", 72),
@@ -134,16 +163,16 @@ fn generate_android_icons(img: &image::DynamicImage) -> Result<()> {
         ("mipmap-xxhdpi", 144),
         ("mipmap-xxxhdpi", 192),
     ];
-    
+
     for (dir_name, size) in densities {
         let dir_path = base_dir.join(dir_name);
         fs::create_dir_all(&dir_path)?;
-        
+
         let out_path = dir_path.join("ic_launcher.png");
         let resized = img.resize_exact(size, size, FilterType::Lanczos3);
         resized.save(&out_path)?;
     }
-    
+
     // Also generate play store icon
     let store_icon_dir = Path::new("platforms/android/fastlane/metadata/android/en-US/images");
     if store_icon_dir.exists() {
@@ -151,7 +180,7 @@ fn generate_android_icons(img: &image::DynamicImage) -> Result<()> {
         let resized = img.resize_exact(512, 512, FilterType::Lanczos3);
         resized.save(&out_path)?;
     }
-    
+
     Ok(())
 }
 
@@ -160,7 +189,7 @@ fn generate_windows_icons(img: &image::DynamicImage) -> Result<()> {
     if !dest_dir.exists() {
         fs::create_dir_all(dest_dir)?;
     }
-    
+
     // Generate app.ico for the compiled WinExe icon and titlebar use
     let ico_path = dest_dir.join("app.ico");
     let resized_256 = img.resize_exact(256, 256, FilterType::Lanczos3);
@@ -175,7 +204,7 @@ fn generate_windows_icons(img: &image::DynamicImage) -> Result<()> {
         ("StoreLogo.scale-200.png", 100),
         ("LockScreenLogo.scale-200.png", 48),
     ];
-    
+
     for (filename, size) in sizes {
         let out_path = dest_dir.join(filename);
         let resized = img.resize_exact(size, size, FilterType::Lanczos3);
@@ -199,23 +228,23 @@ fn generate_windows_icons(img: &image::DynamicImage) -> Result<()> {
         image::imageops::overlay(&mut bg, &resized, x, y);
         bg.save(&out_path)?;
     }
-    
+
     Ok(())
 }
 
 fn generate_linux_icons(img: &image::DynamicImage) -> Result<()> {
     let dest_dir = Path::new("platforms/linux/data/icons/hicolor");
-    
+
     let sizes = vec![16, 32, 48, 64, 128, 256, 512];
-    
+
     for size in sizes {
         let dir_path = dest_dir.join(format!("{}x{}/apps", size, size));
         fs::create_dir_all(&dir_path)?;
-        
+
         let out_path = dir_path.join("org.jffi.App.png");
         let resized = img.resize_exact(size, size, FilterType::Lanczos3);
         resized.save(&out_path)?;
     }
-    
+
     Ok(())
 }

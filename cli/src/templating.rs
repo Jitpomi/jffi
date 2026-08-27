@@ -104,7 +104,8 @@ impl TemplateEngine {
             let path = entry.path();
 
             if path.is_dir() {
-                let name = path.file_name()
+                let name = path
+                    .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or("unknown")
                     .to_string();
@@ -129,15 +130,15 @@ impl TemplateEngine {
         let manifest_path = template_path.join("manifest.toml");
 
         if manifest_path.exists() {
-            let contents = fs::read_to_string(&manifest_path)
-                .context("Failed to read manifest.toml")?;
-            
+            let contents =
+                fs::read_to_string(&manifest_path).context("Failed to read manifest.toml")?;
+
             // Parse as raw TOML value first to handle nested tables
-            let toml_value: toml::Value = toml::from_str(&contents)
-                .context("Failed to parse manifest as TOML value")?;
-            
+            let toml_value: toml::Value =
+                toml::from_str(&contents).context("Failed to parse manifest as TOML value")?;
+
             let mut manifest = TemplateManifest::default();
-            
+
             if let toml::Value::Table(root) = toml_value {
                 // Parse [template] section
                 if let Some(toml::Value::Table(template_table)) = root.get("template") {
@@ -154,7 +155,7 @@ impl TemplateEngine {
                         manifest.template.version = version.clone();
                     }
                 }
-                
+
                 // Parse [variables] section
                 if let Some(toml::Value::Table(vars_table)) = root.get("variables") {
                     for (key, value) in vars_table {
@@ -173,7 +174,7 @@ impl TemplateEngine {
                         }
                     }
                 }
-                
+
                 // Parse [platforms] section
                 if let Some(toml::Value::Table(platforms_table)) = root.get("platforms") {
                     if let Some(toml::Value::Array(supported)) = platforms_table.get("supported") {
@@ -189,7 +190,7 @@ impl TemplateEngine {
                             .collect();
                     }
                 }
-                
+
                 // Parse [metadata] section
                 if let Some(toml::Value::Table(metadata_table)) = root.get("metadata") {
                     if let Some(toml::Value::String(status)) = metadata_table.get("status") {
@@ -200,7 +201,7 @@ impl TemplateEngine {
                     }
                 }
             }
-            
+
             Ok(manifest)
         } else {
             // Create default manifest
@@ -222,11 +223,12 @@ impl TemplateEngine {
     pub fn get_template(&self, name: &str) -> Result<Option<Template>> {
         let templates = self.discover_templates()?;
         Ok(templates.into_iter().find(|t| {
-            t.name.eq_ignore_ascii_case(name) || 
-            t.path.file_name()
-                .and_then(|n| n.to_str())
-                .map(|n| n.eq_ignore_ascii_case(name))
-                .unwrap_or(false)
+            t.name.eq_ignore_ascii_case(name)
+                || t.path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| n.eq_ignore_ascii_case(name))
+                    .unwrap_or(false)
         }))
     }
 
@@ -250,7 +252,12 @@ impl TemplateEngine {
 
         // Generate platforms with platform-specific contexts
         for platform in platforms {
-            if template.manifest.platforms.supported.contains(&platform.to_string()) {
+            if template
+                .manifest
+                .platforms
+                .supported
+                .contains(&platform.to_string())
+            {
                 let platform_context = self.build_context(name, &template.manifest, Some(platform));
                 self.generate_platform(template, project_dir, platform, &platform_context)?;
             }
@@ -261,7 +268,12 @@ impl TemplateEngine {
 
     /// Build variable context for substitution
     /// If platform is provided, merges platform-specific variable overrides
-    fn build_context(&self, name: &str, manifest: &TemplateManifest, platform: Option<&str>) -> HashMap<String, String> {
+    fn build_context(
+        &self,
+        name: &str,
+        manifest: &TemplateManifest,
+        platform: Option<&str>,
+    ) -> HashMap<String, String> {
         let mut context = HashMap::new();
 
         // Standard variables
@@ -283,7 +295,7 @@ impl TemplateEngine {
             );
             context.insert(format!("UUID{}", i), uuid);
         }
-        
+
         // Generate GUIDs for Windows manifests (with hyphens, RFC 4122 format)
         for i in 1..=5 {
             let guid = format!(
@@ -342,7 +354,10 @@ impl TemplateEngine {
         }
 
         // Generate Cargo.toml for core
-        let uniffi_version = context.get("uniffi_version").map(|s| s.as_str()).unwrap_or(UNIFFI_VERSION);
+        let uniffi_version = context
+            .get("uniffi_version")
+            .map(|s| s.as_str())
+            .unwrap_or(UNIFFI_VERSION);
         let cargo_toml = format!(
             r#"[package]
 name = "{}-core"
@@ -353,7 +368,7 @@ edition = "2021"
 crate-type = ["cdylib", "staticlib", "lib"]
 
 [dependencies]
-uniffi = {{ version = "{}", features = ["wasm-unstable-single-threaded"] }}
+uniffi = {{ version = "={}", features = ["wasm-unstable-single-threaded"] }}
 "#,
             context.get("name_snake").unwrap_or(&"app".to_string()),
             uniffi_version
@@ -384,9 +399,13 @@ cdylib_name = "{name_snake}_core"
         fs::create_dir_all(&platforms_dir)?;
 
         let platform_template_dir = template.path.join("platforms").join(platform);
-        
+
         if !platform_template_dir.exists() {
-            anyhow::bail!("Platform '{}' not supported by template '{}'", platform, template.name);
+            anyhow::bail!(
+                "Platform '{}' not supported by template '{}'",
+                platform,
+                template.name
+            );
         }
 
         self.copy_dir_with_render(&platform_template_dir, &platforms_dir, context)?;
@@ -434,12 +453,12 @@ cdylib_name = "{name_snake}_core"
     /// Simple template rendering - replace {{variable}} with value
     fn render_template(&self, template: &str, context: &HashMap<String, String>) -> String {
         let mut result = template.to_string();
-        
+
         for (key, value) in context {
             let placeholder = format!("{{{{{}}}}}", key);
             result = result.replace(&placeholder, value);
         }
-        
+
         result
     }
 }
@@ -477,7 +496,7 @@ mod tests {
 
         let template = "Hello {{name}}, {{greeting}}!";
         let result = engine.render_template(template, &context);
-        
+
         assert_eq!(result, "Hello myapp, Hello!");
     }
 
@@ -485,10 +504,13 @@ mod tests {
     fn test_uniffi_version_default() {
         let mut context = HashMap::new();
         context.insert("name_snake".to_string(), "test_app".to_string());
-        
+
         // Simulate Cargo.toml generation without uniffi_version override
-        let uniffi_version = context.get("uniffi_version").map(|s| s.as_str()).unwrap_or(UNIFFI_VERSION);
-        
+        let uniffi_version = context
+            .get("uniffi_version")
+            .map(|s| s.as_str())
+            .unwrap_or(UNIFFI_VERSION);
+
         assert_eq!(uniffi_version, "0.31.1");
     }
 
@@ -497,10 +519,13 @@ mod tests {
         let mut context = HashMap::new();
         context.insert("name_snake".to_string(), "test_app".to_string());
         context.insert("uniffi_version".to_string(), "0.32.0".to_string());
-        
+
         // Simulate Cargo.toml generation with uniffi_version override
-        let uniffi_version = context.get("uniffi_version").map(|s| s.as_str()).unwrap_or(UNIFFI_VERSION);
-        
+        let uniffi_version = context
+            .get("uniffi_version")
+            .map(|s| s.as_str())
+            .unwrap_or(UNIFFI_VERSION);
+
         assert_eq!(uniffi_version, "0.32.0");
     }
 }

@@ -1,5 +1,23 @@
 # `jffi` Changelog
 
+## v0.4.1 — Release Trust & Framework Hardening
+
+- Added `jffi debug` for verbose debug builds with Rust backtraces.
+- Made `jffi doctor bundle --release` fail on invalid configuration instead of printing a false-green completion, and added `--profile` for named signing profiles.
+- Made Apple entitlement synchronization idempotent and removed accumulated indentation/blank-line corruption.
+- Recognize modern Android `packaging.jniLibs.useLegacyPackaging = true` configuration instead of recommending the deprecated manifest attribute.
+- Make `build --all` fail when any enabled platform fails instead of returning a false-green result.
+- Reject unfinished bundle formats and advertise only formats JFFI currently produces.
+- Require icon generation, entitlement synchronization, signing, notarization, and Flatpak export to succeed.
+- Verify Windows MSIX and Linux Flatpak artifacts exist before reporting success.
+- Stop rewriting Rust source modules as an implicit side effect of `jffi build`.
+- Add strict formatting, Clippy, test, package, and generated-project smoke-test gates in CI.
+- Embed project templates in the installed binary and add truthful `jffi new --no-build` scaffolding semantics.
+- Add explicit `jffi setup --platform` installation; normal build and diagnostic commands no longer install tools or system packages.
+- Match `uniffi-bindgen` exactly to the project's pinned UniFFI dependency.
+- Reject unknown configuration fields under schema version 1.
+- Make web export, icon generation, and release signing validation fail on missing outputs or credentials.
+
 ## v0.3.11 — Package Sync & Rename Across All Platforms
 
 - Implemented automatic, end-to-end Kotlin/Java source package and directory refactoring on Android when the package name changes.
@@ -44,9 +62,9 @@
 
 ---
 
-# `jffi` v1.0.0 Comprehensive Changelog
+# Historical v1.0.0 Planning Draft
 
-This release marks the first stable `1.0.0` version of the `jffi` framework. We have completely transformed the framework from a local development tool into a robust, production-grade release orchestrator. 
+This preserved planning draft described the intended stable `1.0.0` scope. It is not a released version; the authoritative release history is the versioned list above.
 
 This changelog exhaustively details every feature, fix, and template improvement introduced over the last 33 commits since version `0.3.2`.
 

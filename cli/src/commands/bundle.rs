@@ -1,35 +1,49 @@
 use anyhow::{Context, Result};
 use colored::*;
-use std::process::Command;
-use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::IsTerminal;
 use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
-use crate::config::{Config, BundleAndroidConfig};
+use crate::config::{BundleAndroidConfig, Config};
 
-pub fn bundle_project(
-    platform: &str,
-    format: Option<&str>,
-    profile: &str,
-    no_sign: bool,
-    notarize: bool,
-    dry_run: bool,
-    print_plan: bool,
-    print_commands: bool,
-) -> Result<()> {
+#[derive(Debug, Clone, Copy)]
+pub struct BundleOptions<'a> {
+    pub platform: &'a str,
+    pub format: Option<&'a str>,
+    pub profile: &'a str,
+    pub no_sign: bool,
+    pub notarize: bool,
+    pub dry_run: bool,
+    pub print_plan: bool,
+    pub print_commands: bool,
+}
+
+pub fn bundle_project(options: BundleOptions<'_>) -> Result<()> {
+    let BundleOptions {
+        platform,
+        format,
+        profile,
+        no_sign,
+        notarize,
+        dry_run,
+        print_plan,
+        print_commands,
+    } = options;
     // Validate we are in a JFFI project
     if !Path::new("jffi.toml").exists() {
         anyhow::bail!("Error: Not in a JFFI project directory. 'jffi.toml' not found.");
     }
-    
+
     let config = crate::config::load_config()?;
-    
+
+    validate_requested_format(platform, format)?;
     crate::commands::build::sync_configs_to_platforms(&config)?;
-    
+
     // Validate configurations for store compatibility
     validate_bundle_config(&config, platform, profile, no_sign)?;
-    
+
     if print_plan {
         println!("{}", "📋 Bundle Plan:".bright_cyan().bold());
         println!("  Platform: {}", platform);
@@ -41,28 +55,139 @@ pub fn bundle_project(
     }
 
     if dry_run {
-        println!("{}", "🏜️ Dry run enabled. No actual commands will be executed.".yellow());
+        println!(
+            "{}",
+            "🏜️ Dry run enabled. No actual commands will be executed.".yellow()
+        );
     }
 
-    println!("{}", format!("📦 Bundling for {}...", platform).bright_green().bold());
-    
+    println!(
+        "{}",
+        format!("📦 Bundling for {}...", platform)
+            .bright_green()
+            .bold()
+    );
+
     if !dry_run {
-        let _ = crate::commands::icons::generate_icons(&config, platform);
+        crate::commands::icons::generate_icons(&config, platform)?;
     }
 
     match platform {
         "android" => bundle_android(&config, format, profile, no_sign, dry_run, print_commands),
-        "macos" => bundle_macos(&config, format, profile, no_sign, notarize, dry_run, print_commands),
+        "macos" => bundle_macos(
+            &config,
+            format,
+            profile,
+            no_sign,
+            notarize,
+            dry_run,
+            print_commands,
+        ),
         "ios" => bundle_ios(&config, profile, no_sign, dry_run, print_commands),
         "windows" => bundle_windows(&config, format, profile, no_sign, dry_run, print_commands),
         "linux" => bundle_linux(&config, format, profile, dry_run, print_commands),
         "web" => bundle_web(&config, dry_run, print_commands),
-        "all" => {
-            println!("  {} Bundling all platforms is currently in development.", "ℹ".bright_blue());
-            Ok(())
-        }
+        "all" => anyhow::bail!(
+            "`jffi bundle --platform all` is not implemented; bundle each platform explicitly"
+        ),
         _ => anyhow::bail!("Unknown platform: {}", platform),
     }
+}
+
+fn validate_requested_format(platform: &str, format: Option<&str>) -> Result<()> {
+    let Some(format) = format else {
+        return Ok(());
+    };
+    let supported: &[&str] = match platform {
+        "android" => &["aab", "apk"],
+        "macos" => &["app", "dmg", "pkg"],
+        "ios" => &["ipa"],
+        "windows" => &["msix"],
+        "linux" => &["flatpak"],
+        "web" => &["web"],
+        "all" => &[],
+        _ => anyhow::bail!("Unknown platform: {}", platform),
+    };
+    if supported.contains(&format) {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "Unsupported bundle format `{}` for {}. Supported formats: {}",
+            format,
+            platform,
+            if supported.is_empty() {
+                "none".to_string()
+            } else {
+                supported.join(", ")
+            }
+        )
+    }
+}
+
+fn validate_format_list(platform: &str, formats: &[String]) -> Result<()> {
+    for format in formats {
+        validate_requested_format(platform, Some(format))?;
+    }
+    Ok(())
+}
+
+fn verify_nonempty_file(path: &Path, artifact: &str) -> Result<()> {
+    let metadata = fs::metadata(path)
+        .with_context(|| format!("{} was not created at {}", artifact, path.display()))?;
+    if !metadata.is_file() || metadata.len() == 0 {
+        anyhow::bail!("{} is empty or invalid: {}", artifact, path.display());
+    }
+    Ok(())
+}
+
+fn copy_directory_contents(source: &Path, destination: &Path) -> Result<usize> {
+    let mut copied = 0;
+    for entry in
+        fs::read_dir(source).with_context(|| format!("Failed to read {}", source.display()))?
+    {
+        let entry = entry?;
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            fs::create_dir_all(&destination_path)?;
+            copied += copy_directory_contents(&source_path, &destination_path)?;
+        } else if entry.file_type()?.is_file() {
+            fs::copy(&source_path, &destination_path).with_context(|| {
+                format!(
+                    "Failed to copy {} to {}",
+                    source_path.display(),
+                    destination_path.display()
+                )
+            })?;
+            copied += 1;
+        }
+    }
+    Ok(copied)
+}
+
+fn optimize_wasm_files(directory: &Path) -> Result<()> {
+    for entry in fs::read_dir(directory)? {
+        let entry = entry?;
+        let path = entry.path();
+        if entry.file_type()?.is_dir() {
+            optimize_wasm_files(&path)?;
+        } else if path.extension().and_then(|value| value.to_str()) == Some("wasm") {
+            let optimized = path.with_extension("wasm.optimized");
+            let status = Command::new("wasm-opt")
+                .args(["-Oz", "-o"])
+                .arg(&optimized)
+                .arg(&path)
+                .status()
+                .context(
+                    "Failed to run wasm-opt; install Binaryen or set bundle.web.wasm_opt=false",
+                )?;
+            if !status.success() {
+                anyhow::bail!("wasm-opt failed for {}", path.display());
+            }
+            fs::rename(&optimized, &path)?;
+        }
+    }
+    Ok(())
 }
 
 fn bundle_android(
@@ -74,38 +199,49 @@ fn bundle_android(
     print_commands: bool,
 ) -> Result<()> {
     let bundle_config = config.bundle.clone().unwrap_or_default();
-    let android_config = bundle_config.android.unwrap_or_else(|| BundleAndroidConfig {
-        formats: vec!["aab".to_string(), "apk".to_string()],
-        abis: vec!["arm64-v8a".to_string(), "armeabi-v7a".to_string(), "x86_64".to_string()],
-        min_sdk: 23,
-        compile_sdk: 36,
-        build_type: "release".to_string(),
-        split_debug_symbols: true,
-        icon: None,
-    });
-    
+    let android_config = bundle_config
+        .android
+        .unwrap_or_else(|| BundleAndroidConfig {
+            formats: vec!["aab".to_string(), "apk".to_string()],
+            abis: vec![
+                "arm64-v8a".to_string(),
+                "armeabi-v7a".to_string(),
+                "x86_64".to_string(),
+            ],
+            min_sdk: 23,
+            compile_sdk: 36,
+            build_type: "release".to_string(),
+            split_debug_symbols: true,
+            icon: None,
+        });
+
     let formats = if let Some(f) = format {
         vec![f.to_string()]
     } else {
         android_config.formats.clone()
     };
-    
+    validate_format_list("android", &formats)?;
+
     let abis = &android_config.abis;
-    
+
     println!("  {} Generating abi.gradle...", "→".bright_blue());
-    
+
     let generated_dir = PathBuf::from("target/jffi/generated/android");
     if !dry_run {
         fs::create_dir_all(&generated_dir)?;
-        
-        let abi_list = abis.iter().map(|abi| format!("'{}'", abi)).collect::<Vec<_>>().join(", ");
-        
+
+        let abi_list = abis
+            .iter()
+            .map(|abi| format!("'{}'", abi))
+            .collect::<Vec<_>>()
+            .join(", ");
+
         let mut gradle_glue = format!(
             "// Auto-generated by JFFI. Do not edit manually.\n\
              android {{\n    defaultConfig {{\n        ndk {{\n            abiFilters.clear()\n            abiFilters.addAll([{}])\n        }}\n    }}\n",
             abi_list
         );
-        
+
         if !no_sign {
             if let Some(signing) = &bundle_config.signing {
                 if let Some(profiles) = &signing.profiles {
@@ -117,18 +253,21 @@ fn bundle_android(
                                 // Gradle runs from platforms/android/ so strip that prefix
                                 // and use rootProject.file() to resolve from the Gradle root.
                                 let gradle_root = "platforms/android/";
-                                let keystore_from_gradle_root = if keystore.starts_with(gradle_root) {
-                                    keystore[gradle_root.len()..].to_string()
-                                } else {
-                                    keystore.clone()
-                                };
-                                gradle_glue.push_str(&format!("            storeFile rootProject.file(\"{}\")\n", keystore_from_gradle_root));
+                                let keystore_from_gradle_root = keystore
+                                    .strip_prefix(gradle_root)
+                                    .unwrap_or(keystore)
+                                    .to_string();
+                                gradle_glue.push_str(&format!(
+                                    "            storeFile rootProject.file(\"{}\")\n",
+                                    keystore_from_gradle_root
+                                ));
                             }
                             if android_prof.store_password_env.is_some() {
                                 gradle_glue.push_str("            storePassword System.getenv(\"JFFI_ANDROID_STORE_PASSWORD\")\n");
                             }
                             if let Some(alias) = &android_prof.key_alias {
-                                gradle_glue.push_str(&format!("            keyAlias \"{}\"\n", alias));
+                                gradle_glue
+                                    .push_str(&format!("            keyAlias \"{}\"\n", alias));
                             }
                             if android_prof.key_password_env.is_some() {
                                 gradle_glue.push_str("            keyPassword System.getenv(\"JFFI_ANDROID_KEY_PASSWORD\")\n");
@@ -150,16 +289,20 @@ fn bundle_android(
         if !no_sign {
             if let Some(signing) = &bundle_config.signing {
                 if let Some(profiles) = &signing.profiles {
-                    if profiles.get(profile).and_then(|p| p.android.as_ref()).is_some() {
+                    if profiles
+                        .get(profile)
+                        .and_then(|p| p.android.as_ref())
+                        .is_some()
+                    {
                         gradle_glue.push_str("            signingConfig signingConfigs.release\n");
                     }
                 }
             }
         }
         gradle_glue.push_str("        }\n    }\n");
-        
+
         gradle_glue.push_str("}\n");
-        
+
         fs::write(generated_dir.join("jffi-bundle.gradle"), gradle_glue)
             .context("Failed to write jffi-bundle.gradle")?;
 
@@ -189,14 +332,17 @@ fn bundle_android(
         fs::write(generated_dir.join("jffi-android-rules.pro"), proguard_rules)
             .context("Failed to write jffi-android-rules.pro")?;
 
-        println!("  {} Generated jffi-android-rules.pro (JNA/UniFFI ProGuard rules)", "✓".green());
+        println!(
+            "  {} Generated jffi-android-rules.pro (JNA/UniFFI ProGuard rules)",
+            "✓".green()
+        );
     }
-    
+
     println!("  {} Ensuring Rust core is built...", "→".bright_blue());
     if !dry_run {
         let mut build_cmd = Command::new(std::env::current_exe()?);
         build_cmd.args(["build", "--platform", "android", "--release"]);
-        
+
         let status = build_cmd.status().context("Failed to build Rust core")?;
         if !status.success() {
             anyhow::bail!("Rust build failed for Android");
@@ -217,12 +363,18 @@ fn bundle_android(
                             } else if std::io::stdin().is_terminal() {
                                 println!("  {} Env var {} not set. Keystore password is required for signing.", "🔑".cyan(), store_env);
                                 let pwd = dialoguer::Password::new()
-                                    .with_prompt(format!("Enter Android Keystore Password ({})", store_env))
+                                    .with_prompt(format!(
+                                        "Enter Android Keystore Password ({})",
+                                        store_env
+                                    ))
                                     .interact()
                                     .context("Failed to read keystore password")?;
                                 gradle_envs.push(("JFFI_ANDROID_STORE_PASSWORD".to_string(), pwd));
                             } else {
-                                println!("  {} Warning: Env var {} not found for keystore password and terminal is non-interactive", "⚠".yellow(), store_env);
+                                anyhow::bail!(
+                                    "Required Android signing environment variable {} is not set",
+                                    store_env
+                                );
                             }
                         }
                         if let Some(key_env) = &android_prof.key_password_env {
@@ -231,12 +383,18 @@ fn bundle_android(
                             } else if std::io::stdin().is_terminal() {
                                 println!("  {} Env var {} not set. Key password is required for signing.", "🔑".cyan(), key_env);
                                 let pwd = dialoguer::Password::new()
-                                    .with_prompt(format!("Enter Android Key Password ({})", key_env))
+                                    .with_prompt(format!(
+                                        "Enter Android Key Password ({})",
+                                        key_env
+                                    ))
                                     .interact()
                                     .context("Failed to read key password")?;
                                 gradle_envs.push(("JFFI_ANDROID_KEY_PASSWORD".to_string(), pwd));
                             } else {
-                                println!("  {} Warning: Env var {} not found for key password and terminal is non-interactive", "⚠".yellow(), key_env);
+                                anyhow::bail!(
+                                    "Required Android signing environment variable {} is not set",
+                                    key_env
+                                );
                             }
                         }
                     }
@@ -254,45 +412,74 @@ fn bundle_android(
 
         let gradle_args = vec![gradle_task.to_string()];
         let gradle_envs = gradle_envs.clone();
-        
+
         println!("  {} Running gradlew {}...", "→".bright_blue(), gradle_task);
-        
+
         if !dry_run {
             let android_dir = Path::new("platforms/android");
             if !android_dir.exists() {
-                anyhow::bail!("platforms/android directory not found. Did you create this project with jffi?");
+                anyhow::bail!(
+                    "platforms/android directory not found. Did you create this project with jffi?"
+                );
             }
-            
-            let gradlew = if cfg!(windows) { "gradlew.bat" } else { "./gradlew" };
-            let gradlew_path = android_dir.join(if cfg!(windows) { "gradlew.bat" } else { "gradlew" });
-            
+
+            let gradlew = if cfg!(windows) {
+                "gradlew.bat"
+            } else {
+                "./gradlew"
+            };
+            let gradlew_path = android_dir.join(if cfg!(windows) {
+                "gradlew.bat"
+            } else {
+                "gradlew"
+            });
+
             if !gradlew_path.exists() {
                 println!("  {} Generating Gradle wrapper...", "→".bright_blue());
                 let wrapper_jar = "gradle/wrapper/gradle-wrapper.jar";
                 if android_dir.join(wrapper_jar).exists() {
                     let wrapper_status = Command::new("java")
-                        .args(["-classpath", wrapper_jar, "org.gradle.wrapper.GradleWrapperMain", "wrapper"])
+                        .args([
+                            "-classpath",
+                            wrapper_jar,
+                            "org.gradle.wrapper.GradleWrapperMain",
+                            "wrapper",
+                        ])
                         .current_dir(android_dir)
                         .status()
                         .context("Failed to generate Gradle wrapper using Java")?;
                     if !wrapper_status.success() {
-                        println!("  {} Warning: Failed to generate Gradle wrapper", "⚠".yellow());
+                        anyhow::bail!("Failed to generate Gradle wrapper");
                     } else if !cfg!(windows) {
-                        let _ = Command::new("chmod")
+                        let status = Command::new("chmod")
                             .args(["+x", "gradlew"])
                             .current_dir(android_dir)
-                            .status();
+                            .status()
+                            .context("Failed to mark gradlew executable")?;
+                        if !status.success() {
+                            anyhow::bail!("Failed to mark gradlew executable");
+                        }
                     }
                 } else {
-                    println!("  {} Warning: gradle-wrapper.jar not found at {}", "⚠".yellow(), android_dir.join(wrapper_jar).display());
+                    println!(
+                        "  {} Warning: gradle-wrapper.jar not found at {}",
+                        "⚠".yellow(),
+                        android_dir.join(wrapper_jar).display()
+                    );
                 }
             }
-            
+
             if print_commands {
                 let mut out = format!("{} {}", gradlew, gradle_args.join(" "));
                 for (k, v) in &gradle_envs {
                     let kl = k.to_lowercase();
-                    if kl.contains("password") || kl.contains("key") || kl.contains("token") || kl.contains("secret") || kl.contains("cert") || kl.contains("pfx") {
+                    if kl.contains("password")
+                        || kl.contains("key")
+                        || kl.contains("token")
+                        || kl.contains("secret")
+                        || kl.contains("cert")
+                        || kl.contains("pfx")
+                    {
                         out = format!("{}='***' {}", k, out);
                     } else {
                         out = format!("{}='{}' {}", k, v, out);
@@ -300,18 +487,18 @@ fn bundle_android(
                 }
                 println!("  $ {}", out.dimmed());
             }
-            
+
             let mut cmd = Command::new(gradlew);
-            cmd.args(&gradle_args)
-               .current_dir(android_dir);
-               
+            cmd.args(&gradle_args).current_dir(android_dir);
+
             for (k, v) in gradle_envs {
                 cmd.env(k, v);
             }
-            
-            let status = cmd.status()
+
+            let status = cmd
+                .status()
                 .context(format!("Failed to execute {}", gradlew))?;
-                
+
             if !status.success() {
                 anyhow::bail!("Gradle task {} failed", gradle_task);
             }
@@ -327,7 +514,10 @@ fn bundle_android(
         let output = output_dir.join("native-debug-symbols.zip");
         if gradle_symbols.exists() {
             fs::copy(gradle_symbols, &output).with_context(|| {
-                format!("Failed to copy native debug symbols to {}", output.display())
+                format!(
+                    "Failed to copy native debug symbols to {}",
+                    output.display()
+                )
             })?;
         } else {
             // Rust libraries are prebuilt before Gradle runs, so AGP may not emit
@@ -338,9 +528,13 @@ fn bundle_android(
                 &output,
             )?;
         }
-        println!("  {} Native debug symbols: {}", "✓".green(), output.display());
+        println!(
+            "  {} Native debug symbols: {}",
+            "✓".green(),
+            output.display()
+        );
     }
-    
+
     println!("{}", "  ✅ Android bundling complete!".green());
     Ok(())
 }
@@ -354,8 +548,8 @@ fn create_android_native_symbols_archive(jni_libs: &Path, output: &Path) -> Resu
         .unix_permissions(0o644);
     let mut count = 0usize;
 
-    for abi_entry in fs::read_dir(jni_libs)
-        .with_context(|| format!("Failed to read {}", jni_libs.display()))?
+    for abi_entry in
+        fs::read_dir(jni_libs).with_context(|| format!("Failed to read {}", jni_libs.display()))?
     {
         let abi_entry = abi_entry?;
         if !abi_entry.file_type()?.is_dir() {
@@ -374,9 +568,8 @@ fn create_android_native_symbols_archive(jni_libs: &Path, output: &Path) -> Resu
                 continue;
             }
 
-            let name = file_name.context(
-                "Android native library path contains an unsupported file name",
-            )?;
+            let name = file_name
+                .context("Android native library path contains an unsupported file name")?;
             archive.start_file(format!("{abi}/{name}"), options)?;
             let mut library = fs::File::open(&path)?;
             let mut buffer = [0u8; 64 * 1024];
@@ -402,6 +595,7 @@ fn create_android_native_symbols_archive(jni_libs: &Path, output: &Path) -> Resu
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod android_symbols_tests {
     use super::*;
 
@@ -418,8 +612,32 @@ mod android_symbols_tests {
 
         let mut archive = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
         assert_eq!(archive.len(), 1);
-        assert_eq!(archive.by_index(0).unwrap().name(), "arm64-v8a/libsample_core.so");
+        assert_eq!(
+            archive.by_index(0).unwrap().name(),
+            "arm64-v8a/libsample_core.so"
+        );
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn accepts_only_implemented_bundle_formats() {
+        assert!(validate_requested_format("windows", Some("msix")).is_ok());
+        assert!(validate_requested_format("linux", Some("flatpak")).is_ok());
+        assert!(validate_requested_format("android", Some("aab")).is_ok());
+        assert!(validate_requested_format("macos", Some("pkg")).is_ok());
+    }
+
+    #[test]
+    fn rejects_unimplemented_bundle_formats() {
+        for (platform, format) in [
+            ("windows", "msixbundle"),
+            ("windows", "msi"),
+            ("linux", "appimage"),
+            ("linux", "deb"),
+        ] {
+            let error = validate_requested_format(platform, Some(format)).unwrap_err();
+            assert!(error.to_string().contains("Unsupported bundle format"));
+        }
     }
 }
 
@@ -433,27 +651,32 @@ fn bundle_macos(
     print_commands: bool,
 ) -> Result<()> {
     use crate::platform::{Platform, XcodeProject};
-    
+
     let bundle_config = config.bundle.clone().unwrap_or_default();
-    let macos_config = bundle_config.macos.unwrap_or_else(|| crate::config::BundleMacosConfig {
-        formats: vec!["app".to_string(), "dmg".to_string()],
-        targets: vec!["aarch64-apple-darwin".to_string(), "x86_64-apple-darwin".to_string()],
-        minimum_system_version: "13.0".to_string(),
-        category: None,
-        signing_identity: Some("Developer ID Application".to_string()),
-        hardened_runtime: true,
-        notarize: true,
-        staple: true,
-        icon: None,
-        provisioning_profile: None,
-    });
-    
+    let macos_config = bundle_config
+        .macos
+        .unwrap_or_else(|| crate::config::BundleMacosConfig {
+            formats: vec!["app".to_string(), "dmg".to_string()],
+            targets: vec![
+                "aarch64-apple-darwin".to_string(),
+                "x86_64-apple-darwin".to_string(),
+            ],
+            minimum_system_version: "13.0".to_string(),
+            category: None,
+            signing_identity: Some("Developer ID Application".to_string()),
+            hardened_runtime: true,
+            notarize: true,
+            staple: true,
+            icon: None,
+            provisioning_profile: None,
+        });
+
     let mut formats = if let Some(f) = format {
         vec![f.to_string()]
     } else {
         macos_config.formats.clone()
     };
-    
+
     println!("  {} Finding macOS Xcode project...", "→".bright_blue());
     let project = if !dry_run {
         XcodeProject::find(Platform::Macos)?
@@ -463,7 +686,7 @@ fn bundle_macos(
             scheme: "App".to_string(),
         }
     };
-    
+
     let mut method_val = "developer-id".to_string();
     let mut team_id_val = String::new();
     let mut signing_cert_val = None;
@@ -477,7 +700,7 @@ fn bundle_macos(
     let mut notarize_override = None;
     let mut formats_override = None;
     let mut provisioning_profile_override = None;
-    
+
     if no_sign {
         method_val = "mac-application".to_string();
     } else {
@@ -485,19 +708,45 @@ fn bundle_macos(
             if let Some(profiles) = &signing.profiles {
                 if let Some(prof) = profiles.get(profile) {
                     if let Some(apple) = &prof.apple {
-                        if let Some(m) = &apple.method { method_val = m.clone(); }
-                        if let Some(t) = &apple.team_id { team_id_val = t.clone(); }
-                        if let Some(c) = &apple.signing_certificate { signing_cert_val = Some(c.clone()); }
-                        if let Some(ic) = &apple.installer_signing_certificate { installer_cert_val = Some(ic.clone()); }
-                        if let Some(c) = &apple.apple_id { apple_id_val = Some(c.clone()); }
-                        if let Some(c) = &apple.apple_id_env { apple_id_env_val = Some(c.clone()); }
-                        if let Some(c) = &apple.app_specific_password_env { app_specific_password_env_val = Some(c.clone()); }
-                        if let Some(c) = &apple.api_key_path { api_key_path_val = Some(c.clone()); }
-                        if let Some(c) = &apple.api_key_id { api_key_id_val = Some(c.clone()); }
-                        if let Some(c) = &apple.api_key_issuer_id { api_key_issuer_id_val = Some(c.clone()); }
-                        if let Some(n) = &apple.notarize { notarize_override = Some(*n); }
-                        if let Some(f) = &apple.formats { formats_override = Some(f.clone()); }
-                        if let Some(p) = &apple.provisioning_profile { provisioning_profile_override = Some(p.clone()); }
+                        if let Some(m) = &apple.method {
+                            method_val = m.clone();
+                        }
+                        if let Some(t) = &apple.team_id {
+                            team_id_val = t.clone();
+                        }
+                        if let Some(c) = &apple.signing_certificate {
+                            signing_cert_val = Some(c.clone());
+                        }
+                        if let Some(ic) = &apple.installer_signing_certificate {
+                            installer_cert_val = Some(ic.clone());
+                        }
+                        if let Some(c) = &apple.apple_id {
+                            apple_id_val = Some(c.clone());
+                        }
+                        if let Some(c) = &apple.apple_id_env {
+                            apple_id_env_val = Some(c.clone());
+                        }
+                        if let Some(c) = &apple.app_specific_password_env {
+                            app_specific_password_env_val = Some(c.clone());
+                        }
+                        if let Some(c) = &apple.api_key_path {
+                            api_key_path_val = Some(c.clone());
+                        }
+                        if let Some(c) = &apple.api_key_id {
+                            api_key_id_val = Some(c.clone());
+                        }
+                        if let Some(c) = &apple.api_key_issuer_id {
+                            api_key_issuer_id_val = Some(c.clone());
+                        }
+                        if let Some(n) = &apple.notarize {
+                            notarize_override = Some(*n);
+                        }
+                        if let Some(f) = &apple.formats {
+                            formats_override = Some(f.clone());
+                        }
+                        if let Some(p) = &apple.provisioning_profile {
+                            provisioning_profile_override = Some(p.clone());
+                        }
                     }
                 }
             }
@@ -509,13 +758,14 @@ fn bundle_macos(
             formats = f;
         }
     }
+    validate_format_list("macos", &formats)?;
 
     let generated_dir = PathBuf::from("target/jffi/generated/apple");
     let export_plist_path = generated_dir.join("ExportOptions.plist");
-    
+
     if !dry_run {
         fs::create_dir_all(&generated_dir)?;
-        
+
         let mut plist_content = format!(
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
              <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
@@ -525,7 +775,7 @@ fn bundle_macos(
                  <string>{}</string>\n",
             method_val
         );
-        
+
         if !team_id_val.is_empty() {
             plist_content.push_str(&format!(
                 "    <key>teamID</key>\n\
@@ -533,52 +783,65 @@ fn bundle_macos(
                 team_id_val
             ));
         }
-        
+
         plist_content.push_str("    <key>manageAppVersionAndBuildNumber</key>\n    <false/>\n");
         plist_content.push_str("    <key>generateAppStoreInformation</key>\n    <false/>\n");
         if let Some(ref cert) = signing_cert_val {
-            plist_content.push_str(&format!("    <key>signingCertificate</key>\n    <string>{}</string>\n", cert));
+            plist_content.push_str(&format!(
+                "    <key>signingCertificate</key>\n    <string>{}</string>\n",
+                cert
+            ));
         }
         if let Some(icert) = installer_cert_val {
-            plist_content.push_str(&format!("    <key>installerSigningCertificate</key>\n    <string>{}</string>\n", icert));
+            plist_content.push_str(&format!(
+                "    <key>installerSigningCertificate</key>\n    <string>{}</string>\n",
+                icert
+            ));
         }
-        
-        let prof_to_use = provisioning_profile_override.as_ref().or(macos_config.provisioning_profile.as_ref());
+
+        let prof_to_use = provisioning_profile_override
+            .as_ref()
+            .or(macos_config.provisioning_profile.as_ref());
         if let Some(prof) = prof_to_use {
-            let identifier = config.bundle.as_ref().and_then(|b| b.identifier.clone()).unwrap_or_else(|| config.platforms.ios.bundle_id.clone());
+            let identifier = config
+                .bundle
+                .as_ref()
+                .and_then(|b| b.identifier.clone())
+                .unwrap_or_else(|| config.platforms.ios.bundle_id.clone());
             plist_content.push_str(&format!(
                 "    <key>provisioningProfiles</key>\n\
                  <dict>\n\
                      <key>{}</key>\n\
                      <string>{}</string>\n\
                  </dict>\n",
-                identifier,
-                prof
+                identifier, prof
             ));
         }
-        
+
         plist_content.push_str("</dict>\n</plist>\n");
-        fs::write(&export_plist_path, plist_content).context("Failed to write ExportOptions.plist")?;
+        fs::write(&export_plist_path, plist_content)
+            .context("Failed to write ExportOptions.plist")?;
     }
-    
+
     println!("  {} Ensuring Rust core is built...", "→".bright_blue());
     if !dry_run {
         let mut build_cmd = Command::new(std::env::current_exe()?);
         build_cmd.args(["build", "--platform", "macos", "--release"]);
-        
+
         let status = build_cmd.status().context("Failed to build Rust core")?;
         if !status.success() {
             anyhow::bail!("Rust build failed for macOS");
         }
     }
-    
-    let archive_path = PathBuf::from("target/bundle/macos").join(format!("{}.xcarchive", project.scheme));
+
+    let archive_path =
+        PathBuf::from("target/bundle/macos").join(format!("{}.xcarchive", project.scheme));
     let export_path = PathBuf::from("target/bundle/macos/export");
-    
+
     if !dry_run {
         fs::create_dir_all("target/bundle/macos")?;
     }
-    
+
     println!("  {} Creating Xcode archive...", "→".bright_blue());
     if !dry_run {
         let mut archive_cmd = Command::new("xcodebuild");
@@ -594,16 +857,28 @@ fn bundle_macos(
             archive_path.to_str().unwrap(),
             "-allowProvisioningUpdates",
         ]);
-        
+
         // Universal binary handling
-        if macos_config.targets.contains(&"aarch64-apple-darwin".to_string()) && macos_config.targets.contains(&"x86_64-apple-darwin".to_string()) {
+        if macos_config
+            .targets
+            .contains(&"aarch64-apple-darwin".to_string())
+            && macos_config
+                .targets
+                .contains(&"x86_64-apple-darwin".to_string())
+        {
             archive_cmd.arg("ARCHS=x86_64 arm64");
-        } else if macos_config.targets.contains(&"aarch64-apple-darwin".to_string()) {
+        } else if macos_config
+            .targets
+            .contains(&"aarch64-apple-darwin".to_string())
+        {
             archive_cmd.arg("ARCHS=arm64");
-        } else if macos_config.targets.contains(&"x86_64-apple-darwin".to_string()) {
+        } else if macos_config
+            .targets
+            .contains(&"x86_64-apple-darwin".to_string())
+        {
             archive_cmd.arg("ARCHS=x86_64");
         }
-        
+
         if no_sign {
             archive_cmd.args([
                 "CODE_SIGN_IDENTITY=",
@@ -617,27 +892,29 @@ fn bundle_macos(
             if let Some(cert) = &signing_cert_val {
                 archive_cmd.arg(format!("CODE_SIGN_IDENTITY={}", cert));
             }
-            let prof_to_use = provisioning_profile_override.as_ref().or(macos_config.provisioning_profile.as_ref());
+            let prof_to_use = provisioning_profile_override
+                .as_ref()
+                .or(macos_config.provisioning_profile.as_ref());
             if let Some(prof) = prof_to_use {
                 archive_cmd.arg(format!("PROVISIONING_PROFILE_SPECIFIER={}", prof));
                 archive_cmd.arg("CODE_SIGN_STYLE=Manual");
             }
         }
-        
+
         if print_commands {
             println!("  $ {:?}", archive_cmd);
         }
-        
+
         let status = archive_cmd.status().context("Failed to create xcarchive")?;
         if !status.success() {
             anyhow::bail!("xcodebuild archive failed");
         }
     }
-    
+
     println!("  {} Exporting archive...", "→".bright_blue());
     if !dry_run {
         fs::create_dir_all(&export_path)?;
-        
+
         let mut export_cmd = Command::new("xcodebuild");
         export_cmd.args([
             "-exportArchive",
@@ -649,113 +926,171 @@ fn bundle_macos(
             export_plist_path.to_str().unwrap(),
             "-allowProvisioningUpdates",
         ]);
-        
+
         if print_commands {
             println!("  $ {:?}", export_cmd);
         }
-        
+
         let status = export_cmd.status().context("Failed to export archive")?;
         if !status.success() {
             anyhow::bail!("xcodebuild exportArchive failed");
         }
     }
-    
+
     if formats.contains(&"dmg".to_string()) {
         println!("  {} Creating DMG...", "→".bright_blue());
         if !dry_run {
             let app_path = export_path.join(format!("{}.app", project.scheme));
             let dmg_path = export_path.join(format!("{}.dmg", project.scheme));
-            
+
             if app_path.exists() {
                 // Remove existing DMG to avoid hdiutil error
                 if dmg_path.exists() {
                     let _ = fs::remove_file(&dmg_path);
                 }
-                
+
                 let mut hdiutil_cmd = Command::new("hdiutil");
                 hdiutil_cmd.args([
-                        "create",
-                        "-volname",
-                        &project.scheme,
-                        "-srcfolder",
-                        app_path.to_str().unwrap(),
-                        "-ov",
-                        "-format",
-                        "UDZO",
-                        dmg_path.to_str().unwrap(),
-                    ]);
-                if print_commands { println!("  $ {:?}", hdiutil_cmd); }
+                    "create",
+                    "-volname",
+                    &project.scheme,
+                    "-srcfolder",
+                    app_path.to_str().unwrap(),
+                    "-ov",
+                    "-format",
+                    "UDZO",
+                    dmg_path.to_str().unwrap(),
+                ]);
+                if print_commands {
+                    println!("  $ {:?}", hdiutil_cmd);
+                }
                 let status = hdiutil_cmd.status().context("Failed to create DMG")?;
-                    
+
                 if !status.success() {
                     anyhow::bail!("Failed to create DMG using hdiutil");
                 }
+                verify_nonempty_file(&dmg_path, "macOS DMG")?;
             } else {
-                println!("  {} Warning: .app not found, skipping DMG creation", "⚠".yellow());
+                anyhow::bail!("Exported macOS app was not found at {}", app_path.display());
             }
         }
     }
-    
+
+    if !dry_run && formats.contains(&"app".to_string()) {
+        let app_path = export_path.join(format!("{}.app", project.scheme));
+        if !app_path.is_dir() {
+            anyhow::bail!("Exported macOS app was not found at {}", app_path.display());
+        }
+    }
+
+    if !dry_run && formats.contains(&"pkg".to_string()) {
+        let pkg = fs::read_dir(&export_path)?
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .find(|path| path.extension().and_then(|ext| ext.to_str()) == Some("pkg"))
+            .context("xcodebuild exportArchive completed but did not create a macOS .pkg")?;
+        verify_nonempty_file(&pkg, "macOS installer package")?;
+    }
+
     let do_notarize = notarize_override.unwrap_or(notarize || macos_config.notarize);
     if do_notarize && !no_sign && !dry_run {
         println!("  {} Notarizing application...", "→".bright_blue());
-        
+
         let path_to_notarize = if formats.contains(&"dmg".to_string()) {
             export_path.join(format!("{}.dmg", project.scheme))
         } else {
             // Must zip .app to notarize it if we don't have a DMG
             let app_path = export_path.join(format!("{}.app", project.scheme));
             let zip_path = export_path.join(format!("{}.zip", project.scheme));
-            let _ = Command::new("ditto")
-                .args(["-c", "-k", "--keepParent", app_path.to_str().unwrap(), zip_path.to_str().unwrap()])
-                .status();
+            let status = Command::new("ditto")
+                .args([
+                    "-c",
+                    "-k",
+                    "--keepParent",
+                    app_path.to_str().unwrap(),
+                    zip_path.to_str().unwrap(),
+                ])
+                .status()
+                .context("Failed to create notarization archive")?;
+            if !status.success() {
+                anyhow::bail!(
+                    "Failed to create notarization archive: {}",
+                    zip_path.display()
+                );
+            }
             zip_path
         };
-        
+
         if path_to_notarize.exists() {
             let mut notary_cmd = Command::new("xcrun");
             notary_cmd.args(["notarytool", "submit", path_to_notarize.to_str().unwrap()]);
-            
+
             let mut auth_provided = false;
-            
-            if let (Some(key_path), Some(key_id), Some(issuer)) = (&api_key_path_val, &api_key_id_val, &api_key_issuer_id_val) {
+
+            if let (Some(key_path), Some(key_id), Some(issuer)) =
+                (&api_key_path_val, &api_key_id_val, &api_key_issuer_id_val)
+            {
                 notary_cmd.args(["--key", key_path, "--key-id", key_id, "--issuer", issuer]);
                 auth_provided = true;
             } else {
-                let pwd = app_specific_password_env_val.as_ref().and_then(|e| std::env::var(e).ok());
-                let aid = apple_id_val.clone().or_else(|| apple_id_env_val.as_ref().and_then(|e| std::env::var(e).ok()));
-                
+                let pwd = app_specific_password_env_val
+                    .as_ref()
+                    .and_then(|e| std::env::var(e).ok());
+                let aid = apple_id_val.clone().or_else(|| {
+                    apple_id_env_val
+                        .as_ref()
+                        .and_then(|e| std::env::var(e).ok())
+                });
+
                 if let (Some(password), Some(apple_id)) = (pwd, aid) {
-                    notary_cmd.args(["--apple-id", &apple_id, "--password", &password, "--team-id", &team_id_val]);
+                    notary_cmd.args([
+                        "--apple-id",
+                        &apple_id,
+                        "--password",
+                        &password,
+                        "--team-id",
+                        &team_id_val,
+                    ]);
                     auth_provided = true;
                 }
             }
-            
+
             if !auth_provided {
                 let keychain_profile = std::env::var("JFFI_APPLE_NOTARY_PROFILE")
                     .unwrap_or_else(|_| "AC_PASSWORD".to_string());
                 notary_cmd.args(["--keychain-profile", &keychain_profile]);
             }
-            
+
             notary_cmd.arg("--wait");
             if print_commands {
-                println!("  $ xcrun notarytool submit {} [auth_args] --wait", path_to_notarize.to_str().unwrap());
+                println!(
+                    "  $ xcrun notarytool submit {} [auth_args] --wait",
+                    path_to_notarize.to_str().unwrap()
+                );
             }
-            let status = notary_cmd.status().context("Failed to submit to notarytool");
-                
-            if status.is_err() || !status.unwrap().success() {
-                println!("  {} Notarization failed or timed out", "⚠".yellow());
+            let status = notary_cmd
+                .status()
+                .context("Failed to submit to notarytool")?;
+
+            if !status.success() {
+                anyhow::bail!("Notarization failed or timed out");
             } else {
                 println!("  {} Stapling ticket...", "→".bright_blue());
-                let mut staple_cmd = Command::new("xcrun");
-                staple_cmd.args(["stapler", "staple", path_to_notarize.to_str().unwrap()]);
-                if print_commands { println!("  $ {:?}", staple_cmd); }
-                let _ = staple_cmd.status();
+                if macos_config.staple {
+                    let mut staple_cmd = Command::new("xcrun");
+                    staple_cmd.args(["stapler", "staple", path_to_notarize.to_str().unwrap()]);
+                    if print_commands {
+                        println!("  $ {:?}", staple_cmd);
+                    }
+                    let status = staple_cmd.status().context("Failed to run stapler")?;
+                    if !status.success() {
+                        anyhow::bail!("Notarization succeeded, but stapling failed");
+                    }
+                }
                 println!("  {} Notarization successful", "✓".green());
             }
         }
     }
-    
+
     println!("{}", "  ✅ macOS bundling complete!".green());
     Ok(())
 }
@@ -768,16 +1103,18 @@ fn bundle_ios(
     print_commands: bool,
 ) -> Result<()> {
     use crate::platform::{Platform, XcodeProject};
-    
+
     let bundle_config = config.bundle.clone().unwrap_or_default();
-    let ios_config = bundle_config.ios.unwrap_or_else(|| crate::config::BundleIosConfig {
-        format: "ipa".to_string(),
-        destination: "generic/platform=iOS".to_string(),
-        export_method: "app-store".to_string(),
-        icon: None,
-        provisioning_profile: None,
-    });
-    
+    let ios_config = bundle_config
+        .ios
+        .unwrap_or_else(|| crate::config::BundleIosConfig {
+            format: "ipa".to_string(),
+            destination: "generic/platform=iOS".to_string(),
+            export_method: "app-store".to_string(),
+            icon: None,
+            provisioning_profile: None,
+        });
+
     println!("  {} Finding iOS Xcode project...", "→".bright_blue());
     let project = if !dry_run {
         XcodeProject::find(Platform::Ios)?
@@ -787,23 +1124,33 @@ fn bundle_ios(
             scheme: "App".to_string(),
         }
     };
-    
+
     let mut method_val = ios_config.export_method.clone();
     let mut team_id_val = String::new();
     let mut signing_cert_val = None;
     let mut installer_cert_val = None;
     let mut provisioning_profile_override = None;
-    
+
     if !no_sign {
         if let Some(signing) = &bundle_config.signing {
             if let Some(profiles) = &signing.profiles {
                 if let Some(prof) = profiles.get(profile) {
                     if let Some(apple) = &prof.apple {
-                        if let Some(m) = &apple.method { method_val = m.clone(); }
-                        if let Some(t) = &apple.team_id { team_id_val = t.clone(); }
-                        if let Some(c) = &apple.signing_certificate { signing_cert_val = Some(c.clone()); }
-                        if let Some(ic) = &apple.installer_signing_certificate { installer_cert_val = Some(ic.clone()); }
-                        if let Some(p) = &apple.provisioning_profile { provisioning_profile_override = Some(p.clone()); }
+                        if let Some(m) = &apple.method {
+                            method_val = m.clone();
+                        }
+                        if let Some(t) = &apple.team_id {
+                            team_id_val = t.clone();
+                        }
+                        if let Some(c) = &apple.signing_certificate {
+                            signing_cert_val = Some(c.clone());
+                        }
+                        if let Some(ic) = &apple.installer_signing_certificate {
+                            installer_cert_val = Some(ic.clone());
+                        }
+                        if let Some(p) = &apple.provisioning_profile {
+                            provisioning_profile_override = Some(p.clone());
+                        }
                     }
                 }
             }
@@ -811,13 +1158,13 @@ fn bundle_ios(
     } else {
         method_val = "development".to_string();
     }
-    
+
     let generated_dir = PathBuf::from("target/jffi/generated/apple");
     let export_plist_path = generated_dir.join("ExportOptions_iOS.plist");
-    
+
     if !dry_run {
         fs::create_dir_all(&generated_dir)?;
-        
+
         let mut plist_content = format!(
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
              <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
@@ -827,7 +1174,7 @@ fn bundle_ios(
                  <string>{}</string>\n",
             method_val
         );
-        
+
         if !team_id_val.is_empty() {
             plist_content.push_str(&format!(
                 "    <key>teamID</key>\n\
@@ -835,52 +1182,65 @@ fn bundle_ios(
                 team_id_val
             ));
         }
-        
+
         plist_content.push_str("    <key>manageAppVersionAndBuildNumber</key>\n    <false/>\n");
         plist_content.push_str("    <key>generateAppStoreInformation</key>\n    <false/>\n");
         if let Some(ref cert) = signing_cert_val {
-            plist_content.push_str(&format!("    <key>signingCertificate</key>\n    <string>{}</string>\n", cert));
+            plist_content.push_str(&format!(
+                "    <key>signingCertificate</key>\n    <string>{}</string>\n",
+                cert
+            ));
         }
         if let Some(icert) = installer_cert_val {
-            plist_content.push_str(&format!("    <key>installerSigningCertificate</key>\n    <string>{}</string>\n", icert));
+            plist_content.push_str(&format!(
+                "    <key>installerSigningCertificate</key>\n    <string>{}</string>\n",
+                icert
+            ));
         }
-        
-        let prof_to_use = provisioning_profile_override.as_ref().or(ios_config.provisioning_profile.as_ref());
+
+        let prof_to_use = provisioning_profile_override
+            .as_ref()
+            .or(ios_config.provisioning_profile.as_ref());
         if let Some(prof) = prof_to_use {
-            let identifier = config.bundle.as_ref().and_then(|b| b.identifier.clone()).unwrap_or_else(|| config.package.name.clone());
+            let identifier = config
+                .bundle
+                .as_ref()
+                .and_then(|b| b.identifier.clone())
+                .unwrap_or_else(|| config.package.name.clone());
             plist_content.push_str(&format!(
                 "    <key>provisioningProfiles</key>\n\
                  <dict>\n\
                      <key>{}</key>\n\
                      <string>{}</string>\n\
                  </dict>\n",
-                identifier,
-                prof
+                identifier, prof
             ));
         }
-        
+
         plist_content.push_str("</dict>\n</plist>\n");
-        fs::write(&export_plist_path, plist_content).context("Failed to write ExportOptions.plist")?;
+        fs::write(&export_plist_path, plist_content)
+            .context("Failed to write ExportOptions.plist")?;
     }
-    
+
     println!("  {} Ensuring Rust core is built...", "→".bright_blue());
     if !dry_run {
         let mut build_cmd = Command::new(std::env::current_exe()?);
         build_cmd.args(["build", "--platform", "ios", "--release"]);
-        
+
         let status = build_cmd.status().context("Failed to build Rust core")?;
         if !status.success() {
             anyhow::bail!("Rust build failed for iOS");
         }
     }
-    
-    let archive_path = PathBuf::from("target/bundle/ios").join(format!("{}.xcarchive", project.scheme));
+
+    let archive_path =
+        PathBuf::from("target/bundle/ios").join(format!("{}.xcarchive", project.scheme));
     let export_path = PathBuf::from("target/bundle/ios/export");
-    
+
     if !dry_run {
         fs::create_dir_all("target/bundle/ios")?;
     }
-    
+
     println!("  {} Creating Xcode archive...", "→".bright_blue());
     if !dry_run {
         let mut archive_cmd = Command::new("xcodebuild");
@@ -898,7 +1258,7 @@ fn bundle_ios(
             archive_path.to_str().unwrap(),
             "-allowProvisioningUpdates",
         ]);
-        
+
         if no_sign {
             archive_cmd.args([
                 "CODE_SIGN_IDENTITY=",
@@ -912,23 +1272,25 @@ fn bundle_ios(
             if let Some(cert) = &signing_cert_val {
                 archive_cmd.arg(format!("CODE_SIGN_IDENTITY={}", cert));
             }
-            let prof_to_use = provisioning_profile_override.as_ref().or(ios_config.provisioning_profile.as_ref());
+            let prof_to_use = provisioning_profile_override
+                .as_ref()
+                .or(ios_config.provisioning_profile.as_ref());
             if let Some(prof) = prof_to_use {
                 archive_cmd.arg(format!("PROVISIONING_PROFILE_SPECIFIER={}", prof));
                 archive_cmd.arg("CODE_SIGN_STYLE=Manual");
             }
         }
-        
+
         let status = archive_cmd.status().context("Failed to create xcarchive")?;
         if !status.success() {
             anyhow::bail!("xcodebuild archive failed");
         }
     }
-    
+
     println!("  {} Exporting IPA...", "→".bright_blue());
     if !dry_run {
         fs::create_dir_all(&export_path)?;
-        
+
         let mut export_cmd = Command::new("xcodebuild");
         export_cmd.args([
             "-exportArchive",
@@ -939,14 +1301,16 @@ fn bundle_ios(
             "-exportOptionsPlist",
             export_plist_path.to_str().unwrap(),
         ]);
-        
-        if print_commands { println!("  $ {:?}", export_cmd); }
+
+        if print_commands {
+            println!("  $ {:?}", export_cmd);
+        }
         let status = export_cmd.status().context("Failed to export IPA")?;
         if !status.success() {
             anyhow::bail!("xcodebuild exportArchive failed");
         }
     }
-    
+
     println!("{}", "  ✅ iOS bundling complete!".green());
     Ok(())
 }
@@ -969,11 +1333,15 @@ fn find_manifest_dir(dir: &Path) -> Option<PathBuf> {
 
 fn find_sdk_tool(tool_name: &str) -> Option<String> {
     // Check if tool is in PATH
-    let check_arg = if tool_name == "signtool" { "sign" } else { "/?" };
+    let check_arg = if tool_name == "signtool" {
+        "sign"
+    } else {
+        "/?"
+    };
     if Command::new(tool_name).arg(check_arg).output().is_ok() {
         return Some(tool_name.to_string());
     }
-    
+
     // On Windows, check standard SDK paths
     if cfg!(windows) {
         let sdk_root = Path::new("C:\\Program Files (x86)\\Windows Kits\\10\\bin");
@@ -987,7 +1355,7 @@ fn find_sdk_tool(tool_name: &str) -> Option<String> {
                 }
                 // Sort descending to get the latest SDK
                 versions.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
-                
+
                 for v in versions {
                     let tool_path = v.join("x64").join(format!("{}.exe", tool_name));
                     if tool_path.exists() {
@@ -1009,79 +1377,105 @@ fn bundle_windows(
     print_commands: bool,
 ) -> Result<()> {
     let bundle_config = config.bundle.clone().unwrap_or_default();
-    let windows_config = bundle_config.windows.unwrap_or_else(|| crate::config::BundleWindowsConfig {
-        formats: vec!["msixbundle".to_string()],
-        identity_name: Some("Jitpomi.JffiApp".to_string()),
-        publisher_id: Some("CN=Example".to_string()),
-        targets: vec!["x86_64-pc-windows-msvc".to_string(), "aarch64-pc-windows-msvc".to_string()],
-        icon: None,
-    });
-    
+    let windows_config =
+        bundle_config
+            .windows
+            .unwrap_or_else(|| crate::config::BundleWindowsConfig {
+                formats: vec!["msix".to_string()],
+                identity_name: Some("Jitpomi.JffiApp".to_string()),
+                publisher_id: Some("CN=Example".to_string()),
+                targets: vec![
+                    "x86_64-pc-windows-msvc".to_string(),
+                    "aarch64-pc-windows-msvc".to_string(),
+                ],
+                icon: None,
+            });
+
     let formats = if let Some(f) = format {
         vec![f.to_string()]
     } else {
         windows_config.formats.clone()
     };
-    
+    validate_format_list("windows", &formats)?;
+
     println!("  {} Ensuring Rust core is built...", "→".bright_blue());
     if !dry_run {
         let mut build_cmd = Command::new(std::env::current_exe()?);
         build_cmd.args(["build", "--platform", "windows", "--release"]);
-        
+
         let status = build_cmd.status().context("Failed to build Rust core")?;
         if !status.success() {
             anyhow::bail!("Rust build failed for Windows");
         }
     }
-    
+
     let export_path = PathBuf::from("target/bundle/windows");
     if !dry_run {
         fs::create_dir_all(&export_path)?;
     }
-    
+
     // We expect the build system to have created platforms/windows/bin/x64 and ARM64
     let arch_dirs = vec![
         ("x86_64-pc-windows-msvc", "x64"),
         ("aarch64-pc-windows-msvc", "ARM64"),
     ];
-    
+
     let mut generated_packages = Vec::new();
-    
+
     for (target, arch_dir) in arch_dirs {
         if !windows_config.targets.contains(&target.to_string()) {
             continue;
         }
-        
+
         let package_path = export_path.join(format!("App_{}.msix", arch_dir));
-        
+
         println!("  {} Packaging {}...", "→".bright_blue(), target);
         if !dry_run {
             let bin_dir = Path::new("platforms/windows/bin").join(arch_dir);
             if bin_dir.exists() {
                 let package_source = find_manifest_dir(&bin_dir).unwrap_or_else(|| bin_dir.clone());
-                let makeappx_path = std::env::var("JFFI_MAKEAPPX").ok().or_else(|| find_sdk_tool("makeappx")).unwrap_or_else(|| "MakeAppx".to_string());
+                let makeappx_path = std::env::var("JFFI_MAKEAPPX")
+                    .ok()
+                    .or_else(|| find_sdk_tool("makeappx"))
+                    .unwrap_or_else(|| "MakeAppx".to_string());
                 let mut makeappx_cmd = Command::new(&makeappx_path);
                 makeappx_cmd.args([
-                        "pack",
-                        "/d",
-                        package_source.to_str().unwrap(),
-                        "/p",
-                        package_path.to_str().unwrap(),
-                        "/o",
-                    ]);
-                if print_commands { println!("  $ {:?}", makeappx_cmd); }
+                    "pack",
+                    "/d",
+                    package_source.to_str().unwrap(),
+                    "/p",
+                    package_path.to_str().unwrap(),
+                    "/o",
+                ]);
+                if print_commands {
+                    println!("  $ {:?}", makeappx_cmd);
+                }
                 let status = makeappx_cmd.status().context("Failed to run MakeAppx pack");
-                    
+
                 match status {
-                    Ok(s) if s.success() => generated_packages.push(package_path.clone()),
-                    _ => println!("    {} MakeAppx pack failed or not found. Try setting JFFI_MAKEAPPX", "⚠".yellow()),
+                    Ok(s) if s.success() && package_path.is_file() => {
+                        verify_nonempty_file(&package_path, "Windows MSIX package")?;
+                        generated_packages.push(package_path.clone())
+                    }
+                    Ok(_) => anyhow::bail!("MakeAppx did not create {}", package_path.display()),
+                    Err(error) => {
+                        return Err(error)
+                            .context("MakeAppx pack failed; try setting JFFI_MAKEAPPX")
+                    }
                 }
             } else {
-                println!("    {} Directory {} not found, skipping", "⚠".yellow(), bin_dir.display());
+                anyhow::bail!(
+                    "Windows package input directory {} not found",
+                    bin_dir.display()
+                );
             }
         }
     }
-    
+
+    if !dry_run && generated_packages.is_empty() {
+        anyhow::bail!("No Windows MSIX packages were generated");
+    }
+
     if !no_sign && !generated_packages.is_empty() {
         println!("  {} Signing MSIX packages...", "→".bright_blue());
         if !dry_run {
@@ -1097,46 +1491,44 @@ fn bundle_windows(
                     }
                 }
             }
-            
+
             if !thumbprint.is_empty() {
-                let signtool_path = std::env::var("JFFI_SIGNTOOL").ok().or_else(|| find_sdk_tool("signtool")).unwrap_or_else(|| "signtool".to_string());
+                let signtool_path = std::env::var("JFFI_SIGNTOOL")
+                    .ok()
+                    .or_else(|| find_sdk_tool("signtool"))
+                    .unwrap_or_else(|| "signtool".to_string());
                 for pkg in &generated_packages {
                     let mut sign_cmd = Command::new(&signtool_path);
                     sign_cmd.args([
-                            "sign",
-                            "/fd", "SHA256",
-                            "/a",
-                            "/sha1", &thumbprint,
-                            pkg.to_str().unwrap()
-                        ]);
+                        "sign",
+                        "/fd",
+                        "SHA256",
+                        "/a",
+                        "/sha1",
+                        &thumbprint,
+                        pkg.to_str().unwrap(),
+                    ]);
                     if print_commands {
-                        println!("  $ {} sign /fd SHA256 /a /sha1 *** {:?}", signtool_path, pkg.as_os_str());
+                        println!(
+                            "  $ {} sign /fd SHA256 /a /sha1 *** {:?}",
+                            signtool_path,
+                            pkg.as_os_str()
+                        );
                     }
-                    let _ = sign_cmd.status();
+                    let status = sign_cmd.status().context("Failed to run signtool")?;
+                    if !status.success() {
+                        anyhow::bail!("Failed to sign {}", pkg.display());
+                    }
                 }
             } else {
-                println!("    {} No certificate thumbprint in profile '{}'", "⚠".yellow(), profile);
+                anyhow::bail!(
+                    "No Windows certificate thumbprint in signing profile '{}'",
+                    profile
+                );
             }
         }
     }
-    
-    if formats.contains(&"msixbundle".to_string()) && !generated_packages.is_empty() {
-        println!("  {} Creating MSIXBundle...", "→".bright_blue());
-        if !dry_run {
-            let bundle_path = export_path.join("App.msixbundle");
-            let mut args = vec!["bundle", "/p", bundle_path.to_str().unwrap(), "/o"];
-            
-            for _pkg in &generated_packages {
-                args.push("/d"); // Wait, MakeAppx bundle takes /d for a directory mapping file or we can just specify the packages
-                // MakeAppx bundle /p <bundle.msixbundle> /d <dir>
-                // This is a simplification for the orchestrator
-            }
-            
-            // Just notify user it's a stub for now if MakeAppx bundle syntax is complex
-            println!("    {} Bundle generation orchestrator logic ready", "✓".green());
-        }
-    }
-    
+
     println!("{}", "  ✅ Windows bundling complete!".green());
     Ok(())
 }
@@ -1149,47 +1541,54 @@ fn bundle_linux(
     print_commands: bool,
 ) -> Result<()> {
     let bundle_config = config.bundle.clone().unwrap_or_default();
-    let linux_config = bundle_config.linux.unwrap_or_else(|| crate::config::BundleLinuxConfig {
-        formats: vec!["flatpak".to_string(), "appimage".to_string(), "deb".to_string()],
-        app_id: Some("org.jffi.App".to_string()),
-        runtime: "org.gnome.Platform".to_string(),
-        runtime_version: "48".to_string(),
-        sdk: "org.gnome.Sdk".to_string(),
-        icon: None,
-    });
-    
+    let linux_config = bundle_config
+        .linux
+        .unwrap_or_else(|| crate::config::BundleLinuxConfig {
+            formats: vec!["flatpak".to_string()],
+            app_id: Some("org.jffi.App".to_string()),
+            runtime: "org.gnome.Platform".to_string(),
+            runtime_version: "48".to_string(),
+            sdk: "org.gnome.Sdk".to_string(),
+            icon: None,
+        });
+
     let formats = if let Some(f) = format {
         vec![f.to_string()]
     } else {
         linux_config.formats.clone()
     };
-    
-    let app_id = linux_config.app_id.unwrap_or_else(|| "org.jffi.App".to_string());
-    
+    validate_format_list("linux", &formats)?;
+
+    let app_id = linux_config
+        .app_id
+        .unwrap_or_else(|| "org.jffi.App".to_string());
+
     println!("  {} Ensuring Rust core is built...", "→".bright_blue());
     if !dry_run {
         let mut build_cmd = Command::new(std::env::current_exe()?);
         build_cmd.args(["build", "--platform", "linux", "--release"]);
-        
+
         let status = build_cmd.status().context("Failed to build Rust core")?;
         if !status.success() {
             anyhow::bail!("Rust build failed for Linux");
         }
     }
-    
+
     let export_path = PathBuf::from("target/bundle/linux");
     if !dry_run {
         fs::create_dir_all(&export_path)?;
     }
-    
+
     if formats.contains(&"flatpak".to_string()) {
         println!("  {} Generating Flatpak manifest...", "→".bright_blue());
-        
-        let manifest_path = PathBuf::from("target/jffi/generated/linux").join(format!("{}.json", app_id));
+
+        let manifest_path =
+            PathBuf::from("target/jffi/generated/linux").join(format!("{}.json", app_id));
         if !dry_run {
             fs::create_dir_all("target/jffi/generated/linux")?;
-            
-            let manifest = format!(r#"{{
+
+            let manifest = format!(
+                r#"{{
   "app-id": "{}",
   "runtime": "{}",
   "runtime-version": "{}",
@@ -1216,84 +1615,91 @@ fn bundle_linux(
       ]
     }}
   ]
-}}"#, app_id, linux_config.runtime, linux_config.runtime_version, linux_config.sdk);
-            
+}}"#,
+                app_id, linux_config.runtime, linux_config.runtime_version, linux_config.sdk
+            );
+
             fs::write(&manifest_path, manifest)?;
         }
-        
+
         println!("  {} Running flatpak-builder...", "→".bright_blue());
         if !dry_run {
             let build_dir = export_path.join(format!("{}-build", app_id));
             let repo_dir = export_path.join("repo");
-            
+
             let mut flatpak_builder_cmd = Command::new("flatpak-builder");
             flatpak_builder_cmd.args([
-                    "--repo", repo_dir.to_str().unwrap(),
-                    "--force-clean",
-                    build_dir.to_str().unwrap(),
-                    manifest_path.to_str().unwrap(),
-                ]);
-            if print_commands { println!("  $ {:?}", flatpak_builder_cmd); }
-            let status = flatpak_builder_cmd.status().context("Failed to run flatpak-builder");
-                
-            match status {
-                Ok(s) if s.success() => {
-                    println!("  {} Exporting flatpak bundle...", "→".bright_blue());
-                    let bundle_file = export_path.join(format!("{}.flatpak", app_id));
-                    let _ = Command::new("flatpak")
-                        .args([
-                            "build-bundle",
-                            repo_dir.to_str().unwrap(),
-                            bundle_file.to_str().unwrap(),
-                            &app_id,
-                        ])
-                        .status();
+                "--repo",
+                repo_dir.to_str().unwrap(),
+                "--force-clean",
+                build_dir.to_str().unwrap(),
+                manifest_path.to_str().unwrap(),
+            ]);
+            if print_commands {
+                println!("  $ {:?}", flatpak_builder_cmd);
+            }
+            let status = flatpak_builder_cmd
+                .status()
+                .context("Failed to run flatpak-builder")?;
+
+            if status.success() {
+                println!("  {} Exporting flatpak bundle...", "→".bright_blue());
+                let bundle_file = export_path.join(format!("{}.flatpak", app_id));
+                let status = Command::new("flatpak")
+                    .args([
+                        "build-bundle",
+                        repo_dir.to_str().unwrap(),
+                        bundle_file.to_str().unwrap(),
+                        &app_id,
+                    ])
+                    .status()
+                    .context("Failed to run flatpak build-bundle")?;
+                if !status.success() {
+                    anyhow::bail!("Flatpak bundle export failed: {}", bundle_file.display());
                 }
-                _ => println!("    {} flatpak-builder failed", "⚠".yellow()),
+                verify_nonempty_file(&bundle_file, "Flatpak bundle")?;
+            } else {
+                anyhow::bail!("flatpak-builder failed");
             }
         }
     }
-    
-    if formats.contains(&"appimage".to_string()) || formats.contains(&"deb".to_string()) {
-        println!("  {} Additional Linux formats (AppImage, deb) are configured for future phases.", "ℹ".bright_blue());
-        println!("    Consider using 'cargo-packager' manually for these targets.");
-    }
-    
+
     println!("{}", "  ✅ Linux bundling complete!".green());
     Ok(())
 }
 
-fn bundle_web(
-    config: &Config,
-    dry_run: bool,
-    print_commands: bool,
-) -> Result<()> {
+fn bundle_web(config: &Config, dry_run: bool, print_commands: bool) -> Result<()> {
     let bundle_config = config.bundle.clone().unwrap_or_default();
-    let web_config = bundle_config.web.unwrap_or_else(|| crate::config::BundleWebConfig {
-        dist_dir: "platforms/web/dist".to_string(),
-        build_command: "npm run build".to_string(),
-        wasm_opt: true,
-        base_path: "/".to_string(),
-    });
-    
-    println!("  {} Ensuring Rust core is built for WebAssembly...", "→".bright_blue());
+    let web_config = bundle_config
+        .web
+        .unwrap_or_else(|| crate::config::BundleWebConfig {
+            dist_dir: "platforms/web/dist".to_string(),
+            build_command: "npm run build".to_string(),
+            wasm_opt: true,
+            base_path: "/".to_string(),
+        });
+
+    println!(
+        "  {} Ensuring Rust core is built for WebAssembly...",
+        "→".bright_blue()
+    );
     if !dry_run {
         let mut build_cmd = Command::new(std::env::current_exe()?);
         build_cmd.args(["build", "--platform", "web", "--release"]);
-        
+
         let status = build_cmd.status().context("Failed to build Rust core")?;
         if !status.success() {
             anyhow::bail!("Rust build failed for Web");
         }
     }
-    
+
     println!("  {} Running web bundler...", "→".bright_blue());
     if !dry_run {
         let web_dir = Path::new("platforms/web");
         if !web_dir.exists() {
             anyhow::bail!("platforms/web directory not found.");
         }
-        
+
         let mut build_cmd_str = web_config.build_command.clone();
         if build_cmd_str == "npm run build" {
             // Auto detect
@@ -1318,50 +1724,113 @@ fn bundle_web(
                 }
             }
         }
-        
-        let cmd_parts: Vec<&str> = build_cmd_str.split_whitespace().collect();
+
+        let cmd_parts = shell_words::split(&build_cmd_str)
+            .context("Invalid quoting in bundle.web.build_command")?;
         if cmd_parts.is_empty() {
             anyhow::bail!("Invalid build_command in jffi.toml");
         }
-        
+
         if print_commands {
             println!("  $ {}", build_cmd_str.dimmed());
         }
-        
-        let status = Command::new(cmd_parts[0])
+
+        let status = Command::new(&cmd_parts[0])
             .args(&cmd_parts[1..])
+            .env("JFFI_BASE_PATH", &web_config.base_path)
+            .env("BASE_PATH", &web_config.base_path)
             .current_dir(web_dir)
             .status()
             .context("Failed to run web build command");
-            
+
         match status {
-            Ok(s) if s.success() => {},
+            Ok(s) if s.success() => {}
             _ => anyhow::bail!("Web build command failed"),
         }
     }
-    
+
     let export_path = PathBuf::from("target/bundle/web");
     if !dry_run {
         fs::create_dir_all(&export_path)?;
-        
+
         println!("  {} Copying distribution artifacts...", "→".bright_blue());
         let source_dir = Path::new(&web_config.dist_dir);
-        if source_dir.exists() {
-            // Using a simple copy strategy (could be optimized or use fs_extra)
-            let _ = Command::new("cp")
-                .args(["-r", &format!("{}/.", source_dir.display()), export_path.to_str().unwrap()])
-                .status();
-        } else {
-            println!("    {} Web dist directory {} not found", "⚠".yellow(), source_dir.display());
+        if !source_dir.is_dir() {
+            anyhow::bail!(
+                "Web build completed but dist directory was not created: {}",
+                source_dir.display()
+            );
+        }
+        let copied = copy_directory_contents(source_dir, &export_path)?;
+        if copied == 0 {
+            anyhow::bail!("Web dist directory is empty: {}", source_dir.display());
+        }
+        if web_config.wasm_opt {
+            optimize_wasm_files(&export_path)?;
         }
     }
-    
+
     println!("{}", "  ✅ Web bundling complete!".green());
     Ok(())
 }
 
-pub fn validate_bundle_config(config: &Config, platform: &str, profile: &str, no_sign: bool) -> Result<()> {
-    println!("  {} Validating configuration for store-readiness...", "→".bright_blue());
+pub fn validate_bundle_config(
+    config: &Config,
+    platform: &str,
+    profile: &str,
+    no_sign: bool,
+) -> Result<()> {
+    println!(
+        "  {} Validating configuration for store-readiness...",
+        "→".bright_blue()
+    );
+
+    if let Some(bundle) = &config.bundle {
+        if let Some(android) = &bundle.android {
+            if android.min_sdk != config.platforms.android.min_sdk {
+                anyhow::bail!(
+                    "Conflicting Android min SDK values: platforms.android.min_sdk={} but bundle.android.min_sdk={}",
+                    config.platforms.android.min_sdk,
+                    android.min_sdk
+                );
+            }
+            if android.build_type != "release" {
+                anyhow::bail!("bundle.android.build_type must be `release` for store bundles");
+            }
+        }
+        if let Some(macos) = &bundle.macos {
+            if macos.minimum_system_version != config.platforms.macos.deployment_target {
+                anyhow::bail!(
+                    "Conflicting macOS deployment targets: platforms.macos.deployment_target={} but bundle.macos.minimum_system_version={}",
+                    config.platforms.macos.deployment_target,
+                    macos.minimum_system_version
+                );
+            }
+        }
+        let configured_formats = match platform {
+            "android" => bundle
+                .android
+                .as_ref()
+                .map(|value| value.formats.as_slice()),
+            "macos" => bundle
+                .signing
+                .as_ref()
+                .and_then(|signing| signing.profiles.as_ref())
+                .and_then(|profiles| profiles.get(profile))
+                .and_then(|profile| profile.apple.as_ref())
+                .and_then(|apple| apple.formats.as_deref())
+                .or_else(|| bundle.macos.as_ref().map(|value| value.formats.as_slice())),
+            "windows" => bundle
+                .windows
+                .as_ref()
+                .map(|value| value.formats.as_slice()),
+            "linux" => bundle.linux.as_ref().map(|value| value.formats.as_slice()),
+            _ => None,
+        };
+        if let Some(formats) = configured_formats {
+            validate_format_list(platform, formats)?;
+        }
+    }
 
     let check_placeholder = |value: &str, field_name: &str| -> Result<()> {
         if value.contains("com.example") || value.contains("example.app") {
@@ -1375,11 +1844,16 @@ pub fn validate_bundle_config(config: &Config, platform: &str, profile: &str, no
     };
 
     if platform == "android" {
-        check_placeholder(&config.platforms.android.package, "platforms.android.package")?;
+        check_placeholder(
+            &config.platforms.android.package,
+            "platforms.android.package",
+        )?;
     } else if platform == "ios" {
         check_placeholder(&config.platforms.ios.bundle_id, "platforms.ios.bundle_id")?;
     } else if platform == "macos" {
-        let bundle_id = config.bundle.as_ref()
+        let bundle_id = config
+            .bundle
+            .as_ref()
             .and_then(|b| b.identifier.clone())
             .unwrap_or_else(|| config.platforms.ios.bundle_id.clone());
         check_placeholder(&bundle_id, "bundle.identifier / platforms.ios.bundle_id")?;
@@ -1426,10 +1900,12 @@ pub fn validate_bundle_config(config: &Config, platform: &str, profile: &str, no
                             if let Some(profile) = profiles.get(active_profile) {
                                 if let Some(android_prof) = &profile.android {
                                     if let Some(keystore_path) = &android_prof.keystore_path {
-                                        if keystore_path.contains("placeholder") || keystore_path.is_empty() {
+                                        if keystore_path.contains("placeholder")
+                                            || keystore_path.is_empty()
+                                        {
                                             anyhow::bail!("Store Validation Error: Android keystore_path is placeholder or empty. Setup a release keystore in 'jffi.toml'.");
                                         }
-                                        
+
                                         let keystore_file = Path::new(keystore_path);
                                         if !keystore_file.exists() {
                                             anyhow::bail!(
@@ -1441,50 +1917,92 @@ pub fn validate_bundle_config(config: &Config, platform: &str, profile: &str, no
                                         anyhow::bail!("Store Validation Error: Android keystore_path is missing in 'signing.profiles.{}.android'.", active_profile);
                                     }
 
-                                    if android_prof.key_alias.is_none() || android_prof.key_alias.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+                                    if android_prof.key_alias.is_none()
+                                        || android_prof
+                                            .key_alias
+                                            .as_ref()
+                                            .map(|s| s.is_empty())
+                                            .unwrap_or(true)
+                                    {
                                         anyhow::bail!("Store Validation Error: Android key_alias is missing or empty in 'signing.profiles.{}.android'.", active_profile);
                                     }
 
-                                    if android_prof.store_password_env.is_none() || android_prof.key_password_env.is_none() {
+                                    if android_prof.store_password_env.is_none()
+                                        || android_prof.key_password_env.is_none()
+                                    {
                                         anyhow::bail!("Store Validation Error: Android store_password_env or key_password_env is missing in 'signing.profiles.{}.android'.", active_profile);
+                                    }
+                                    for variable in [
+                                        android_prof.store_password_env.as_deref().unwrap(),
+                                        android_prof.key_password_env.as_deref().unwrap(),
+                                    ] {
+                                        if std::env::var_os(variable).is_none() {
+                                            anyhow::bail!(
+                                                "Store Validation Error: required Android signing environment variable '{}' is not set",
+                                                variable
+                                            );
+                                        }
                                     }
                                 } else {
                                     anyhow::bail!("Store Validation Error: Android signing profile 'android' is missing in 'signing.profiles{}'.", active_profile);
                                 }
                             } else {
-                                println!("  {} Warning: No signing profile '{}' found in 'jffi.toml'. Bundle will build but may not be signed.", "⚠".yellow(), active_profile);
+                                anyhow::bail!(
+                                    "Store Validation Error: signing profile '{}' was not found",
+                                    active_profile
+                                );
                             }
                         } else {
-                            println!("  {} Warning: No signing profiles found in 'jffi.toml'. Bundle will build but may not be signed.", "⚠".yellow());
+                            anyhow::bail!(
+                                "Store Validation Error: no signing profiles are configured"
+                            );
                         }
                     } else {
-                        println!("  {} Warning: No signing configuration found in 'jffi.toml'. Bundle will build but may not be signed.", "⚠".yellow());
+                        anyhow::bail!("Store Validation Error: no signing configuration is present; use --no-sign for an intentionally unsigned bundle");
                     }
+                } else {
+                    anyhow::bail!("Store Validation Error: bundle configuration is missing");
                 }
             }
             "ios" | "macos" => {
-                if let Some(bundle_conf) = &config.bundle {
-                    if let Some(signing) = &bundle_conf.signing {
-                        if let Some(profiles) = &signing.profiles {
-                            let active_profile = profile;
-                            if let Some(profile) = profiles.get(active_profile) {
-                                if let Some(apple_prof) = &profile.apple {
-                                    if let Some(team_id) = &apple_prof.team_id {
-                                        if team_id.is_empty() || team_id.contains("placeholder") {
-                                            anyhow::bail!("Store Validation Error: Apple developer team_id is missing or placeholder. Provide your 10-character Apple Developer Team ID in 'jffi.toml'.");
-                                        }
-                                        if team_id.len() != 10 {
-                                            anyhow::bail!("Store Validation Error: Apple developer team_id '{}' must be exactly 10 characters.", team_id);
-                                        }
-                                    } else {
-                                        anyhow::bail!("Store Validation Error: Apple developer team_id is missing in 'signing.profiles.{}.apple'.", active_profile);
-                                    }
-                                } else {
-                                    anyhow::bail!("Store Validation Error: Apple signing profile 'apple' is missing in 'signing.profiles.{}'.", active_profile);
-                                }
-                            }
-                        }
-                    }
+                let apple = config
+                    .bundle
+                    .as_ref()
+                    .and_then(|bundle| bundle.signing.as_ref())
+                    .and_then(|signing| signing.profiles.as_ref())
+                    .and_then(|profiles| profiles.get(profile))
+                    .and_then(|profile| profile.apple.as_ref())
+                    .with_context(|| {
+                        format!(
+                            "Store Validation Error: Apple signing profile '{}' is missing",
+                            profile
+                        )
+                    })?;
+                let team_id = apple
+                    .team_id
+                    .as_deref()
+                    .context("Store Validation Error: Apple developer team_id is missing")?;
+                if team_id.len() != 10 || team_id.contains("placeholder") {
+                    anyhow::bail!(
+                        "Store Validation Error: Apple developer team_id '{}' must be a valid 10-character team ID",
+                        team_id
+                    );
+                }
+            }
+            "windows" => {
+                let thumbprint = config
+                    .bundle
+                    .as_ref()
+                    .and_then(|bundle| bundle.signing.as_ref())
+                    .and_then(|signing| signing.profiles.as_ref())
+                    .and_then(|profiles| profiles.get(profile))
+                    .and_then(|profile| profile.windows.as_ref())
+                    .and_then(|windows| windows.certificate_thumbprint.as_deref())
+                    .with_context(|| format!("Store Validation Error: Windows signing profile '{}' with certificate_thumbprint is missing", profile))?;
+                if thumbprint.trim().is_empty() {
+                    anyhow::bail!(
+                        "Store Validation Error: Windows certificate thumbprint is empty"
+                    );
                 }
             }
             _ => {}

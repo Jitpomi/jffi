@@ -9,17 +9,22 @@ use std::time::Duration;
 use crate::platform::{AndroidProject, Platform, XcodeProject};
 
 pub fn watch_project(platform: &str) -> Result<()> {
-    println!("{}", format!("👀 Rust watch mode for {}...", platform).bright_green().bold());
+    println!(
+        "{}",
+        format!("👀 Rust watch mode for {}...", platform)
+            .bright_green()
+            .bold()
+    );
     println!();
     println!("   This watches your Rust code (core/) and rebuilds on changes.");
     println!();
-    
+
     // Initial build (full build to ensure Xcode compatibility)
     println!("{}", "  → Initial Rust build...".bright_blue());
     crate::commands::build::build_platform(platform, false)?;
     println!("{}", "  ✓ Build complete!".green());
     println!();
-    
+
     // Parse platform
     let platform_enum = Platform::from_str(platform)
         .ok_or_else(|| anyhow::anyhow!("Unknown platform: {}", platform))?;
@@ -32,7 +37,12 @@ pub fn watch_project(platform: &str) -> Result<()> {
         println!();
         println!("{}", "  ✓ Xcode opened!".green());
         println!();
-        println!("{}", "   🚀 IMPORTANT: Press Cmd+R in Xcode to RUN the app!".bright_yellow().bold());
+        println!(
+            "{}",
+            "   🚀 IMPORTANT: Press Cmd+R in Xcode to RUN the app!"
+                .bright_yellow()
+                .bold()
+        );
         println!("   (Select your simulator/device and run)");
         println!();
         println!("   Development workflow:");
@@ -48,7 +58,12 @@ pub fn watch_project(platform: &str) -> Result<()> {
         println!();
         println!("{}", "  ✓ Xcode opened!".green());
         println!();
-        println!("{}", "   🚀 IMPORTANT: Press Cmd+R in Xcode to RUN the app!".bright_yellow().bold());
+        println!(
+            "{}",
+            "   🚀 IMPORTANT: Press Cmd+R in Xcode to RUN the app!"
+                .bright_yellow()
+                .bold()
+        );
         println!("   (Don't just look at the preview - actually run it)");
         println!();
         println!("   Development workflow:");
@@ -64,7 +79,12 @@ pub fn watch_project(platform: &str) -> Result<()> {
         println!();
         println!("{}", "  ✓ Android Studio opened!".green());
         println!();
-        println!("{}", "   🚀 IMPORTANT: Press ▶️ in Android Studio to RUN the app!".bright_yellow().bold());
+        println!(
+            "{}",
+            "   🚀 IMPORTANT: Press ▶️ in Android Studio to RUN the app!"
+                .bright_yellow()
+                .bold()
+        );
         println!();
         println!("   Development workflow:");
         println!("   • Edit Kotlin files → Changes appear on rebuild (Compose hot reload)");
@@ -78,7 +98,10 @@ pub fn watch_project(platform: &str) -> Result<()> {
         println!();
         println!("{}", "  ✓ App launched!".green());
         println!();
-        println!("{}", "   🚀 Development mode active!".bright_yellow().bold());
+        println!(
+            "{}",
+            "   🚀 Development mode active!".bright_yellow().bold()
+        );
         println!();
         println!("   Development workflow:");
         println!("   • Edit Python files → App auto-restarts");
@@ -89,7 +112,10 @@ pub fn watch_project(platform: &str) -> Result<()> {
     } else if platform == "web" {
         println!("{}", "  → Starting web dev server...".bright_blue());
         start_web_dev_server()?;
-        println!("{}", "   🚀 Development mode active!".bright_yellow().bold());
+        println!(
+            "{}",
+            "   🚀 Development mode active!".bright_yellow().bold()
+        );
         println!();
         println!("   Development workflow:");
         println!("   • Edit JS/HTML/CSS files → Hot reload via Vite");
@@ -103,9 +129,22 @@ pub fn watch_project(platform: &str) -> Result<()> {
         println!();
         println!("{}", "  ✓ Visual Studio opened!".green());
         println!();
-        println!("{}", "   🚀 IMPORTANT: Enable Deploy in VS before running!".bright_yellow().bold());
-        println!("{}", "      Build → Configuration Manager → ☑ Deploy".bright_yellow());
-        println!("{}", "      Then press ▶️ (F5) to RUN the app!".bright_yellow().bold());
+        println!(
+            "{}",
+            "   🚀 IMPORTANT: Enable Deploy in VS before running!"
+                .bright_yellow()
+                .bold()
+        );
+        println!(
+            "{}",
+            "      Build → Configuration Manager → ☑ Deploy".bright_yellow()
+        );
+        println!(
+            "{}",
+            "      Then press ▶️ (F5) to RUN the app!"
+                .bright_yellow()
+                .bold()
+        );
         println!();
         println!("   Development workflow:");
         println!("   • Edit C# files → Use Visual Studio's hot reload (Edit & Continue)");
@@ -114,10 +153,10 @@ pub fn watch_project(platform: &str) -> Result<()> {
         println!("   Press Ctrl+C to stop watching");
         println!();
     }
-    
+
     // Set up file watcher
     let (tx, rx) = channel();
-    
+
     let mut watcher = RecommendedWatcher::new(
         move |res: Result<Event, notify::Error>| {
             if let Ok(event) = res {
@@ -126,16 +165,16 @@ pub fn watch_project(platform: &str) -> Result<()> {
         },
         Config::default(),
     )?;
-    
+
     // Watch entire core directory (catches src/, Cargo.toml, build.rs, .udl files, etc.)
     watcher.watch(Path::new("core"), RecursiveMode::Recursive)?;
-    
+
     println!("{}", "  👀 Watching Rust project (core/)...".bright_cyan());
     println!();
-    
+
     let mut last_rebuild = std::time::Instant::now();
     let debounce_duration = Duration::from_millis(500);
-    
+
     loop {
         match rx.recv_timeout(Duration::from_millis(100)) {
             Ok(event) => {
@@ -146,70 +185,76 @@ pub fn watch_project(platform: &str) -> Result<()> {
                     event.kind,
                     notify::EventKind::Access(_) // Ignore file access events (too noisy)
                 );
-                
+
                 if should_process {
                     // Filter out irrelevant files (target/, .git/, temp files, etc.)
                     let is_relevant_change = event.paths.iter().any(|p| {
                         let path_str = p.to_string_lossy();
                         // Ignore target directory, hidden files, and temp files
                         !path_str.contains("/target/")
-                        && !path_str.contains("/.")
-                        && !path_str.ends_with('~')
-                        && !path_str.contains(".swp")
-                        && !path_str.contains(".tmp")
-                        && !path_str.contains("core/src/android.rs")
+                            && !path_str.contains("/.")
+                            && !path_str.ends_with('~')
+                            && !path_str.contains(".swp")
+                            && !path_str.contains(".tmp")
+                            && !path_str.contains("core/src/android.rs")
                     });
-                    
+
                     if !is_relevant_change {
                         continue;
                     }
-                    
+
                     // Debug: show which files changed
                     for path in &event.paths {
                         let ext = path.extension().and_then(|s| s.to_str());
                         let filename = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
-                        
+
                         // Show changes to Rust files, Cargo.toml, UDL files, build scripts
-                        if ext == Some("rs") 
-                            || ext == Some("toml") 
+                        if ext == Some("rs")
+                            || ext == Some("toml")
                             || ext == Some("udl")
                             || filename == "build.rs"
                         {
                             println!("  📝 Detected change: {}", path.display());
                         }
                     }
-                    
+
                     // Debounce: only rebuild if enough time has passed
                     let now = std::time::Instant::now();
                     if now.duration_since(last_rebuild) > debounce_duration {
                         println!();
-                        
+
                         println!("{}", "  🔄 Rust changes detected, rebuilding...".yellow());
-                        
+
                         // For Windows, only build the active platform architecture
                         let build_result = if platform == "windows" {
                             rebuild_windows_rust_only()
                         } else {
                             crate::commands::build::build_platform(platform, false)
                         };
-                        
+
                         match build_result {
                             Ok(_) => {
                                 println!();
                                 if platform == "linux" {
-                                    println!("{}", "  ✓ Rust rebuild complete! Restarting app...".green());
+                                    println!(
+                                        "{}",
+                                        "  ✓ Rust rebuild complete! Restarting app...".green()
+                                    );
                                     match restart_linux_app() {
                                         Ok(_) => {
                                             println!("{}", "  ✓ App restarted!".green());
                                         }
                                         Err(e) => {
-                                            println!("{}", format!("  ✗ Failed to restart app: {}", e).red());
+                                            println!(
+                                                "{}",
+                                                format!("  ✗ Failed to restart app: {}", e).red()
+                                            );
                                         }
                                     }
                                 } else if platform == "ios" {
                                     // Touch XCFramework to update timestamp
                                     let _ = touch_xcframework(platform);
-                                    
+
                                     println!("{}", "  ✓ Rust rebuild complete! Press Cmd+B in Xcode to use new code.".green());
                                 } else if platform == "macos" {
                                     // Touch XCFramework to update timestamp and notify Xcode
@@ -233,7 +278,7 @@ pub fn watch_project(platform: &str) -> Result<()> {
                                 println!();
                             }
                         }
-                        
+
                         last_rebuild = now;
                     }
                 }
@@ -250,9 +295,7 @@ pub fn watch_project(platform: &str) -> Result<()> {
 }
 
 fn find_windows_solution() -> Result<PathBuf> {
-    let windows_dir = std::env::current_dir()?
-        .join("platforms")
-        .join("windows");
+    let windows_dir = std::env::current_dir()?.join("platforms").join("windows");
 
     find_file_with_extension(&windows_dir, "slnx")
         .or_else(|| find_file_with_extension(&windows_dir, "csproj"))
@@ -322,35 +365,49 @@ fn open_visual_studio() -> Result<()> {
 
 pub fn rebuild_windows_rust_only() -> Result<()> {
     use std::process::Command;
-    
+
     // Detect which platform is active (or use host architecture as default)
     let bin_dir = std::env::current_dir()?.join("platforms/windows/bin");
     let is_first_build = !bin_dir.exists();
-    
+
     let target = detect_active_windows_platform().unwrap_or("x86_64-pc-windows-msvc");
-    
+
     let platform_name = match target {
         "x86_64-pc-windows-msvc" => "x64",
         "i686-pc-windows-msvc" => "x86",
         "aarch64-pc-windows-msvc" => "ARM64",
         _ => "x64",
     };
-    
+
     if is_first_build {
-        println!("  {} Detected host architecture: {}", "→".bright_blue(), platform_name);
+        println!(
+            "  {} Detected host architecture: {}",
+            "→".bright_blue(),
+            platform_name
+        );
     }
-    println!("  {} Building Rust for {} only...", "→".bright_blue(), platform_name);
-    
+    println!(
+        "  {} Building Rust for {} only...",
+        "→".bright_blue(),
+        platform_name
+    );
+
     // Build only the detected target
     let status = Command::new("cargo")
-        .args(["build", "--target", target, "--manifest-path", "core/Cargo.toml"])
+        .args([
+            "build",
+            "--target",
+            target,
+            "--manifest-path",
+            "core/Cargo.toml",
+        ])
         .status()
         .context("Failed to run cargo build")?;
-    
+
     if !status.success() {
         anyhow::bail!("Rust build failed");
     }
-    
+
     Ok(())
 }
 
@@ -377,7 +434,7 @@ pub fn detect_active_windows_platform() -> Option<&'static str> {
     }
 
     let mut most_recent: Option<(std::time::SystemTime, &'static str)> = None;
-    
+
     // Map platform folder names to Rust targets
     let platform_map = [
         ("x64", "x86_64-pc-windows-msvc"),
@@ -389,7 +446,12 @@ pub fn detect_active_windows_platform() -> Option<&'static str> {
         let platform_dir = bin_dir.join(platform_name);
         if let Ok(metadata) = platform_dir.metadata() {
             if let Ok(modified) = metadata.modified() {
-                if most_recent.is_none() || most_recent.as_ref().map(|(t, _)| modified > *t).unwrap_or(false) {
+                if most_recent.is_none()
+                    || most_recent
+                        .as_ref()
+                        .map(|(t, _)| modified > *t)
+                        .unwrap_or(false)
+                {
                     most_recent = Some((modified, rust_target));
                 }
             }
@@ -397,7 +459,9 @@ pub fn detect_active_windows_platform() -> Option<&'static str> {
     }
 
     // If no builds found, use host architecture
-    most_recent.map(|(_, target)| target).or(Some(detect_host_windows_architecture()))
+    most_recent
+        .map(|(_, target)| target)
+        .or(Some(detect_host_windows_architecture()))
 }
 
 pub fn copy_windows_ffi_dll() -> Result<()> {
@@ -439,7 +503,13 @@ pub fn copy_windows_ffi_dll() -> Result<()> {
                             if tfm_dir.is_dir() {
                                 for rid_entry in std::fs::read_dir(&tfm_dir)? {
                                     let rid_dir = rid_entry?.path();
-                                    if rid_dir.is_dir() && rid_dir.file_name().and_then(|n| n.to_str()).map(|n| n.starts_with("win-")).unwrap_or(false) {
+                                    if rid_dir.is_dir()
+                                        && rid_dir
+                                            .file_name()
+                                            .and_then(|n| n.to_str())
+                                            .map(|n| n.starts_with("win-"))
+                                            .unwrap_or(false)
+                                    {
                                         let dest = rid_dir.join(&dll_name);
                                         std::fs::copy(&dll_source, &dest).ok(); // Ignore errors, directory might not exist yet
                                     }
@@ -455,10 +525,9 @@ pub fn copy_windows_ffi_dll() -> Result<()> {
     Ok(())
 }
 
-
 fn launch_linux_app_background() -> Result<()> {
     use std::process::Stdio;
-    
+
     // Copy the .so file to platforms/linux
     let lib_path = std::fs::read_dir("target/debug")
         .context("Failed to read target directory")?
@@ -470,19 +539,19 @@ fn launch_linux_app_background() -> Result<()> {
         })
         .map(|e| e.path())
         .context("Could not find FFI library")?;
-    
-    let lib_filename = lib_path.file_name()
+
+    let lib_filename = lib_path
+        .file_name()
         .context("Could not get library filename")?;
     let dest_path = format!("platforms/linux/{}", lib_filename.to_string_lossy());
-    
-    std::fs::copy(&lib_path, &dest_path)
-        .context("Failed to copy library to platforms/linux")?;
-    
+
+    std::fs::copy(&lib_path, &dest_path).context("Failed to copy library to platforms/linux")?;
+
     // Check display environment for headless fallback
     let display_var = std::env::var("DISPLAY").unwrap_or_default();
     let wayland_var = std::env::var("WAYLAND_DISPLAY").unwrap_or_default();
     let display_set = !display_var.trim().is_empty() || !wayland_var.trim().is_empty();
-    
+
     let has_xvfb = Command::new("which")
         .arg("xvfb-run")
         .output()
@@ -490,7 +559,9 @@ fn launch_linux_app_background() -> Result<()> {
         .unwrap_or(false);
 
     // Allow user to disable headless mode via env var
-    let force_no_headless = std::env::var("JFFI_HEADLESS").map(|v| v == "0").unwrap_or(false);
+    let force_no_headless = std::env::var("JFFI_HEADLESS")
+        .map(|v| v == "0")
+        .unwrap_or(false);
 
     if !display_set && !has_xvfb {
         anyhow::bail!(
@@ -508,11 +579,19 @@ fn launch_linux_app_background() -> Result<()> {
         );
         println!("     (Set JFFI_HEADLESS=0 to disable this behavior)");
         let mut c = Command::new("xvfb-run");
-        c.args(["--auto-servernum", "--server-args=-screen 0 1024x768x24", "python3", "main.py"]);
+        c.args([
+            "--auto-servernum",
+            "--server-args=-screen 0 1024x768x24",
+            "python3",
+            "main.py",
+        ]);
         c
     } else {
         if !display_set && force_no_headless {
-            println!("  {} Headless mode disabled, attempting regular launch...", "→".bright_blue());
+            println!(
+                "  {} Headless mode disabled, attempting regular launch...",
+                "→".bright_blue()
+            );
         }
         let mut c = Command::new("python3");
         c.arg("main.py");
@@ -520,20 +599,19 @@ fn launch_linux_app_background() -> Result<()> {
     };
 
     let verbose = std::env::var("JFFI_VERBOSE").is_ok();
-    
+
     cmd.current_dir("platforms/linux")
         .env("GSK_RENDERER", "cairo")
         .env("GDK_DEBUG", "gl-disable")
         .env("NO_AT_BRIDGE", "1")
         .env("GTK_A11Y", "none")
         .env("LC_ALL", "C.UTF-8");
-    
+
     if !verbose {
         cmd.stdout(Stdio::null());
     }
-    
-    cmd.spawn()
-        .context("Failed to launch app")?;
+
+    cmd.spawn().context("Failed to launch app")?;
 
     // Give it a moment to start
     std::thread::sleep(Duration::from_millis(500));
@@ -546,10 +624,10 @@ fn restart_linux_app() -> Result<()> {
     let _ = Command::new("pkill")
         .args(["-f", "python3.*main.py"])
         .status();
-    
+
     // Wait a moment for cleanup
     std::thread::sleep(Duration::from_millis(200));
-    
+
     // Relaunch
     launch_linux_app_background()
 }
@@ -582,31 +660,31 @@ fn touch_xcframework(platform: &str) -> Result<()> {
 
 fn start_web_dev_server() -> Result<()> {
     use std::process::Stdio;
-    
+
     let config = crate::config::load_config()?;
     let web_config = config.platforms.web;
     let port = web_config.port;
-    
+
     let verbose = std::env::var("JFFI_VERBOSE").is_ok();
-    
+
     // Install npm dependencies if needed
     let node_modules = std::path::Path::new("platforms/web/node_modules");
     if !node_modules.exists() {
         println!("  {} Installing npm dependencies...", "→".bright_blue());
         let mut npm_install = Command::new("npm");
-        npm_install.arg("install")
-            .current_dir("platforms/web");
+        npm_install.arg("install").current_dir("platforms/web");
         if !verbose {
             npm_install.stdout(Stdio::null()).stderr(Stdio::null());
         }
-        let status = npm_install.status()
+        let status = npm_install
+            .status()
             .context("Failed to install npm dependencies")?;
-        
+
         if !status.success() {
             anyhow::bail!("npm install failed");
         }
     }
-    
+
     // Start Vite dev server in background
     let mut vite_cmd = Command::new("npm");
     let mut args = vec![
@@ -616,7 +694,7 @@ fn start_web_dev_server() -> Result<()> {
         "--port".to_string(),
         port.to_string(),
     ];
-    
+
     if web_config.host {
         args.push("--host".to_string());
     }
@@ -629,24 +707,34 @@ fn start_web_dev_server() -> Result<()> {
     if web_config.cors {
         args.push("--cors".to_string());
     }
-    
-    vite_cmd.args(&args)
-        .current_dir("platforms/web");
+
+    vite_cmd.args(&args).current_dir("platforms/web");
     if !verbose {
         vite_cmd.stdout(Stdio::null()).stderr(Stdio::null());
     }
-    vite_cmd.spawn()
+    vite_cmd
+        .spawn()
         .context("Failed to start Vite dev server")?;
-    
+
     // Give it a moment to start
     std::thread::sleep(Duration::from_millis(1500));
-    
+
     let protocol = if web_config.https { "https" } else { "http" };
-    let host_str = if web_config.host { "0.0.0.0" } else { "localhost" };
-    
+    let host_str = if web_config.host {
+        "0.0.0.0"
+    } else {
+        "localhost"
+    };
+
     println!();
-    println!("  {} Vite dev server running at {}", "✓".green(), format!("{}://{}:{}", protocol, host_str, port).bright_cyan().underline());
+    println!(
+        "  {} Vite dev server running at {}",
+        "✓".green(),
+        format!("{}://{}:{}", protocol, host_str, port)
+            .bright_cyan()
+            .underline()
+    );
     println!();
-    
+
     Ok(())
 }

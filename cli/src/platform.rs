@@ -37,6 +37,15 @@ impl Platform {
         }
     }
 
+    pub fn is_host_supported(&self) -> bool {
+        match self {
+            Self::Ios | Self::Macos => cfg!(target_os = "macos"),
+            Self::Windows => cfg!(target_os = "windows"),
+            Self::Linux => cfg!(target_os = "linux") || cfg!(target_os = "macos"),
+            Self::Android | Self::Web => true,
+        }
+    }
+
     pub fn check_requirements(&self) -> Result<()> {
         crate::setup::setup_platform(self)
     }
@@ -52,7 +61,7 @@ impl XcodeProject {
     pub fn find(platform: Platform) -> Result<Self> {
         let platform_str = platform.as_str();
         let platform_dir = format!("platforms/{}", platform_str);
-        
+
         // Find .xcodeproj
         let project_path = std::fs::read_dir(&platform_dir)
             .context(format!("Failed to read directory '{}'", platform_dir))?
@@ -65,7 +74,10 @@ impl XcodeProject {
                     .unwrap_or(false)
             })
             .map(|e| e.path())
-            .context(format!("Could not find .xcodeproj file in '{}'", platform_dir))?;
+            .context(format!(
+                "Could not find .xcodeproj file in '{}'",
+                platform_dir
+            ))?;
 
         let scheme = project_path
             .file_stem()
@@ -81,11 +93,14 @@ impl XcodeProject {
 
     pub fn build(&self, destination: &str, extra_args: &[&str]) -> Result<()> {
         use std::process::Stdio;
-        
+
         let verbose = std::env::var("JFFI_VERBOSE").is_ok();
-        
-        let project_path_str = self.project_path.to_str().ok_or_else(|| anyhow::anyhow!("Invalid project path"))?;
-        
+
+        let project_path_str = self
+            .project_path
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid project path"))?;
+
         let mut clean_cmd = Command::new("xcodebuild");
         clean_cmd.args([
             "-project",
@@ -98,14 +113,9 @@ impl XcodeProject {
             clean_cmd.stdout(Stdio::null()).stderr(Stdio::null());
         }
         let _ = clean_cmd.status();
-        
+
         let mut build_cmd = Command::new("xcodebuild");
-        build_cmd.args([
-            "-project",
-            project_path_str,
-            "-scheme",
-            &self.scheme,
-        ]);
+        build_cmd.args(["-project", project_path_str, "-scheme", &self.scheme]);
         if !destination.is_empty() {
             build_cmd.args(["-destination", destination]);
         }
@@ -114,8 +124,9 @@ impl XcodeProject {
         if !verbose {
             build_cmd.stdout(Stdio::null()).stderr(Stdio::null());
         }
-        
-        let status = build_cmd.status()
+
+        let status = build_cmd
+            .status()
             .context("Failed to build with xcodebuild")?;
 
         if !status.success() {
@@ -133,7 +144,6 @@ impl XcodeProject {
     }
 }
 
-
 /// Android project
 pub struct AndroidProject {
     pub project_path: PathBuf,
@@ -145,13 +155,14 @@ impl AndroidProject {
         if !path.exists() {
             anyhow::bail!("Android project not found at platforms/android");
         }
-        Ok(Self {
-            project_path: path,
-        })
+        Ok(Self { project_path: path })
     }
 
     pub fn open(&self) -> Result<()> {
-        let path_str = self.project_path.to_str().ok_or_else(|| anyhow::anyhow!("Invalid project path"))?;
+        let path_str = self
+            .project_path
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid project path"))?;
         Command::new("open")
             .args(["-a", "Android Studio", path_str])
             .status()
@@ -165,7 +176,11 @@ impl AndroidProject {
         }
 
         let home = std::env::var("HOME").ok()?;
-        let tool_subdir = if tool_name == "emulator" { "emulator" } else { "platform-tools" };
+        let tool_subdir = if tool_name == "emulator" {
+            "emulator"
+        } else {
+            "platform-tools"
+        };
 
         let mut possible_paths = vec![
             format!("{}/Library/Android/sdk/{}/{}", home, tool_subdir, tool_name),
@@ -180,13 +195,9 @@ impl AndroidProject {
             possible_paths.push(format!("{}/{}/{}", sdk_home, tool_subdir, tool_name));
         }
 
-        possible_paths
-            .into_iter()
-            .find(|p| Path::new(p).exists())
+        possible_paths.into_iter().find(|p| Path::new(p).exists())
     }
 }
-
-
 
 /// iOS Simulator utilities
 pub struct IOSSimulator;
@@ -246,15 +257,14 @@ impl IOSSimulator {
     }
 
     pub fn open_app(&self) -> Result<()> {
-        Command::new("open")
-            .args(["-a", "Simulator"])
-            .status()
-            .ok();
+        Command::new("open").args(["-a", "Simulator"]).status().ok();
         Ok(())
     }
 
     pub fn install_app(&self, app_path: &Path) -> Result<()> {
-        let app_path_str = app_path.to_str().ok_or_else(|| anyhow::anyhow!("Invalid app path"))?;
+        let app_path_str = app_path
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid app path"))?;
         let status = Command::new("xcrun")
             .args(["simctl", "install", "booted", app_path_str])
             .status()

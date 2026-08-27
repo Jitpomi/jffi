@@ -1,10 +1,10 @@
-pub mod new;
-pub mod build;
-pub mod run;
-pub mod dev;
 pub mod add;
-pub mod remove;
+pub mod build;
 pub mod bundle;
+pub mod dev;
 pub mod doctor;
 pub mod icons;
+pub mod new;
+pub mod remove;
+pub mod run;
 pub mod screenshots;

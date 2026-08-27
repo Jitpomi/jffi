@@ -44,24 +44,32 @@ Before building or bundling for new platforms, use `jffi doctor` to verify that 
 
 ```bash
 # Check environment readiness for all supported platforms
-jffi doctor
+jffi doctor bundle
+
+# Validate jffi.toml without checking SDKs or development tools
+jffi doctor config
 
 # Check readiness for a specific platform
-jffi doctor --platform android
+jffi doctor bundle --platform android
+
+# Explicitly install missing development tools for a platform
+jffi setup --platform android
 ```
 
 ### Bundle Your App for Distribution
 
-Once your application is ready, JFFI can orchestrate the packaging of release-ready artifacts (DMG, AppImage, EXE, APK, etc.) for distribution using a single command.
+Once your application is ready, JFFI can orchestrate packaging for the formats it currently supports: Android APK/AAB, macOS app/DMG/PKG, iOS IPA, Windows MSIX, Linux Flatpak, and web distributions.
+
+Configured source icons must be PNG, JPEG, or ICO files. A configured but missing or unreadable icon is treated as a build error.
 
 ```bash
 # Bundle for macOS (creates a .dmg)
 jffi bundle --platform macos
 
-# Bundle for Windows (creates an .exe or installer)
+# Bundle for Windows (creates MSIX packages)
 jffi bundle --platform windows
 
-# Bundle for Linux (creates an .AppImage or Flatpak)
+# Bundle for Linux (creates a Flatpak)
 jffi bundle --platform linux
 
 # Bundle for Android (creates an .aab or .apk)
@@ -345,6 +353,10 @@ jffi build --platform ios --device          # Build for physical device
 jffi run --platform <platform>
 jffi run --platform ios --device            # Run on physical device
 
+# Run a debug build with verbose JFFI output and Rust backtraces
+jffi debug --platform <platform>
+jffi debug --platform ios --device          # Debug on physical device
+
 # Development mode (auto-rebuild on changes)
 jffi dev --platform <platform>
 
@@ -354,9 +366,13 @@ jffi add <platform>
 # Remove platform from existing project
 jffi remove <platform>
 
-# List available platforms
-jffi platforms
+# Show available commands and platform arguments
+jffi --help
 ```
+
+`jffi build`, `jffi run`, and `jffi doctor` do not install system packages or development tools. Use `jffi setup --platform <platform>` when you want JFFI to install missing tools. Use `jffi new ... --no-build` to scaffold a project without installing tools or running its initial build.
+
+New configuration files declare `schema_version = 1`. Unknown configuration fields are rejected so misspelled settings cannot be silently ignored.
 
 ##  How It Works
 

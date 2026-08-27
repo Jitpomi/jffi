@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  quality:
+    name: Quality and package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: cargo package -p jffi --locked
+
+  generated-project:
+    name: Generated project smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - run: cargo install --path cli --root "$RUNNER_TEMP/jffi-install" --locked
+      - name: Generate from embedded templates and check the project
+        run: |
+          JFFI_FORCE_EMBEDDED_TEMPLATES=1 "$RUNNER_TEMP/jffi-install/bin/jffi" new smoke-app --platforms web --path "$RUNNER_TEMP/jffi-smoke" --no-build
+          cd "$RUNNER_TEMP/jffi-smoke"
+          cargo generate-lockfile
+          cargo check --workspace --locked
+          "$RUNNER_TEMP/jffi-install/bin/jffi" setup --platform web
+          "$RUNNER_TEMP/jffi-install/bin/jffi" build --platform web
+
+  cross-platform-compile:
+    name: Compile CLI (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - run: cargo test --workspace --locked
+      - name: Exercise embedded scaffolding
+        shell: bash
+        run: |
+          cargo build -p jffi --locked
+          JFFI_FORCE_EMBEDDED_TEMPLATES=1 target/debug/jffi new smoke-app --platforms web --path "$RUNNER_TEMP/jffi-smoke" --no-build
+
+  security-audit:
+    name: Dependency security audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

@@ -4,7 +4,12 @@ use std::fs;
 use std::path::PathBuf;
 
 pub fn remove_platform(platform: &str) -> Result<()> {
-    println!("{}", format!("🗑️  Removing {} platform...", platform).bright_red().bold());
+    println!(
+        "{}",
+        format!("🗑️  Removing {} platform...", platform)
+            .bright_red()
+            .bold()
+    );
     println!();
 
     // Validate project structure
@@ -31,15 +36,18 @@ pub fn remove_platform(platform: &str) -> Result<()> {
             .with_context(|| format!("Failed to remove platforms/{} directory", platform))?;
         println!("  {} Removed platforms/{}/", "✓".green(), platform);
     } else {
-        println!("  {} platforms/{}/ did not exist", "→".bright_blue(), platform);
+        println!(
+            "  {} platforms/{}/ did not exist",
+            "→".bright_blue(),
+            platform
+        );
     }
 
     // Web-specific cleanup: remove ffi-web crate and update workspace
     if platform == "web" {
         let ffi_web_dir = PathBuf::from("ffi-web");
         if ffi_web_dir.exists() {
-            fs::remove_dir_all(&ffi_web_dir)
-                .context("Failed to remove ffi-web directory")?;
+            fs::remove_dir_all(&ffi_web_dir).context("Failed to remove ffi-web directory")?;
             println!("  {} Removed ffi-web/", "✓".green());
         }
 
@@ -59,17 +67,18 @@ pub fn remove_platform(platform: &str) -> Result<()> {
     }
 
     // Remove from config
-    config
-        .platforms
-        .enabled
-        .retain(|p| p != platform);
+    config.platforms.enabled.retain(|p| p != platform);
     crate::config::save_config(&config)?;
     println!("  {} Updated jffi.toml", "✓".green());
 
     println!();
-    println!("{}", format!("✅ {} platform removed", platform).bright_red());
+    println!(
+        "{}",
+        format!("✅ {} platform removed", platform).bright_red()
+    );
     println!();
-    println!("Tip: Run {} to re-add it later.",
+    println!(
+        "Tip: Run {} to re-add it later.",
         format!("jffi add {}", platform).bright_cyan()
     );
 
