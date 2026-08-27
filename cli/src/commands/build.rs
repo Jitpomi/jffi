@@ -3060,11 +3060,8 @@ mod config_sync_tests {
 
     #[test]
     fn entitlement_sync_is_idempotent_and_normalizes_whitespace() {
-        let path = std::env::temp_dir().join(format!(
-            "jffi-entitlements-{}-{}.plist",
-            std::process::id(),
-            std::thread::current().name().unwrap_or("test")
-        ));
+        let path =
+            std::env::temp_dir().join(format!("jffi-entitlements-{}.plist", uuid::Uuid::new_v4()));
         fs::write(
             &path,
             "<plist>\n<dict>\n    \t\t<key>com.apple.security.application-groups</key>\n\t<array>\n\t\t<string>old</string>\n\t</array>\n\n\n</dict>\n</plist>\n",
