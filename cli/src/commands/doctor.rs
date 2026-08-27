@@ -85,8 +85,8 @@ fn doctor_bundle(platform: Option<&str>, release: bool, profile: &str) -> Result
             }
             "android" => {
                 check_tool(
-                    "cargo-ndk",
-                    &["--version"],
+                    "cargo",
+                    &["ndk", "--version"],
                     "cargo-ndk is required for Android Rust builds",
                 )?;
                 // Check JAVA_HOME or gradlew

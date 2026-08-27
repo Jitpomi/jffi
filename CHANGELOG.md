@@ -1,5 +1,13 @@
 # `jffi` Changelog
 
+## v0.4.3 — Reliable Android Native Packaging
+
+- Prevent stale and hashed Rust dependency libraries from accumulating in Android `jniLibs` output.
+- Package only the project's primary JNI library and the required Android C++ runtime for each configured ABI.
+- Strip debug sections from packaged JNI copies while preserving symbols in Cargo's target directory, reducing SEYFR's debug APK from 1.8 GB to 71 MB.
+- Use the supported `cargo ndk` subcommand entrypoint for setup and diagnostic checks and correct its build argument ordering.
+- Include the underlying `adb` output when APK installation fails instead of returning an opaque error.
+
 ## v0.4.2 — Managed UniFFI Toolchain Reconciliation
 
 - Automatically install or replace `uniffi-bindgen` when its version does not exactly match the project's resolved UniFFI dependency.

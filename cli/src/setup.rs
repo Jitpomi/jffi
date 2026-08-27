@@ -176,6 +176,36 @@ pub fn ensure_tool(name: &str, install_cmd: &[&str]) -> Result<()> {
     Ok(())
 }
 
+/// Ensure cargo-ndk is available through its supported Cargo subcommand entrypoint.
+/// Recent cargo-ndk releases intentionally reject direct `cargo-ndk --version`
+/// invocation even though the tool is correctly installed.
+fn ensure_cargo_ndk() -> Result<()> {
+    print!("  {} Checking cargo ndk... ", "→".bright_blue());
+    if tool_succeeds("cargo", &["ndk", "--version"]) {
+        println!("{}", "✓".green());
+        return Ok(());
+    }
+
+    println!("{}", "not found".yellow());
+    if !installation_allowed() {
+        anyhow::bail!(
+            "cargo-ndk is required but not installed. Run `jffi setup --platform {}`",
+            std::env::var("JFFI_SETUP_PLATFORM").unwrap_or_else(|_| "android".to_string())
+        );
+    }
+
+    println!("  {} Installing cargo-ndk...", "→".bright_blue());
+    let status = Command::new("cargo")
+        .args(["install", "cargo-ndk"])
+        .status()
+        .context("Failed to install cargo-ndk")?;
+    if !status.success() || !tool_succeeds("cargo", &["ndk", "--version"]) {
+        anyhow::bail!("Failed to install cargo-ndk. Please install it manually.");
+    }
+    println!("  {} cargo-ndk installed successfully!", "✓".green());
+    Ok(())
+}
+
 /// Ensure Rust targets are installed.
 pub fn ensure_rust_targets(targets: &[&str]) -> Result<()> {
     let output = Command::new("rustup")
@@ -292,7 +322,7 @@ pub fn setup_platform(platform: &Platform) -> Result<()> {
             ensure_rust_targets(&["aarch64-apple-darwin", "x86_64-apple-darwin"])?;
         }
         Platform::Android => {
-            ensure_tool("cargo-ndk", &["cargo", "install", "cargo-ndk"])?;
+            ensure_cargo_ndk()?;
             ensure_rust_targets(&[
                 "aarch64-linux-android",
                 "armv7-linux-androideabi",

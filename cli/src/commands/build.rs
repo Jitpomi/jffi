@@ -593,6 +593,22 @@ fn build_android(release: bool) -> Result<()> {
     }
 
     let config = crate::config::load_config()?;
+    let cargo_manifest =
+        std::fs::read_to_string("core/Cargo.toml").context("Failed to read core/Cargo.toml")?;
+    let cargo_manifest: toml::Value =
+        toml::from_str(&cargo_manifest).context("Failed to parse core/Cargo.toml")?;
+    let lib_name = cargo_manifest
+        .get("lib")
+        .and_then(|lib| lib.get("name"))
+        .and_then(toml::Value::as_str)
+        .or_else(|| {
+            cargo_manifest
+                .get("package")
+                .and_then(|package| package.get("name"))
+                .and_then(toml::Value::as_str)
+        })
+        .context("core/Cargo.toml must define a package or library name")?
+        .replace('-', "_");
 
     // Build for all Android architectures
     let mut architectures = vec![
@@ -613,6 +629,21 @@ fn build_android(release: bool) -> Result<()> {
 
     let profile = if release { "release" } else { "debug" };
 
+    // jniLibs is generated output. Remove old ABI directories so renamed and
+    // hashed dependency artifacts cannot accumulate into multi-gigabyte APKs.
+    for (_, abi) in &architectures {
+        let output_dir = Path::new("platforms/android/app/src/main/jniLibs").join(abi);
+        if output_dir.exists() {
+            std::fs::remove_dir_all(&output_dir).with_context(|| {
+                format!(
+                    "Failed to clear stale Android JNI output at {}",
+                    output_dir.display()
+                )
+            })?;
+        }
+        std::fs::create_dir_all(&output_dir)?;
+    }
+
     if verbose {
         // Verbose mode: no progress bars, just plain output
         for (target, abi) in &architectures {
@@ -622,14 +653,13 @@ fn build_android(release: bool) -> Result<()> {
                 "ndk",
                 "-t",
                 target,
-                "-o",
-                "platforms/android/app/src/main/jniLibs",
+                "--manifest-path",
+                "core/Cargo.toml",
                 "build",
             ];
             if release {
                 args.push("--release");
             }
-            args.extend(&["--manifest-path", "core/Cargo.toml"]);
 
             let ndk_platform = std::env::var("CARGO_NDK_PLATFORM")
                 .unwrap_or_else(|_| config.platforms.android.min_sdk.to_string());
@@ -654,6 +684,7 @@ fn build_android(release: bool) -> Result<()> {
             if !status.success() {
                 anyhow::bail!("Rust build failed for {}", target);
             }
+            copy_android_primary_library(target, abi, profile, &lib_name)?;
         }
     } else {
         // Clean mode: use progress bars
@@ -673,14 +704,13 @@ fn build_android(release: bool) -> Result<()> {
                 "ndk",
                 "-t",
                 target,
-                "-o",
-                "platforms/android/app/src/main/jniLibs",
+                "--manifest-path",
+                "core/Cargo.toml",
                 "build",
             ];
             if release {
                 args.push("--release");
             }
-            args.extend(&["--manifest-path", "core/Cargo.toml"]);
 
             let ndk_platform = std::env::var("CARGO_NDK_PLATFORM")
                 .unwrap_or_else(|_| config.platforms.android.min_sdk.to_string());
@@ -706,6 +736,7 @@ fn build_android(release: bool) -> Result<()> {
                 pb.finish_with_message(format!("{} Android {}", "✗".red(), abi));
                 anyhow::bail!("Rust build failed for {}", target);
             }
+            copy_android_primary_library(target, abi, profile, &lib_name)?;
 
             pb.finish_with_message(format!("{} Android {}", "✓".green(), abi));
         }
@@ -788,6 +819,49 @@ fn build_android(release: bool) -> Result<()> {
     }
 
     println!("{}", "  ✅ Android build complete".green());
+    Ok(())
+}
+
+fn copy_android_primary_library(
+    target: &str,
+    abi: &str,
+    profile: &str,
+    lib_name: &str,
+) -> Result<()> {
+    let filename = format!("lib{}.so", lib_name);
+    let source = Path::new("target")
+        .join(target)
+        .join(profile)
+        .join(&filename);
+    let destination = Path::new("platforms/android/app/src/main/jniLibs")
+        .join(abi)
+        .join(&filename);
+    std::fs::copy(&source, &destination).with_context(|| {
+        format!(
+            "Failed to copy Android JNI library from {} to {}",
+            source.display(),
+            destination.display()
+        )
+    })?;
+
+    // Keep symbols in Cargo's target directory, but remove debug sections from
+    // the packaged copy. AGP cannot reliably strip Rust-produced ELF files and
+    // otherwise debug APKs can grow by hundreds of megabytes per ABI.
+    let ndk_dir = find_ndk_dir().context("Android NDK not found while preparing JNI library")?;
+    let prebuilt_dir = ndk_dir.join("toolchains/llvm/prebuilt");
+    let strip = std::fs::read_dir(&prebuilt_dir)
+        .with_context(|| format!("Failed to inspect {}", prebuilt_dir.display()))?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path().join("bin/llvm-strip"))
+        .find(|candidate| candidate.exists())
+        .context("llvm-strip not found in the Android NDK")?;
+    let strip_status = Command::new(&strip)
+        .args(["--strip-debug", destination.to_str().unwrap()])
+        .status()
+        .with_context(|| format!("Failed to run {}", strip.display()))?;
+    if !strip_status.success() {
+        anyhow::bail!("Failed to strip packaged Android JNI library for {abi}");
+    }
     Ok(())
 }
 

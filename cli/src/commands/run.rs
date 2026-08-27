@@ -345,13 +345,22 @@ fn run_android() -> Result<()> {
         install_cmd.args(["-s", s]);
     }
     install_cmd.args(["install", "-r", apk_path.to_str().unwrap()]);
-    if !verbose {
-        install_cmd.stdout(Stdio::null()).stderr(Stdio::null());
-    }
-    let install_status = install_cmd.status().context("Failed to install APK")?;
+    let install_output = install_cmd.output().context("Failed to install APK")?;
 
-    if !install_status.success() {
-        anyhow::bail!("Failed to install APK on emulator");
+    if verbose {
+        print!("{}", String::from_utf8_lossy(&install_output.stdout));
+        eprint!("{}", String::from_utf8_lossy(&install_output.stderr));
+    }
+
+    if !install_output.status.success() {
+        let stderr = String::from_utf8_lossy(&install_output.stderr);
+        let stdout = String::from_utf8_lossy(&install_output.stdout);
+        let details = if stderr.trim().is_empty() {
+            stdout.trim()
+        } else {
+            stderr.trim()
+        };
+        anyhow::bail!("Failed to install APK on emulator: {details}");
     }
 
     println!("  {} Launching app...", "→".bright_blue());
