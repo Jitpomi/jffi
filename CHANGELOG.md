@@ -1,5 +1,18 @@
 # `jffi` Changelog
 
+## v0.4.4 — Native Release Hygiene
+
+- Generate Linux icons using `bundle.linux.app_id` instead of leaving obsolete
+  `org.jffi.App` assets in branded applications.
+- Generate Android signing configuration with assignment syntax supported by
+  current and upcoming Gradle releases.
+- Stop recommending `useLegacyPackaging = true` for every Android project with
+  an `ndk-context` dependency. JFFI already emits 16 KB linker alignment for
+  Rust libraries; release pipelines must validate all packaged ELF dependencies
+  rather than silently switching to compressed legacy JNI packaging.
+- Preserve an existing authored `core/src/android.rs` bridge during Android
+  builds instead of rewriting it with generated formatting on every run.
+
 ## v0.4.3 — Reliable Android Native Packaging
 
 - Prevent stale and hashed Rust dependency libraries from accumulating in Android `jniLibs` output.

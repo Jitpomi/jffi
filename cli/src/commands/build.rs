@@ -481,34 +481,6 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
     Ok(())
 }
 
-fn validate_android_manifest() -> Result<()> {
-    // Modern AGP prefers the Gradle packaging flag; older projects may still use
-    // the equivalent manifest attribute.
-    let manifest_path = "platforms/android/app/src/main/AndroidManifest.xml";
-    let manifest_content =
-        std::fs::read_to_string(manifest_path).context("Failed to read AndroidManifest.xml")?;
-
-    let gradle_content =
-        std::fs::read_to_string("platforms/android/app/build.gradle.kts").unwrap_or_default();
-    if !android_native_lib_extraction_enabled(&manifest_content, &gradle_content) {
-        println!(
-            "  {} Warning: Set packaging.jniLibs.useLegacyPackaging = true in app/build.gradle.kts",
-            "⚠".bright_yellow()
-        );
-        println!("     Required when prebuilt native dependencies are not 16 KB aligned");
-    }
-
-    Ok(())
-}
-
-fn android_native_lib_extraction_enabled(manifest: &str, gradle: &str) -> bool {
-    manifest.contains("android:extractNativeLibs=\"true\"")
-        || gradle.lines().any(|line| {
-            let compact: String = line.chars().filter(|ch| !ch.is_whitespace()).collect();
-            compact == "useLegacyPackaging=true"
-        })
-}
-
 fn generate_android_cargo_config() -> Result<()> {
     // Generate .cargo/config.toml with 16 KB page alignment for Android 15+
     // This is required for modern Android devices to avoid runtime warnings and crashes
@@ -587,9 +559,6 @@ fn build_android(release: bool) -> Result<()> {
             "ℹ".bright_blue()
         );
         generate_android_ndk_bridge()?;
-
-        // Validate AndroidManifest.xml has extractNativeLibs for prebuilt AARs
-        validate_android_manifest()?;
     }
 
     let config = crate::config::load_config()?;
@@ -945,8 +914,11 @@ pub unsafe extern "C" fn Java_{jni_package}_JffiAndroidInit_initNdkContext(
 "#
     );
 
-    std::fs::write("core/src/android.rs", android_rs)
-        .context("Failed to write core/src/android.rs")?;
+    let android_bridge_path = Path::new("core/src/android.rs");
+    if !android_bridge_path.exists() {
+        std::fs::write(android_bridge_path, android_rs)
+            .context("Failed to create core/src/android.rs")?;
+    }
 
     // 2. Update core/src/lib.rs to include android module
     let lib_rs_path = "core/src/lib.rs";
@@ -3105,10 +3077,7 @@ fn update_entitlements_file(path: &Path, app_groups: &[String]) -> Result<()> {
 
 #[cfg(test)]
 mod config_sync_tests {
-    use super::{
-        android_native_lib_extraction_enabled, resolve_android_target_sdk, resolve_version_code,
-        update_entitlements_file,
-    };
+    use super::{resolve_android_target_sdk, resolve_version_code, update_entitlements_file};
     use std::fs;
 
     #[test]
@@ -3159,21 +3128,5 @@ mod config_sync_tests {
         assert_eq!(resolve_android_target_sdk(Some(34), Some(36)), 34);
         assert_eq!(resolve_android_target_sdk(None, Some(36)), 36);
         assert_eq!(resolve_android_target_sdk(None, None), 36);
-    }
-
-    #[test]
-    fn android_native_library_extraction_accepts_modern_and_legacy_configuration() {
-        assert!(android_native_lib_extraction_enabled(
-            "",
-            "useLegacyPackaging = true"
-        ));
-        assert!(android_native_lib_extraction_enabled(
-            "<application android:extractNativeLibs=\"true\" />",
-            ""
-        ));
-        assert!(!android_native_lib_extraction_enabled(
-            "<application />",
-            ""
-        ));
     }
 }

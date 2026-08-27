@@ -58,9 +58,16 @@ pub fn generate_icons(config: &Config, platform: &str) -> Result<()> {
             "platforms/ios/Assets.xcassets/AppIcon.appiconset",
             false,
         )?,
-        "android" => generate_android_icons(&img)?,
+        "android" => generate_android_icons(&img, config.platforms.android.min_sdk)?,
         "windows" => generate_windows_icons(&img)?,
-        "linux" => generate_linux_icons(&img)?,
+        "linux" => {
+            let app_id = bundle
+                .linux
+                .as_ref()
+                .and_then(|linux| linux.app_id.as_deref())
+                .unwrap_or("org.jffi.App");
+            generate_linux_icons(&img, app_id)?;
+        }
         _ => {}
     }
 
@@ -153,24 +160,32 @@ fn generate_apple_icons(img: &image::DynamicImage, dest_dir: &str, is_macos: boo
     Ok(())
 }
 
-fn generate_android_icons(img: &image::DynamicImage) -> Result<()> {
+fn generate_android_icons(img: &image::DynamicImage, min_sdk: u32) -> Result<()> {
     let base_dir = Path::new("platforms/android/app/src/main/res");
 
-    let densities = vec![
-        ("mipmap-mdpi", 48),
-        ("mipmap-hdpi", 72),
-        ("mipmap-xhdpi", 96),
-        ("mipmap-xxhdpi", 144),
-        ("mipmap-xxxhdpi", 192),
-    ];
+    // Adaptive icons are available from API 26. If the application supplies
+    // adaptive resources and cannot run on older releases, do not regenerate
+    // obsolete full-canvas bitmap launchers that violate Android's icon mask.
+    let has_adaptive_icon = ["mipmap-anydpi", "mipmap-anydpi-v26"]
+        .iter()
+        .any(|directory| base_dir.join(directory).join("ic_launcher.xml").is_file());
+    if min_sdk < 26 || !has_adaptive_icon {
+        let densities = vec![
+            ("mipmap-mdpi", 48),
+            ("mipmap-hdpi", 72),
+            ("mipmap-xhdpi", 96),
+            ("mipmap-xxhdpi", 144),
+            ("mipmap-xxxhdpi", 192),
+        ];
 
-    for (dir_name, size) in densities {
-        let dir_path = base_dir.join(dir_name);
-        fs::create_dir_all(&dir_path)?;
+        for (dir_name, size) in densities {
+            let dir_path = base_dir.join(dir_name);
+            fs::create_dir_all(&dir_path)?;
 
-        let out_path = dir_path.join("ic_launcher.png");
-        let resized = img.resize_exact(size, size, FilterType::Lanczos3);
-        resized.save(&out_path)?;
+            let out_path = dir_path.join("ic_launcher.png");
+            let resized = img.resize_exact(size, size, FilterType::Lanczos3);
+            resized.save(&out_path)?;
+        }
     }
 
     // Also generate play store icon
@@ -232,7 +247,7 @@ fn generate_windows_icons(img: &image::DynamicImage) -> Result<()> {
     Ok(())
 }
 
-fn generate_linux_icons(img: &image::DynamicImage) -> Result<()> {
+fn generate_linux_icons(img: &image::DynamicImage, app_id: &str) -> Result<()> {
     let dest_dir = Path::new("platforms/linux/data/icons/hicolor");
 
     let sizes = vec![16, 32, 48, 64, 128, 256, 512];
@@ -241,7 +256,7 @@ fn generate_linux_icons(img: &image::DynamicImage) -> Result<()> {
         let dir_path = dest_dir.join(format!("{}x{}/apps", size, size));
         fs::create_dir_all(&dir_path)?;
 
-        let out_path = dir_path.join("org.jffi.App.png");
+        let out_path = dir_path.join(format!("{app_id}.png"));
         let resized = img.resize_exact(size, size, FilterType::Lanczos3);
         resized.save(&out_path)?;
     }

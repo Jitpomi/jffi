@@ -294,7 +294,8 @@ fn bundle_android(
                         .and_then(|p| p.android.as_ref())
                         .is_some()
                     {
-                        gradle_glue.push_str("            signingConfig signingConfigs.release\n");
+                        gradle_glue
+                            .push_str("            signingConfig = signingConfigs.release\n");
                     }
                 }
             }
