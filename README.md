@@ -68,6 +68,8 @@ JFFI automatically reconciles `uniffi-bindgen` to the exact UniFFI version resol
 
 Once your application is ready, JFFI can orchestrate packaging for the formats it currently supports: Android APK/AAB, macOS app/DMG/PKG, iOS IPA, Windows MSIX, Linux Flatpak, and web distributions.
 
+Real bundle operations reconcile the selected platform's prerequisites automatically. Use the global `--no-setup` or `--offline` flag when installation must be disabled; plan and dry-run modes remain read-only.
+
 Configured source icons must be PNG, JPEG, or ICO files. A configured but missing or unreadable icon is treated as a build error.
 
 ```bash

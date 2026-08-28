@@ -24,6 +24,10 @@ fn should_sync_native_configs(dry_run: bool, print_plan: bool) -> bool {
     !dry_run && !print_plan
 }
 
+fn should_reconcile_bundle_prerequisites(dry_run: bool, print_plan: bool) -> bool {
+    !dry_run && !print_plan
+}
+
 pub fn bundle_project(options: BundleOptions<'_>) -> Result<()> {
     let BundleOptions {
         platform,
@@ -70,6 +74,16 @@ pub fn bundle_project(options: BundleOptions<'_>) -> Result<()> {
             "{}",
             "🏜️ Dry run enabled. No actual commands will be executed.".yellow()
         );
+    }
+
+    if should_reconcile_bundle_prerequisites(dry_run, print_plan) {
+        let platform = crate::platform::Platform::from_str(platform)
+            .ok_or_else(|| anyhow::anyhow!("Unknown platform: {}", platform))?;
+        if std::env::var("JFFI_NO_SETUP").as_deref() == Ok("1") {
+            platform.check_requirements()?;
+        } else {
+            crate::setup::install_platform(&platform)?;
+        }
     }
 
     println!(
@@ -673,6 +687,9 @@ mod android_symbols_tests {
         assert!(!should_sync_native_configs(false, true));
         assert!(!should_sync_native_configs(true, true));
         assert!(should_sync_native_configs(false, false));
+        assert!(!should_reconcile_bundle_prerequisites(true, false));
+        assert!(!should_reconcile_bundle_prerequisites(false, true));
+        assert!(should_reconcile_bundle_prerequisites(false, false));
     }
 
     #[test]

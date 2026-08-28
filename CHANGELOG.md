@@ -1,5 +1,13 @@
 # `jffi` Changelog
 
+## v0.4.11 — Self-Preparing Bundles
+
+- Make real `jffi bundle` operations reconcile the selected platform's managed
+  toolchain and system prerequisites before building or packaging.
+- Preserve read-only behavior for `--dry-run` and `--print-plan`.
+- Honor global `--no-setup` and `--offline` by validating without installing
+  and returning actionable missing-prerequisite errors.
+
 ## v0.4.10 — Complete Linux Prerequisite Reconciliation
 
 - Make `jffi setup --platform linux` install missing compiler, pkg-config,
