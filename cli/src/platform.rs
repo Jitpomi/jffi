@@ -47,7 +47,7 @@ impl Platform {
     }
 
     pub fn check_requirements(&self) -> Result<()> {
-        crate::setup::setup_platform(self)
+        crate::setup::setup_platform_for_build(self)
     }
 }
 

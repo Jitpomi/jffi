@@ -105,7 +105,7 @@ fn missing_linux_system_packages(
     has_pkg_config: bool,
     has_gtk4: bool,
     has_adwaita: bool,
-    has_flatpak_builder: bool,
+    needs_flatpak_builder: bool,
 ) -> Vec<&'static str> {
     let mut packages = Vec::new();
     if !has_cc {
@@ -124,7 +124,7 @@ fn missing_linux_system_packages(
             "gir1.2-adw-1",
         ]);
     }
-    if !has_flatpak_builder {
+    if needs_flatpak_builder {
         packages.push("flatpak-builder");
     }
     packages
@@ -396,6 +396,16 @@ pub fn ensure_python_requirements(platform: &str) -> Result<()> {
 
 /// Setup all dependencies for a platform.
 pub fn setup_platform(platform: &Platform) -> Result<()> {
+    setup_platform_with_scope(platform, true)
+}
+
+/// Check prerequisites needed to compile and run a platform without requiring
+/// packaging-only tooling. Bundle commands use the full platform setup above.
+pub(crate) fn setup_platform_for_build(platform: &Platform) -> Result<()> {
+    setup_platform_with_scope(platform, false)
+}
+
+fn setup_platform_with_scope(platform: &Platform, include_bundle_tools: bool) -> Result<()> {
     std::env::set_var("JFFI_SETUP_PLATFORM", platform.as_str());
     println!(
         "{}",
@@ -525,7 +535,7 @@ pub fn setup_platform(platform: &Platform) -> Result<()> {
                 tool_succeeds("pkg-config", &["--version"]),
                 tool_succeeds("pkg-config", &["--exists", "gtk4"]),
                 tool_succeeds("pkg-config", &["--exists", "libadwaita-1"]),
-                tool_succeeds("flatpak-builder", &["--version"]),
+                include_bundle_tools && !tool_succeeds("flatpak-builder", &["--version"]),
             );
             if !packages.is_empty() {
                 install_system_deps(packages)?;
@@ -686,7 +696,7 @@ mod tests {
     #[test]
     fn linux_setup_includes_build_and_flatpak_tooling() {
         assert_eq!(
-            missing_linux_system_packages(false, false, false, false, false),
+            missing_linux_system_packages(false, false, false, false, true),
             vec![
                 "build-essential",
                 "pkg-config",
@@ -699,7 +709,12 @@ mod tests {
                 "flatpak-builder",
             ]
         );
-        assert!(missing_linux_system_packages(true, true, true, true, true).is_empty());
+        assert!(missing_linux_system_packages(true, true, true, true, false).is_empty());
+    }
+
+    #[test]
+    fn linux_build_setup_excludes_flatpak_tooling() {
+        assert!(missing_linux_system_packages(true, true, true, true, false).is_empty());
     }
 
     #[test]

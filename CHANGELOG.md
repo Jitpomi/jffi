@@ -1,5 +1,13 @@
 # `jffi` Changelog
 
+## v0.4.18 — Build and Bundle Prerequisite Boundaries
+
+- Stop requiring Flatpak Builder for ordinary Linux build and run commands.
+- Keep Flatpak Builder mandatory for explicit setup, bundle, and bundle-doctor
+  operations where the packaging tool is actually used.
+- Add regression coverage for Linux build environments that intentionally omit
+  packaging-only tooling.
+
 ## v0.4.17 — Valid AppStream Release Metadata
 
 - Add `package.release_date` as the deterministic, cross-platform release-date
