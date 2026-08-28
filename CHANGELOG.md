@@ -1,5 +1,12 @@
 # `jffi` Changelog
 
+## v0.4.15 — Complete Flatpak Desktop Metadata
+
+- Install JFFI-generated freedesktop icon assets into the Flatpak hicolor
+  hierarchy so AppStream can resolve the application icon.
+- Add regression coverage for the icon-install contract used by generated
+  Flatpak manifests.
+
 ## v0.4.14 — Supported Flatpak Runtime Builds
 
 - Move Flatpak build-network access into the module build sandbox where

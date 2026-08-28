@@ -8,6 +8,9 @@ use std::process::Command;
 
 use crate::config::{BundleAndroidConfig, Config};
 
+const LINUX_ICON_INSTALL_COMMAND: &str =
+    "if [ -d data/icons/hicolor ]; then cp -a data/icons/hicolor /app/share/icons/; fi";
+
 #[derive(Debug, Clone, Copy)]
 pub struct BundleOptions<'a> {
     pub platform: &'a str,
@@ -675,6 +678,12 @@ mod android_symbols_tests {
             let error = validate_requested_format(platform, Some(format)).unwrap_err();
             assert!(error.to_string().contains("Unsupported bundle format"));
         }
+    }
+
+    #[test]
+    fn flatpak_payload_installs_generated_linux_icons() {
+        assert!(LINUX_ICON_INSTALL_COMMAND.contains("data/icons/hicolor"));
+        assert!(LINUX_ICON_INSTALL_COMMAND.contains("/app/share/icons/"));
     }
 
     #[test]
@@ -1793,7 +1802,8 @@ fn bundle_linux(
         "cp -a . /app/share/{0}/",
         "install -Dm755 jffi-app /app/bin/jffi-app",
         "if [ -f {0}.desktop ]; then install -Dm644 {0}.desktop /app/share/applications/{0}.desktop; fi",
-        "if [ -f {0}.metainfo.xml ]; then install -Dm644 {0}.metainfo.xml /app/share/metainfo/{0}.metainfo.xml; fi"
+        "if [ -f {0}.metainfo.xml ]; then install -Dm644 {0}.metainfo.xml /app/share/metainfo/{0}.metainfo.xml; fi",
+        "{4}"
       ],
       "sources": [
         {{
@@ -1804,7 +1814,11 @@ fn bundle_linux(
     }}
   ]
 }}"#,
-                app_id, linux_config.runtime, linux_config.runtime_version, linux_config.sdk
+                app_id,
+                linux_config.runtime,
+                linux_config.runtime_version,
+                linux_config.sdk,
+                LINUX_ICON_INSTALL_COMMAND
             );
 
             fs::write(&manifest_path, manifest)?;
