@@ -27,6 +27,36 @@ fn tool_succeeds(name: &str, args: &[&str]) -> bool {
         .unwrap_or(false)
 }
 
+fn missing_linux_system_packages(
+    has_cc: bool,
+    has_pkg_config: bool,
+    has_gtk4: bool,
+    has_adwaita: bool,
+    has_flatpak_builder: bool,
+) -> Vec<&'static str> {
+    let mut packages = Vec::new();
+    if !has_cc {
+        packages.push("build-essential");
+    }
+    if !has_pkg_config {
+        packages.push("pkg-config");
+    }
+    if !has_gtk4 || !has_adwaita {
+        packages.extend([
+            "libgtk-4-dev",
+            "libadwaita-1-dev",
+            "python3-gi",
+            "python3-gi-cairo",
+            "gir1.2-gtk-4.0",
+            "gir1.2-adw-1",
+        ]);
+    }
+    if !has_flatpak_builder {
+        packages.push("flatpak-builder");
+    }
+    packages
+}
+
 fn resolved_uniffi_version() -> Result<String> {
     if let Ok(lock) = std::fs::read_to_string("Cargo.lock") {
         let mut in_package = false;
@@ -332,10 +362,6 @@ pub fn setup_platform(platform: &Platform) -> Result<()> {
             ensure_rust_targets(&targets)?;
         }
         Platform::Linux => {
-            if !tool_succeeds("cc", &["--version"]) {
-                anyhow::bail!("C compiler (cc) is missing. Install build-essential or equivalent.");
-            }
-
             // Helper to install system packages
             let install_system_deps = |packages: Vec<&str>| -> Result<()> {
                 if !installation_allowed() {
@@ -366,6 +392,18 @@ pub fn setup_platform(platform: &Platform) -> Result<()> {
                         "→".bright_blue(),
                         packages.join(", ")
                     );
+                    let status = cmd.arg("update").status()?;
+                    if !status.success() {
+                        anyhow::bail!("System package index update failed");
+                    }
+
+                    let mut cmd = if has_sudo {
+                        let mut c = Command::new("sudo");
+                        c.arg("apt-get");
+                        c
+                    } else {
+                        Command::new("apt-get")
+                    };
                     let status = cmd.args(["install", "-y"]).args(packages).status()?;
                     if !status.success() {
                         anyhow::bail!("System package installation failed");
@@ -409,35 +447,15 @@ pub fn setup_platform(platform: &Platform) -> Result<()> {
                 }
             };
 
-            if Command::new("pkg-config")
-                .arg("--version")
-                .output()
-                .is_err()
-            {
-                install_system_deps(vec!["pkg-config"])?;
-            }
-
-            // Check for GTK 4 and Libadwaita
-            let has_gtk4 = Command::new("pkg-config")
-                .args(["--exists", "gtk4"])
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
-            let has_adwaita = Command::new("pkg-config")
-                .args(["--exists", "libadwaita-1"])
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
-
-            if !has_gtk4 || !has_adwaita {
-                install_system_deps(vec![
-                    "libgtk-4-dev",
-                    "libadwaita-1-dev",
-                    "python3-gi",
-                    "python3-gi-cairo",
-                    "gir1.2-gtk-4.0",
-                    "gir1.2-adw-1",
-                ])?;
+            let packages = missing_linux_system_packages(
+                tool_succeeds("cc", &["--version"]),
+                tool_succeeds("pkg-config", &["--version"]),
+                tool_succeeds("pkg-config", &["--exists", "gtk4"]),
+                tool_succeeds("pkg-config", &["--exists", "libadwaita-1"]),
+                tool_succeeds("flatpak-builder", &["--version"]),
+            );
+            if !packages.is_empty() {
+                install_system_deps(packages)?;
             }
 
             // Install Python requirements
@@ -543,7 +561,10 @@ pub fn install_platform(platform: &Platform) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{android_rust_targets, parse_uniffi_bindgen_version, windows_rust_targets};
+    use super::{
+        android_rust_targets, missing_linux_system_packages, parse_uniffi_bindgen_version,
+        windows_rust_targets,
+    };
 
     #[test]
     fn parses_uniffi_bindgen_version() {
@@ -587,5 +608,24 @@ mod tests {
     fn windows_setup_rejects_unknown_targets() {
         let targets = vec!["i686-pc-windows-msvc".to_string()];
         assert!(windows_rust_targets(Some(&targets)).is_err());
+    }
+
+    #[test]
+    fn linux_setup_includes_build_and_flatpak_tooling() {
+        assert_eq!(
+            missing_linux_system_packages(false, false, false, false, false),
+            vec![
+                "build-essential",
+                "pkg-config",
+                "libgtk-4-dev",
+                "libadwaita-1-dev",
+                "python3-gi",
+                "python3-gi-cairo",
+                "gir1.2-gtk-4.0",
+                "gir1.2-adw-1",
+                "flatpak-builder",
+            ]
+        );
+        assert!(missing_linux_system_packages(true, true, true, true, true).is_empty());
     }
 }

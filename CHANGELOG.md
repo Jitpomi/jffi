@@ -1,5 +1,12 @@
 # `jffi` Changelog
 
+## v0.4.10 — Complete Linux Prerequisite Reconciliation
+
+- Make `jffi setup --platform linux` install missing compiler, pkg-config,
+  GTK/Libadwaita, and Flatpak Builder system packages as one reconciled set.
+- Refresh apt package indexes before installing missing Linux prerequisites.
+- Add regression coverage for the complete Linux build and bundle toolchain.
+
 ## v0.4.9 — Complete Native Version Synchronization
 
 - Complete `jffi.toml` version synchronization for Windows by updating SDK-style

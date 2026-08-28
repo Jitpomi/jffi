@@ -481,7 +481,7 @@ apps. Do not use both forms unless the mapping is intended to take precedence.
 - **iOS**: Xcode, iOS Simulator
 - **Android**: Android Studio, Android SDK, Android Emulator (auto-configured)
 - **macOS**: Xcode
-- **Linux**: GTK 4, Libadwaita, Python 3 (auto-installed by setup script)
+- **Linux**: compiler, pkg-config, GTK 4, Libadwaita, Python 3, and Flatpak Builder (reconciled by `jffi setup --platform linux` on supported package managers)
 - **Web**: Node.js, npm (for Vite dev server)
 - **Windows**: .NET SDK 8.0+, Visual Studio Build Tools or MSBuild
 
