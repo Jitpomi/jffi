@@ -2275,9 +2275,36 @@ fn sync_windows_csproj_content(content: &str, version_name: &str) -> String {
     result
 }
 
-fn sync_linux_metainfo_content(content: &str, version_name: &str) -> String {
+fn sync_linux_metainfo_content(
+    content: &str,
+    version_name: &str,
+    release_date: Option<&str>,
+) -> String {
     let release_prefix = format!("<release version=\"{}\"", version_name);
-    if content.contains(&release_prefix) {
+    let date_attribute = release_date
+        .map(|date| format!(" date=\"{}\"", date))
+        .unwrap_or_default();
+    if let Some(release_start) = content.find(&release_prefix) {
+        let tag_end = content[release_start..]
+            .find('>')
+            .map(|offset| release_start + offset);
+        if let (Some(date), Some(tag_end)) = (release_date, tag_end) {
+            let tag = &content[release_start..=tag_end];
+            if !tag.contains(" date=") {
+                let insert_at = if content.as_bytes().get(tag_end.wrapping_sub(1)) == Some(&b'/') {
+                    if content.as_bytes().get(tag_end.wrapping_sub(2)) == Some(&b' ') {
+                        tag_end - 2
+                    } else {
+                        tag_end - 1
+                    }
+                } else {
+                    tag_end
+                };
+                let mut result = content.to_string();
+                result.insert_str(insert_at, &format!(" date=\"{}\"", date));
+                return result;
+            }
+        }
         return content.to_string();
     }
 
@@ -2291,7 +2318,10 @@ fn sync_linux_metainfo_content(content: &str, version_name: &str) -> String {
                     .collect::<String>()
             })
             .unwrap_or_default();
-        let entry = format!("\n{}  <release version=\"{}\" />", indent, version_name);
+        let entry = format!(
+            "\n{}  <release version=\"{}\"{} />",
+            indent, version_name, date_attribute
+        );
         let mut result = content.to_string();
         result.insert_str(insert_at, &entry);
         return result;
@@ -2302,8 +2332,8 @@ fn sync_linux_metainfo_content(content: &str, version_name: &str) -> String {
         result.insert_str(
             component_end,
             &format!(
-                "  <releases>\n    <release version=\"{}\" />\n  </releases>\n",
-                version_name
+                "  <releases>\n    <release version=\"{}\"{} />\n  </releases>\n",
+                version_name, date_attribute
             ),
         );
         return result;
@@ -2895,7 +2925,11 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
                 continue;
             }
             let content = fs::read_to_string(&path)?;
-            let new_content = sync_linux_metainfo_content(&content, version_name);
+            let new_content = sync_linux_metainfo_content(
+                &content,
+                version_name,
+                config.package.release_date.as_deref(),
+            );
             if new_content != content {
                 fs::write(&path, new_content)?;
                 println!(
@@ -3275,12 +3309,20 @@ mod config_sync_tests {
     #[test]
     fn linux_metainfo_prepends_version_and_preserves_release_history() {
         let original = "<component>\n  <releases>\n    <release version=\"1.6.3\" date=\"2026-08-27\" />\n  </releases>\n</component>\n";
-        let once = sync_linux_metainfo_content(original, "2.0.0");
-        let twice = sync_linux_metainfo_content(&once, "2.0.0");
+        let once = sync_linux_metainfo_content(original, "2.0.0", Some("2026-08-28"));
+        let twice = sync_linux_metainfo_content(&once, "2.0.0", Some("2026-08-28"));
 
         assert_eq!(once, twice);
-        assert!(once.contains("<release version=\"2.0.0\" />"));
+        assert!(once.contains("<release version=\"2.0.0\" date=\"2026-08-28\" />"));
         assert!(once.contains("<release version=\"1.6.3\" date=\"2026-08-27\" />"));
         assert!(once.find("2.0.0").unwrap() < once.find("1.6.3").unwrap());
+    }
+
+    #[test]
+    fn linux_metainfo_repairs_an_existing_undated_release() {
+        let original = "<component>\n  <releases>\n    <release version=\"2.0.0\" />\n  </releases>\n</component>\n";
+        let synced = sync_linux_metainfo_content(original, "2.0.0", Some("2026-08-28"));
+
+        assert!(synced.contains("<release version=\"2.0.0\" date=\"2026-08-28\" />"));
     }
 }

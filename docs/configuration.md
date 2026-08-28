@@ -28,6 +28,7 @@ schema_version = 1
 name = "my-app"
 version = "1.0.0"
 version_code = 1
+release_date = "2026-08-28"
 
 [platforms]
 enabled = ["ios", "macos", "android", "linux", "windows", "web"]

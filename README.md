@@ -435,6 +435,7 @@ See the focused guides for the complete operating model:
 [package]
 name = "my-app"
 version = "0.1.0"
+release_date = "2026-08-28"
 
 [platforms]
 enabled = ["ios"]

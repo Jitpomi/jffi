@@ -2060,6 +2060,22 @@ pub fn validate_bundle_config(
             .and_then(|b| b.identifier.clone())
             .unwrap_or_else(|| config.platforms.ios.bundle_id.clone());
         check_placeholder(&bundle_id, "bundle.identifier / platforms.ios.bundle_id")?;
+    } else if platform == "linux" {
+        let release_date = config.package.release_date.as_deref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "package.release_date is required for Linux AppStream bundles (YYYY-MM-DD)"
+            )
+        })?;
+        let valid_date = release_date.len() == 10
+            && release_date.as_bytes()[4] == b'-'
+            && release_date.as_bytes()[7] == b'-'
+            && release_date
+                .bytes()
+                .enumerate()
+                .all(|(index, byte)| matches!(index, 4 | 7) || byte.is_ascii_digit());
+        if !valid_date {
+            anyhow::bail!("package.release_date must use YYYY-MM-DD format");
+        }
     }
 
     if let Some(bundle) = &config.bundle {

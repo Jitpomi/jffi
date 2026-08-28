@@ -19,6 +19,7 @@ pub struct PackageConfig {
     pub name: String,
     pub version: String,
     pub version_code: Option<u32>,
+    pub release_date: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

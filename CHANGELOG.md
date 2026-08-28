@@ -1,5 +1,12 @@
 # `jffi` Changelog
 
+## v0.4.17 — Valid AppStream Release Metadata
+
+- Add `package.release_date` as the deterministic, cross-platform release-date
+  authority in `jffi.toml`.
+- Generate and repair Linux AppStream release entries with the required date.
+- Fail Linux bundle preflight early when the release date is absent or malformed.
+
 ## v0.4.16 — Correct Flatpak Icon Hierarchy
 
 - Create `/app/share/icons` before copying the generated `hicolor` tree so
