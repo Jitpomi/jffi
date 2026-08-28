@@ -1,5 +1,14 @@
 # `jffi` Changelog
 
+## v0.4.9 — Complete Native Version Synchronization
+
+- Complete `jffi.toml` version synchronization for Windows by updating SDK-style
+  `.csproj` `Version`, `AssemblyVersion`, and `FileVersion` values alongside the
+  MSIX package identity.
+- Synchronize Linux AppStream `.metainfo.xml` release versions while preserving
+  previous release entries.
+- Add idempotency and release-history regression tests for both synchronizers.
+
 ## v0.4.8 — Release Diagnostics and Preview Safety
 
 - Make bundle dry runs and plan printing non-mutating by skipping native project

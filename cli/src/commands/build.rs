@@ -2234,6 +2234,84 @@ fn resolve_android_target_sdk(
     configured_target_sdk.or(bundle_compile_sdk).unwrap_or(36)
 }
 
+fn sync_windows_csproj_content(content: &str, version_name: &str) -> String {
+    let assembly_version = if version_name.split('.').count() == 3 {
+        format!("{}.0", version_name)
+    } else {
+        version_name.to_string()
+    };
+    let replacements = [
+        ("Version", version_name),
+        ("AssemblyVersion", assembly_version.as_str()),
+        ("FileVersion", assembly_version.as_str()),
+    ];
+
+    let mut result = content.to_string();
+    let mut missing = Vec::new();
+    for (tag, value) in replacements {
+        let open = format!("<{}>", tag);
+        let close = format!("</{}>", tag);
+        if let Some(start) = result.find(&open) {
+            if let Some(relative_end) = result[start + open.len()..].find(&close) {
+                let value_start = start + open.len();
+                let value_end = value_start + relative_end;
+                result.replace_range(value_start..value_end, value);
+                continue;
+            }
+        }
+        missing.push((tag, value.to_string()));
+    }
+
+    if !missing.is_empty() {
+        if let Some(group_start) = result.find("<PropertyGroup>") {
+            let insert_at = group_start + "<PropertyGroup>".len();
+            let block = missing
+                .into_iter()
+                .map(|(tag, value)| format!("\n    <{}>{}</{}>", tag, value, tag))
+                .collect::<String>();
+            result.insert_str(insert_at, &block);
+        }
+    }
+    result
+}
+
+fn sync_linux_metainfo_content(content: &str, version_name: &str) -> String {
+    let release_prefix = format!("<release version=\"{}\"", version_name);
+    if content.contains(&release_prefix) {
+        return content.to_string();
+    }
+
+    if let Some(releases_start) = content.find("<releases>") {
+        let insert_at = releases_start + "<releases>".len();
+        let indent = content[..releases_start]
+            .rsplit_once('\n')
+            .map(|(_, line)| {
+                line.chars()
+                    .take_while(|c| c.is_whitespace())
+                    .collect::<String>()
+            })
+            .unwrap_or_default();
+        let entry = format!("\n{}  <release version=\"{}\" />", indent, version_name);
+        let mut result = content.to_string();
+        result.insert_str(insert_at, &entry);
+        return result;
+    }
+
+    if let Some(component_end) = content.rfind("</component>") {
+        let mut result = content.to_string();
+        result.insert_str(
+            component_end,
+            &format!(
+                "  <releases>\n    <release version=\"{}\" />\n  </releases>\n",
+                version_name
+            ),
+        );
+        return result;
+    }
+
+    content.to_string()
+}
+
 pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
     println!(
         "  {} Syncing jffi.toml configurations to native platform builds...",
@@ -2741,6 +2819,29 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
         }
     }
 
+    // Keep the unpackaged Windows executable metadata aligned with the MSIX
+    // identity. SDK-style projects use these values for file properties and
+    // assembly metadata even when Package.appxmanifest is also present.
+    let windows_dir = Path::new("platforms/windows");
+    if windows_dir.is_dir() {
+        for entry in fs::read_dir(windows_dir)?.filter_map(|entry| entry.ok()) {
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("csproj") {
+                continue;
+            }
+            let content = fs::read_to_string(&path)?;
+            let new_content = sync_windows_csproj_content(&content, version_name);
+            if new_content != content {
+                fs::write(&path, new_content)?;
+                println!(
+                    "    {} Synced Windows project version ({})",
+                    "✓".green(),
+                    path.file_name().unwrap_or_default().to_string_lossy()
+                );
+            }
+        }
+    }
+
     // 6. Linux GTK Application ID
     let linux_app_py = Path::new("platforms/linux/app.py");
     if linux_app_py.exists() {
@@ -2777,6 +2878,32 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
                 "✓".green(),
                 app_id
             );
+        }
+    }
+
+    // AppStream metadata is the version source displayed by Linux software
+    // centers. Preserve older releases and prepend the configured version.
+    let linux_dir = Path::new("platforms/linux");
+    if linux_dir.is_dir() {
+        for entry in fs::read_dir(linux_dir)?.filter_map(|entry| entry.ok()) {
+            let path = entry.path();
+            let is_metainfo = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with(".metainfo.xml"));
+            if !is_metainfo {
+                continue;
+            }
+            let content = fs::read_to_string(&path)?;
+            let new_content = sync_linux_metainfo_content(&content, version_name);
+            if new_content != content {
+                fs::write(&path, new_content)?;
+                println!(
+                    "    {} Synced Linux AppStream version ({})",
+                    "✓".green(),
+                    path.file_name().unwrap_or_default().to_string_lossy()
+                );
+            }
         }
     }
 
@@ -3077,7 +3204,10 @@ fn update_entitlements_file(path: &Path, app_groups: &[String]) -> Result<()> {
 
 #[cfg(test)]
 mod config_sync_tests {
-    use super::{resolve_android_target_sdk, resolve_version_code, update_entitlements_file};
+    use super::{
+        resolve_android_target_sdk, resolve_version_code, sync_linux_metainfo_content,
+        sync_windows_csproj_content, update_entitlements_file,
+    };
     use std::fs;
 
     #[test]
@@ -3128,5 +3258,29 @@ mod config_sync_tests {
         assert_eq!(resolve_android_target_sdk(Some(34), Some(36)), 34);
         assert_eq!(resolve_android_target_sdk(None, Some(36)), 36);
         assert_eq!(resolve_android_target_sdk(None, None), 36);
+    }
+
+    #[test]
+    fn windows_csproj_versions_are_inserted_and_updated_idempotently() {
+        let original = "<Project>\n  <PropertyGroup>\n    <Version>1.2.3</Version>\n  </PropertyGroup>\n</Project>\n";
+        let once = sync_windows_csproj_content(original, "2.0.0");
+        let twice = sync_windows_csproj_content(&once, "2.0.0");
+
+        assert_eq!(once, twice);
+        assert!(once.contains("<Version>2.0.0</Version>"));
+        assert!(once.contains("<AssemblyVersion>2.0.0.0</AssemblyVersion>"));
+        assert!(once.contains("<FileVersion>2.0.0.0</FileVersion>"));
+    }
+
+    #[test]
+    fn linux_metainfo_prepends_version_and_preserves_release_history() {
+        let original = "<component>\n  <releases>\n    <release version=\"1.6.3\" date=\"2026-08-27\" />\n  </releases>\n</component>\n";
+        let once = sync_linux_metainfo_content(original, "2.0.0");
+        let twice = sync_linux_metainfo_content(&once, "2.0.0");
+
+        assert_eq!(once, twice);
+        assert!(once.contains("<release version=\"2.0.0\" />"));
+        assert!(once.contains("<release version=\"1.6.3\" date=\"2026-08-27\" />"));
+        assert!(once.find("2.0.0").unwrap() < once.find("1.6.3").unwrap());
     }
 }

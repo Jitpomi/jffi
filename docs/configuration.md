@@ -103,6 +103,12 @@ wasm_opt = true
 base_path = "/"
 ```
 
+`bundle.version` and `bundle.build_number` are the canonical native release
+values. Before a build, run, development session, or non-preview bundle, JFFI
+synchronizes them into Android Gradle metadata, Apple Xcode projects, the Rust
+core crate, the Windows MSIX manifest and `.csproj`, and Linux AppStream
+metadata. Do not maintain independent platform versions by hand.
+
 The configured source icon must be PNG, JPEG, or ICO and must exist when JFFI
 builds. `jffi icons --platform all` regenerates platform-specific assets.
 
