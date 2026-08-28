@@ -462,7 +462,7 @@ fn default_linux_runtime() -> String {
     "org.gnome.Platform".to_string()
 }
 fn default_linux_runtime_version() -> String {
-    "48".to_string()
+    "50".to_string()
 }
 fn default_linux_sdk() -> String {
     "org.gnome.Sdk".to_string()

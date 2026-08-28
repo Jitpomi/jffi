@@ -1,5 +1,11 @@
 # `jffi` Changelog
 
+## v0.4.14 — Supported Flatpak Runtime Builds
+
+- Move Flatpak build-network access into the module build sandbox where
+  Flatpak Builder supports it.
+- Update the generated Linux default from end-of-life GNOME 48 to GNOME 50.
+
 ## v0.4.13 — Functional Python Flatpak Payloads
 
 - Stage generated Linux Python bindings and the compiled core shared library

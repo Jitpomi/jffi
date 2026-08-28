@@ -1692,7 +1692,7 @@ fn bundle_linux(
             formats: vec!["flatpak".to_string()],
             app_id: Some("org.jffi.App".to_string()),
             runtime: "org.gnome.Platform".to_string(),
-            runtime_version: "48".to_string(),
+            runtime_version: "50".to_string(),
             sdk: "org.gnome.Sdk".to_string(),
             icon: None,
         });
@@ -1784,6 +1784,9 @@ fn bundle_linux(
     {{
       "name": "jffi-app",
       "buildsystem": "simple",
+      "build-options": {{
+        "build-args": ["--share=network"]
+      }},
       "build-commands": [
         "if [ -f requirements.txt ]; then pip3 install --prefix=/app -r requirements.txt; fi",
         "install -d /app/share/{0}",
@@ -1814,7 +1817,6 @@ fn bundle_linux(
 
             let mut flatpak_builder_cmd = Command::new("flatpak-builder");
             flatpak_builder_cmd.args([
-                "--share=network",
                 "--repo",
                 repo_dir.to_str().unwrap(),
                 "--force-clean",

@@ -704,6 +704,6 @@ mod tests {
 
     #[test]
     fn flatpak_refs_pin_the_configured_runtime_version() {
-        assert_eq!(flatpak_ref("org.gnome.Sdk", "48"), "org.gnome.Sdk//48");
+        assert_eq!(flatpak_ref("org.gnome.Sdk", "50"), "org.gnome.Sdk//50");
     }
 }
