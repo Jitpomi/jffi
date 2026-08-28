@@ -19,6 +19,79 @@ fn managed_tool_reconciliation_allowed() -> bool {
         )
 }
 
+pub(crate) fn reconcile_platform(platform: &Platform) -> Result<()> {
+    if managed_tool_reconciliation_allowed() {
+        install_platform(platform)
+    } else {
+        setup_platform(platform)
+    }
+}
+
+fn flatpak_ref(runtime: &str, version: &str) -> String {
+    format!("{}//{}", runtime, version)
+}
+
+fn flatpak_ref_installed(reference: &str) -> bool {
+    tool_succeeds("flatpak", &["info", "--user", reference])
+        || tool_succeeds("flatpak", &["info", reference])
+}
+
+pub(crate) fn ensure_flatpak_runtime(runtime: &str, sdk: &str, version: &str) -> Result<()> {
+    let references = [flatpak_ref(runtime, version), flatpak_ref(sdk, version)];
+    let missing: Vec<&str> = references
+        .iter()
+        .map(String::as_str)
+        .filter(|reference| !flatpak_ref_installed(reference))
+        .collect();
+    if missing.is_empty() {
+        println!(
+            "  {} Flatpak runtime and SDK {} are installed",
+            "✓".green(),
+            version
+        );
+        return Ok(());
+    }
+
+    if !managed_tool_reconciliation_allowed() {
+        anyhow::bail!(
+            "Missing Flatpak dependencies: {}. Automatic setup is disabled; run `jffi setup --platform linux` or allow `jffi bundle` to reconcile them",
+            missing.join(", ")
+        );
+    }
+
+    println!(
+        "  {} Reconciling Flatpak dependencies: {}...",
+        "→".bright_blue(),
+        missing.join(", ")
+    );
+    let remote_status = Command::new("flatpak")
+        .args([
+            "remote-add",
+            "--if-not-exists",
+            "--user",
+            "flathub",
+            "https://flathub.org/repo/flathub.flatpakrepo",
+        ])
+        .status()
+        .context("Failed to configure the Flathub remote")?;
+    if !remote_status.success() {
+        anyhow::bail!("Failed to configure the Flathub Flatpak remote");
+    }
+
+    let status = Command::new("flatpak")
+        .args(["install", "--user", "--noninteractive", "-y", "flathub"])
+        .args(&missing)
+        .status()
+        .context("Failed to install Flatpak runtime dependencies")?;
+    if !status.success() {
+        anyhow::bail!(
+            "Failed to install Flatpak dependencies: {}",
+            missing.join(", ")
+        );
+    }
+    Ok(())
+}
+
 fn tool_succeeds(name: &str, args: &[&str]) -> bool {
     Command::new(name)
         .args(args)
@@ -562,8 +635,8 @@ pub fn install_platform(platform: &Platform) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        android_rust_targets, missing_linux_system_packages, parse_uniffi_bindgen_version,
-        windows_rust_targets,
+        android_rust_targets, flatpak_ref, missing_linux_system_packages,
+        parse_uniffi_bindgen_version, windows_rust_targets,
     };
 
     #[test]
@@ -627,5 +700,10 @@ mod tests {
             ]
         );
         assert!(missing_linux_system_packages(true, true, true, true, true).is_empty());
+    }
+
+    #[test]
+    fn flatpak_refs_pin_the_configured_runtime_version() {
+        assert_eq!(flatpak_ref("org.gnome.Sdk", "48"), "org.gnome.Sdk//48");
     }
 }

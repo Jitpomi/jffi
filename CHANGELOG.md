@@ -1,5 +1,13 @@
 # `jffi` Changelog
 
+## v0.4.12 — Complete Bundle Environment Reconciliation
+
+- Make `jffi doctor bundle` reconcile missing platform prerequisites before
+  validating them, matching the self-preparing behavior of real bundles.
+- Provision the exact Flatpak runtime and SDK version configured in
+  `jffi.toml`, adding the per-user Flathub remote when needed.
+- Preserve strict, non-mutating validation under `--no-setup` and `--offline`.
+
 ## v0.4.11 — Self-Preparing Bundles
 
 - Make real `jffi bundle` operations reconcile the selected platform's managed

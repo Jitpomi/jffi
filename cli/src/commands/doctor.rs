@@ -43,6 +43,10 @@ fn doctor_bundle(platform: Option<&str>, release: bool, profile: &str) -> Result
     let platforms_to_check = select_platforms(&config.platforms.enabled, platform)?;
 
     for p in &platforms_to_check {
+        let selected = crate::platform::Platform::from_str(p)
+            .expect("platform selection validates platform names");
+        crate::setup::reconcile_platform(&selected)?;
+
         println!(
             "\n{}",
             format!("Checking prerequisites for {}:", p.to_uppercase())
@@ -114,6 +118,17 @@ fn doctor_bundle(platform: Option<&str>, release: bool, profile: &str) -> Result
                     &["--version"],
                     "flatpak-builder is required for Flatpak generation",
                 )?;
+                if let Some(linux) = config
+                    .bundle
+                    .as_ref()
+                    .and_then(|bundle| bundle.linux.as_ref())
+                {
+                    crate::setup::ensure_flatpak_runtime(
+                        &linux.runtime,
+                        &linux.sdk,
+                        &linux.runtime_version,
+                    )?;
+                }
             }
             "web" => {
                 check_tool("npm", &["--version"], "npm is required for Web bundling")?;

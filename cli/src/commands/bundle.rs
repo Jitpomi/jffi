@@ -79,11 +79,7 @@ pub fn bundle_project(options: BundleOptions<'_>) -> Result<()> {
     if should_reconcile_bundle_prerequisites(dry_run, print_plan) {
         let platform = crate::platform::Platform::from_str(platform)
             .ok_or_else(|| anyhow::anyhow!("Unknown platform: {}", platform))?;
-        if std::env::var("JFFI_NO_SETUP").as_deref() == Ok("1") {
-            platform.check_requirements()?;
-        } else {
-            crate::setup::install_platform(&platform)?;
-        }
+        crate::setup::reconcile_platform(&platform)?;
     }
 
     println!(
@@ -1729,6 +1725,13 @@ fn bundle_linux(
     }
 
     if formats.contains(&"flatpak".to_string()) {
+        if !dry_run {
+            crate::setup::ensure_flatpak_runtime(
+                &linux_config.runtime,
+                &linux_config.sdk,
+                &linux_config.runtime_version,
+            )?;
+        }
         println!("  {} Generating Flatpak manifest...", "→".bright_blue());
 
         let manifest_path =

@@ -40,7 +40,7 @@ That's it! The app builds, compiles Rust, generates platform bindings, and launc
 
 ### Check Environment Readiness
 
-Before building or bundling for new platforms, use `jffi doctor` to verify that your development environment has all the required tools, SDKs, and compilers installed.
+Before building or bundling for new platforms, use `jffi doctor` to reconcile and verify that your development environment has all the required tools, SDKs, and compilers installed. Pass `--no-setup` or `--offline` for validation without installation.
 
 ```bash
 # Check enabled platforms that this host can build
@@ -68,7 +68,7 @@ JFFI automatically reconciles `uniffi-bindgen` to the exact UniFFI version resol
 
 Once your application is ready, JFFI can orchestrate packaging for the formats it currently supports: Android APK/AAB, macOS app/DMG/PKG, iOS IPA, Windows MSIX, Linux Flatpak, and web distributions.
 
-Real bundle operations reconcile the selected platform's prerequisites automatically. Use the global `--no-setup` or `--offline` flag when installation must be disabled; plan and dry-run modes remain read-only.
+Real bundle operations reconcile the selected platform's prerequisites automatically. On Linux this includes the configured Flatpak SDK and runtime, not only `flatpak-builder`. Use the global `--no-setup` or `--offline` flag when installation must be disabled; plan and dry-run modes remain read-only.
 
 Configured source icons must be PNG, JPEG, or ICO files. A configured but missing or unreadable icon is treated as a build error.
 
