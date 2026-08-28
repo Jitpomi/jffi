@@ -9,7 +9,7 @@ use std::process::Command;
 use crate::config::{BundleAndroidConfig, Config};
 
 const LINUX_ICON_INSTALL_COMMAND: &str =
-    "if [ -d data/icons/hicolor ]; then cp -a data/icons/hicolor /app/share/icons/; fi";
+    "if [ -d data/icons/hicolor ]; then install -d /app/share/icons && cp -a data/icons/hicolor /app/share/icons/; fi";
 
 #[derive(Debug, Clone, Copy)]
 pub struct BundleOptions<'a> {
@@ -683,6 +683,7 @@ mod android_symbols_tests {
     #[test]
     fn flatpak_payload_installs_generated_linux_icons() {
         assert!(LINUX_ICON_INSTALL_COMMAND.contains("data/icons/hicolor"));
+        assert!(LINUX_ICON_INSTALL_COMMAND.contains("install -d /app/share/icons"));
         assert!(LINUX_ICON_INSTALL_COMMAND.contains("/app/share/icons/"));
     }
 

@@ -1,5 +1,12 @@
 # `jffi` Changelog
 
+## v0.4.16 — Correct Flatpak Icon Hierarchy
+
+- Create `/app/share/icons` before copying the generated `hicolor` tree so
+  Flatpak payloads preserve the required `/app/share/icons/hicolor/...`
+  hierarchy instead of renaming `hicolor` to `icons`.
+- Strengthen regression coverage for the parent-directory creation contract.
+
 ## v0.4.15 — Complete Flatpak Desktop Metadata
 
 - Install JFFI-generated freedesktop icon assets into the Flatpak hicolor
