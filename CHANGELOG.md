@@ -1,5 +1,13 @@
 # `jffi` Changelog
 
+## v0.4.13 — Functional Python Flatpak Payloads
+
+- Stage generated Linux Python bindings and the compiled core shared library
+  into Flatpak payloads instead of assuming a nonexistent `jffi-app` binary.
+- Generate a native launcher and install application metadata from the staged
+  payload.
+- Install declared Python requirements inside the Flatpak build environment.
+
 ## v0.4.12 — Complete Bundle Environment Reconciliation
 
 - Make `jffi doctor bundle` reconcile missing platform prerequisites before

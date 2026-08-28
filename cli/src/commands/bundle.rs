@@ -1739,12 +1739,40 @@ fn bundle_linux(
         if !dry_run {
             fs::create_dir_all("target/jffi/generated/linux")?;
 
+            let payload_path = PathBuf::from("target/jffi/generated/linux/payload");
+            if payload_path.exists() {
+                fs::remove_dir_all(&payload_path)?;
+            }
+            fs::create_dir_all(&payload_path)?;
+            copy_directory_contents(Path::new("platforms/linux"), &payload_path)?;
+
+            let ffi_library = fs::read_dir("target/release")?
+                .filter_map(|entry| entry.ok())
+                .find(|entry| {
+                    let name = entry.file_name();
+                    let name = name.to_string_lossy();
+                    name.starts_with("lib") && name.ends_with("core.so")
+                })
+                .map(|entry| entry.path())
+                .context("Linux build completed without producing a core FFI library")?;
+            fs::copy(
+                &ffi_library,
+                payload_path.join(ffi_library.file_name().unwrap()),
+            )?;
+            fs::write(
+                payload_path.join("jffi-app"),
+                format!(
+                    "#!/bin/sh\nexec python3 /app/share/{}/main.py \"$@\"\n",
+                    app_id
+                ),
+            )?;
+
             let manifest = format!(
                 r#"{{
-  "app-id": "{}",
-  "runtime": "{}",
-  "runtime-version": "{}",
-  "sdk": "{}",
+  "app-id": "{0}",
+  "runtime": "{1}",
+  "runtime-version": "{2}",
+  "sdk": "{3}",
   "command": "jffi-app",
   "finish-args": [
     "--share=network",
@@ -1757,12 +1785,17 @@ fn bundle_linux(
       "name": "jffi-app",
       "buildsystem": "simple",
       "build-commands": [
-        "install -D jffi-app /app/bin/jffi-app"
+        "if [ -f requirements.txt ]; then pip3 install --prefix=/app -r requirements.txt; fi",
+        "install -d /app/share/{0}",
+        "cp -a . /app/share/{0}/",
+        "install -Dm755 jffi-app /app/bin/jffi-app",
+        "if [ -f {0}.desktop ]; then install -Dm644 {0}.desktop /app/share/applications/{0}.desktop; fi",
+        "if [ -f {0}.metainfo.xml ]; then install -Dm644 {0}.metainfo.xml /app/share/metainfo/{0}.metainfo.xml; fi"
       ],
       "sources": [
         {{
           "type": "dir",
-          "path": "../../../../platforms/linux"
+          "path": "payload"
         }}
       ]
     }}
@@ -1781,6 +1814,7 @@ fn bundle_linux(
 
             let mut flatpak_builder_cmd = Command::new("flatpak-builder");
             flatpak_builder_cmd.args([
+                "--share=network",
                 "--repo",
                 repo_dir.to_str().unwrap(),
                 "--force-clean",
