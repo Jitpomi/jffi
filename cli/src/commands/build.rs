@@ -2234,6 +2234,38 @@ fn resolve_android_target_sdk(
     configured_target_sdk.or(bundle_compile_sdk).unwrap_or(36)
 }
 
+fn sync_android_gradle_properties(content: &str, shrink_resources: bool) -> String {
+    let mut found = false;
+    let mut lines: Vec<String> = content
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim();
+            if trimmed.starts_with("android.enableResourceOptimizations") {
+                found = true;
+                let indent = line.len() - line.trim_start().len();
+                format!(
+                    "{:width$}android.enableResourceOptimizations={}",
+                    "",
+                    shrink_resources,
+                    width = indent
+                )
+            } else {
+                line.to_string()
+            }
+        })
+        .collect();
+
+    if !found && shrink_resources {
+        lines.push("android.enableResourceOptimizations=true".to_string());
+    }
+
+    let mut result = lines.join("\n");
+    if content.ends_with("\n") && !result.ends_with("\n") {
+        result.push('\n');
+    }
+    result
+}
+
 fn sync_windows_csproj_content(content: &str, version_name: &str) -> String {
     let assembly_version = if version_name.split('.').count() == 3 {
         format!("{}.0", version_name)
@@ -2477,6 +2509,20 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
                 "✓".green(),
                 package
             );
+        }
+
+        let gradle_props_path = Path::new("platforms/android/gradle.properties");
+        if gradle_props_path.exists() {
+            let props_content = fs::read_to_string(gradle_props_path)?;
+            let new_props = sync_android_gradle_properties(&props_content, shrink_resources);
+            if new_props != props_content {
+                fs::write(gradle_props_path, new_props)?;
+                println!(
+                    "    {} Synced Android gradle.properties (enableResourceOptimizations: {})",
+                    "✓".green(),
+                    shrink_resources
+                );
+            }
         }
     }
 
@@ -3239,10 +3285,22 @@ fn update_entitlements_file(path: &Path, app_groups: &[String]) -> Result<()> {
 #[cfg(test)]
 mod config_sync_tests {
     use super::{
-        resolve_android_target_sdk, resolve_version_code, sync_linux_metainfo_content,
-        sync_windows_csproj_content, update_entitlements_file,
+        resolve_android_target_sdk, resolve_version_code, sync_android_gradle_properties,
+        sync_linux_metainfo_content, sync_windows_csproj_content, update_entitlements_file,
     };
     use std::fs;
+
+    #[test]
+    fn android_gradle_properties_synced_idempotently() {
+        let original = "org.gradle.jvmargs=-Xmx2048m\nandroid.useAndroidX=true\n";
+        let synced = sync_android_gradle_properties(original, true);
+        assert!(synced.contains("android.enableResourceOptimizations=true"));
+        let synced_again = sync_android_gradle_properties(&synced, true);
+        assert_eq!(synced, synced_again);
+
+        let disabled = sync_android_gradle_properties(&synced, false);
+        assert!(disabled.contains("android.enableResourceOptimizations=false"));
+    }
 
     #[test]
     fn explicit_build_number_wins_over_ci_run_number() {
