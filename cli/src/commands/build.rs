@@ -6,7 +6,11 @@ use std::path::Path;
 use std::process::Command;
 
 fn validate_project_structure() -> Result<()> {
-    if !Path::new("jffi.toml").exists() {
+    validate_project_structure_at(Path::new("."))
+}
+
+fn validate_project_structure_at(root: &Path) -> Result<()> {
+    if !root.join("jffi.toml").exists() {
         anyhow::bail!(
             "{}\n\nThis command must be run from a project created with:\n  {} {}\n\nOr navigate to an existing JFFI project directory.",
             "Error: Not in a JFFI project directory.".red().bold(),
@@ -15,7 +19,7 @@ fn validate_project_structure() -> Result<()> {
         );
     }
 
-    if !Path::new("core").exists() {
+    if !root.join("core").exists() {
         anyhow::bail!(
             "{}\n\n{}",
             "Error: Missing 'core' directory.".red().bold(),
@@ -23,42 +27,8 @@ fn validate_project_structure() -> Result<()> {
         );
     }
 
-    // Builds must never rewrite user source. Report the problem and let the
-    // developer make the API decision explicitly.
-    ensure_public_modules()?;
-
-    Ok(())
-}
-
-fn ensure_public_modules() -> Result<()> {
-    let lib_rs_path = Path::new("core/src/lib.rs");
-    if !lib_rs_path.exists() {
-        return Ok(());
-    }
-
-    let content = fs::read_to_string(lib_rs_path)?;
-    let mut private_modules = Vec::new();
-
-    for line in content.lines() {
-        let trimmed = line.trim();
-        // UniFFI ignores exported types in private modules.
-        // Automatically convert `mod name;` to `pub mod name;` (excluding internal android/tests).
-        if trimmed.starts_with("mod ")
-            && trimmed.ends_with(';')
-            && !trimmed.contains("android")
-            && !trimmed.contains("tests")
-        {
-            private_modules.push(trimmed.to_string());
-        }
-    }
-
-    if !private_modules.is_empty() {
-        anyhow::bail!(
-            "UniFFI cannot export items from private modules in core/src/lib.rs: {}. \
-             Change each intended API module to `pub mod ...;`; JFFI will not rewrite source during a build.",
-            private_modules.join(", ")
-        );
-    }
+    // Module visibility is a Rust API decision, not a build-tool requirement.
+    // Rust and UniFFI validate actual exported items during compilation.
 
     Ok(())
 }
@@ -508,9 +478,58 @@ rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
 "#;
 
     let config_path = format!("{}/config.toml", cargo_dir);
-    std::fs::write(&config_path, config_content).context("Failed to write .cargo/config.toml")?;
+    let existing = if Path::new(&config_path).exists() {
+        fs::read_to_string(&config_path).context("Failed to read .cargo/config.toml")?
+    } else {
+        config_content.to_string()
+    };
+    let updated = merge_android_cargo_config(&existing)?;
+    if updated != existing || !Path::new(&config_path).exists() {
+        fs::write(&config_path, updated).context("Failed to write .cargo/config.toml")?;
+    }
 
     Ok(())
+}
+
+fn merge_android_cargo_config(content: &str) -> Result<String> {
+    use toml_edit::{value, Array, DocumentMut};
+    let mut doc = content
+        .parse::<DocumentMut>()
+        .context("Invalid .cargo/config.toml; left unchanged")?;
+    if let Some(targets) = doc.get("target") {
+        anyhow::ensure!(
+            targets.is_table_like(),
+            "target must be a table; config left unchanged"
+        );
+        for (_, settings) in targets.as_table_like().unwrap().iter() {
+            anyhow::ensure!(
+                settings.is_table_like(),
+                "target settings must be a table; config left unchanged"
+            );
+        }
+    }
+    for target in [
+        "aarch64-linux-android",
+        "armv7-linux-androideabi",
+        "x86_64-linux-android",
+        "i686-linux-android",
+    ] {
+        let flags = &mut doc["target"][target]["rustflags"];
+        if flags.is_none() {
+            *flags = value(Array::new());
+        }
+        let flags = flags.as_array_mut().with_context(|| {
+            format!("target.{target}.rustflags must be an array; config left unchanged")
+        })?;
+        if !flags
+            .iter()
+            .any(|flag| flag.as_str() == Some("link-arg=-Wl,-z,max-page-size=16384"))
+        {
+            flags.push("-C");
+            flags.push("link-arg=-Wl,-z,max-page-size=16384");
+        }
+    }
+    Ok(doc.to_string())
 }
 
 fn check_ndk_context_needed() -> bool {
@@ -3284,6 +3303,47 @@ fn update_entitlements_file(path: &Path, app_groups: &[String]) -> Result<()> {
 
 #[cfg(test)]
 mod config_sync_tests {
+    #[test]
+    fn private_helpers_are_allowed_and_source_is_unchanged() {
+        let root =
+            std::env::temp_dir().join(format!("jffi-private-modules-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("core/src")).unwrap();
+        std::fs::write(root.join("jffi.toml"), "").unwrap();
+        let source = "mod device_info;\nmod offer_summary;\npub struct Core;\n";
+        let path = root.join("core/src/lib.rs");
+        std::fs::write(&path, source).unwrap();
+        let result = super::validate_project_structure_at(&root);
+        let unchanged = std::fs::read_to_string(&path).unwrap();
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(result.is_ok());
+        assert_eq!(source, unchanged);
+    }
+
+    #[test]
+    fn android_config_preserves_other_platforms_comments_and_flags() {
+        let source = "# Keep this comment\n[env]\nIPHONEOS_DEPLOYMENT_TARGET = { value = \"16.0\", force = false }\n[target.aarch64-linux-android]\nlinker = \"custom-linker\"\nrustflags = [\"-C\", \"debuginfo=2\"]\n[build]\njobs = 2\n";
+        let merged = super::merge_android_cargo_config(source).unwrap();
+        for expected in [
+            "# Keep this comment",
+            "IPHONEOS_DEPLOYMENT_TARGET",
+            "custom-linker",
+            "debuginfo=2",
+            "jobs = 2",
+        ] {
+            assert!(merged.contains(expected));
+        }
+        assert_eq!(merged, super::merge_android_cargo_config(&merged).unwrap());
+    }
+
+    #[test]
+    fn android_config_rejects_invalid_config_and_string_flags() {
+        assert!(super::merge_android_cargo_config("[broken").is_err());
+        assert!(super::merge_android_cargo_config(
+            "[target.aarch64-linux-android]\nrustflags = \"custom\"\n"
+        )
+        .is_err());
+    }
+
     use super::{
         resolve_android_target_sdk, resolve_version_code, sync_android_gradle_properties,
         sync_linux_metainfo_content, sync_windows_csproj_content, update_entitlements_file,
