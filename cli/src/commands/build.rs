@@ -3420,7 +3420,6 @@ fn windows_architectures(targets: &[String]) -> Result<Vec<(&'static str, &'stat
 #[cfg(test)]
 mod config_sync_tests {
 
-    #[cfg(unix)]
     #[test]
     fn msix_publisher_sync_preserves_the_identity_tag_and_escapes_xml() {
         let source = "<Package><Identity Name=\"Sample\" Publisher=\"CN=dev\" Version=\"1.0.0.0\" /></Package>";
@@ -3432,6 +3431,7 @@ mod config_sync_tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn windows_multi_arch_build_stages_matching_dll_and_ignores_stale_outputs() {
         use std::os::unix::fs::PermissionsExt;

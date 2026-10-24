@@ -116,7 +116,8 @@ jobs:
         shell: bash
         run: |
           echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
-          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0'
       - name: Prepare and build native bindings/application
         shell: bash
         env:

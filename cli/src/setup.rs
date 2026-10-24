@@ -209,20 +209,25 @@ pub fn ensure_uniffi_bindgen() -> Result<()> {
         ),
     }
 
-    let exact = format!("={}", required);
+    // Older UniFFI releases expose the CLI entry point but do not ship a bin target.
+    // Build the same small driver against the project's exact UniFFI version.
+    let driver = std::env::current_dir()?.join("target/jffi/tools/uniffi-bindgen");
+    std::fs::create_dir_all(driver.join("src"))?;
+    std::fs::write(
+        driver.join("Cargo.toml"),
+        format!(
+            "[package]\nname = \"uniffi-bindgen\"\nversion = \"{}\"\nedition = \"2021\"\n[workspace]\n[dependencies]\nuniffi = {{ version = \"={}\", features = [\"cli\"] }}\n",
+            required, required
+        ),
+    )?;
+    std::fs::write(
+        driver.join("src/main.rs"),
+        "fn main() { uniffi::uniffi_bindgen_main(); }\n",
+    )?;
     let status = Command::new("cargo")
-        .args([
-            "install",
-            "uniffi",
-            "--features",
-            "cli",
-            "--bin",
-            "uniffi-bindgen",
-            "--version",
-            &exact,
-            "--force",
-            "--locked",
-        ])
+        .args(["install", "--path"])
+        .arg(&driver)
+        .arg("--force")
         .status()
         .context("Failed to install the matching uniffi-bindgen")?;
     if !status.success() {
