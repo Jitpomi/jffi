@@ -1,6 +1,6 @@
 # `jffi` Changelog
 
-## Unreleased — Native workflow consistency
+## v0.4.22 — Native workflow consistency
 
 - Preserve release/debug configuration through native UI builds and launch paths.
 - Add explicit iOS simulator/device and Android device identifiers; include iPad
@@ -22,6 +22,10 @@
   instead of uninstalling them on every run.
 - Correct Flatpak signed export flags and public-key embedding, isolate generated
   repositories between signed/unsigned builds, and check default runtimes in doctor.
+
+- Fix fresh setup for UniFFI 0.29.4 by building the matching CLI driver.
+- Update the web template to Vite 8.3.5 and update ZIP/error dependencies to
+  address security advisories detected by CI.
 
 Compatibility notes: physical iOS runs now require `--device-id`; unsigned Linux
 bundles require `--no-sign` unless a GPG profile is configured; macOS architecture
