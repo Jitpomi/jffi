@@ -1,6 +1,6 @@
 # `jffi` Changelog
 
-## Unreleased
+## v0.4.23 — Windows MakeAppx preflight
 
 - Fix Windows bundle doctor falsely rejecting an installed MakeAppx when its help
   command returns exit code 1. Require recognizable MakeAppx help for that case;
