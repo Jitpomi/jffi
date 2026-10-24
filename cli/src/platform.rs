@@ -14,6 +14,15 @@ pub enum Platform {
 }
 
 impl Platform {
+    pub const ALL: [Self; 6] = [
+        Self::Ios,
+        Self::Macos,
+        Self::Android,
+        Self::Windows,
+        Self::Linux,
+        Self::Web,
+    ];
+
     pub fn from_str(s: &str) -> Option<Self> {
         match s.trim().to_lowercase().as_str() {
             "ios" => Some(Self::Ios),
@@ -41,7 +50,7 @@ impl Platform {
         match self {
             Self::Ios | Self::Macos => cfg!(target_os = "macos"),
             Self::Windows => cfg!(target_os = "windows"),
-            Self::Linux => cfg!(target_os = "linux") || cfg!(target_os = "macos"),
+            Self::Linux => cfg!(target_os = "linux"),
             Self::Android | Self::Web => true,
         }
     }
@@ -49,6 +58,14 @@ impl Platform {
     pub fn check_requirements(&self) -> Result<()> {
         crate::setup::setup_platform_for_build(self)
     }
+}
+
+/// A JFFI-owned directory shared by native build, run, and packaging.
+pub(crate) fn windows_output_dir(platform: &str, release: bool) -> PathBuf {
+    Path::new("platforms/windows/bin")
+        .join(platform)
+        .join(if release { "Release" } else { "Debug" })
+        .join("jffi")
 }
 
 /// iOS/macOS Xcode project
@@ -159,14 +176,35 @@ impl AndroidProject {
     }
 
     pub fn open(&self) -> Result<()> {
-        let path_str = self
-            .project_path
-            .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Invalid project path"))?;
-        Command::new("open")
-            .args(["-a", "Android Studio", path_str])
-            .status()
-            .context("Failed to open Android Studio")?;
+        if cfg!(target_os = "macos") && std::env::var_os("JFFI_ANDROID_STUDIO").is_none() {
+            let status = Command::new("open")
+                .args(["-a", "Android Studio"])
+                .arg(&self.project_path)
+                .status()?;
+            if !status.success() {
+                anyhow::bail!("Could not open Android Studio");
+            }
+        } else {
+            let executable = std::env::var_os("JFFI_ANDROID_STUDIO")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    if cfg!(target_os = "windows") {
+                        PathBuf::from(
+                            std::env::var_os("ProgramFiles")
+                                .unwrap_or_else(|| "C:\\Program Files".into()),
+                        )
+                        .join("Android/Android Studio/bin/studio64.exe")
+                    } else {
+                        PathBuf::from("android-studio")
+                    }
+                });
+            Command::new(executable)
+                .arg(&self.project_path)
+                .spawn()
+                .context(
+                    "Could not launch Android Studio; set JFFI_ANDROID_STUDIO to its executable",
+                )?;
+        }
         Ok(())
     }
 
@@ -203,70 +241,48 @@ impl AndroidProject {
 pub struct IOSSimulator;
 
 impl IOSSimulator {
-    pub fn get_available() -> Result<(String, String)> {
+    pub fn get_available(requested: Option<&str>) -> Result<(String, String)> {
         let output = Command::new("xcrun")
-            .args(["simctl", "list", "devices", "available"])
+            .args(["simctl", "list", "devices", "available", "--json"])
             .output()
             .context("Failed to list simulators")?;
-
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("Failed to get simulator list: {}", stderr);
+            anyhow::bail!(
+                "simctl list devices failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
         }
-
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        let mut booted_iphones: Vec<(String, String)> = Vec::new();
-        let mut shutdown_iphones: Vec<(String, String)> = Vec::new();
-
-        for line in output_str.lines() {
-            if line.contains("iPhone") {
-                let trimmed = line.trim();
-                if let Some(first_paren) = trimmed.find(" (") {
-                    let name = &trimmed[..first_paren];
-                    let rest = &trimmed[first_paren + 2..];
-                    if let Some(second_paren) = rest.find(')') {
-                        let uuid = &rest[..second_paren];
-
-                        if line.contains("(Booted)") {
-                            booted_iphones.push((name.to_string(), uuid.to_string()));
-                        } else if line.contains("(Shutdown)") {
-                            shutdown_iphones.push((name.to_string(), uuid.to_string()));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Prefer booted, then first available
-        if let Some((name, uuid)) = booted_iphones.into_iter().next() {
-            return Ok((name, uuid));
-        }
-        if let Some((name, uuid)) = shutdown_iphones.into_iter().next() {
-            return Ok((name, uuid));
-        }
-
-        anyhow::bail!("No iPhone simulators found. Please install one in Xcode.")
+        select_ios_simulator(&serde_json::from_slice(&output.stdout)?, requested)
     }
 
     pub fn boot(&self, uuid: &str) -> Result<()> {
-        Command::new("xcrun")
+        // Boot is harmless if already booted; bootstatus is the authoritative readiness check.
+        let _ = Command::new("xcrun")
             .args(["simctl", "boot", uuid])
-            .output()
-            .ok();
+            .output();
+        let status = Command::new("xcrun")
+            .args(["simctl", "bootstatus", uuid, "-b"])
+            .status()?;
+        if !status.success() {
+            anyhow::bail!("Simulator {} did not boot", uuid);
+        }
         Ok(())
     }
 
     pub fn open_app(&self) -> Result<()> {
-        Command::new("open").args(["-a", "Simulator"]).status().ok();
+        let status = Command::new("open").args(["-a", "Simulator"]).status()?;
+        if !status.success() {
+            anyhow::bail!("Could not open Simulator");
+        }
         Ok(())
     }
 
-    pub fn install_app(&self, app_path: &Path) -> Result<()> {
+    pub fn install_app(&self, uuid: &str, app_path: &Path) -> Result<()> {
         let app_path_str = app_path
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("Invalid app path"))?;
         let status = Command::new("xcrun")
-            .args(["simctl", "install", "booted", app_path_str])
+            .args(["simctl", "install", uuid, app_path_str])
             .status()
             .context("Failed to install app")?;
 
@@ -276,9 +292,9 @@ impl IOSSimulator {
         Ok(())
     }
 
-    pub fn launch_app(&self, bundle_id: &str) -> Result<()> {
+    pub fn launch_app(&self, uuid: &str, bundle_id: &str) -> Result<()> {
         let status = Command::new("xcrun")
-            .args(["simctl", "launch", "booted", bundle_id])
+            .args(["simctl", "launch", uuid, bundle_id])
             .status()
             .context("Failed to launch app")?;
 
@@ -289,25 +305,60 @@ impl IOSSimulator {
     }
 }
 
-/// Utility to find built iOS app in DerivedData
-pub fn find_ios_app_bundle(project_name: &str) -> Result<PathBuf> {
-    let home = std::env::var("HOME").context("Could not get HOME environment variable")?;
-    let derived_data = format!("{}/Library/Developer/Xcode/DerivedData", home);
-
-    std::fs::read_dir(&derived_data)
-        .context("Could not read DerivedData directory")?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_name().to_string_lossy().starts_with(project_name))
-        .find_map(|project_dir| {
-            let app_path = project_dir
-                .path()
-                .join("Build/Products/Debug-iphonesimulator")
-                .join(format!("{}.app", project_name));
-            if app_path.exists() {
-                Some(app_path)
-            } else {
-                None
+fn select_ios_simulator(
+    value: &serde_json::Value,
+    requested: Option<&str>,
+) -> Result<(String, String)> {
+    let devices = value
+        .get("devices")
+        .and_then(|v| v.as_object())
+        .context("Invalid simctl devices JSON")?;
+    let mut candidates = Vec::new();
+    for (runtime, entries) in devices {
+        if !runtime.starts_with("com.apple.CoreSimulator.SimRuntime.iOS-") {
+            continue;
+        }
+        for device in entries.as_array().into_iter().flatten() {
+            if device.get("isAvailable").and_then(|v| v.as_bool()) != Some(true) {
+                continue;
             }
-        })
-        .context(format!("Could not find built .app bundle for {}. Try running 'jffi build --platform ios' first.", project_name))
+            let Some(id) = device.get("udid").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let Some(name) = device.get("name").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            if requested.is_some_and(|requested| requested != id) {
+                continue;
+            }
+            candidates.push((
+                device.get("state").and_then(|v| v.as_str()) != Some("Booted"),
+                name.to_string(),
+                id.to_string(),
+            ));
+        }
+    }
+    candidates.sort();
+    candidates.into_iter().next().map(|(_, name, id)| (name, id)).context("No available iOS simulator matches; install an iPhone/iPad runtime in Xcode or check --device-id")
+}
+
+#[cfg(test)]
+mod simulator_tests {
+    use super::*;
+    #[test]
+    fn selects_ipad_and_excludes_other_runtimes() {
+        let devices = serde_json::json!({"devices": {
+            "com.apple.CoreSimulator.SimRuntime.iOS-27-0": [
+                {"name":"iPhone", "udid":"phone", "isAvailable":true, "state":"Shutdown"},
+                {"name":"iPad", "udid":"pad", "isAvailable":true, "state":"Booted"}],
+            "com.apple.CoreSimulator.SimRuntime.tvOS-27-0": [
+                {"name":"TV", "udid":"tv", "isAvailable":true, "state":"Booted"}]
+        }});
+        assert_eq!(select_ios_simulator(&devices, None).unwrap().1, "pad");
+        assert_eq!(
+            select_ios_simulator(&devices, Some("phone")).unwrap().1,
+            "phone"
+        );
+        assert!(select_ios_simulator(&devices, Some("tv")).is_err());
+    }
 }

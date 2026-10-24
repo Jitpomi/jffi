@@ -1,5 +1,33 @@
 # `jffi` Changelog
 
+## Unreleased — Native workflow consistency
+
+- Preserve release/debug configuration through native UI builds and launch paths.
+- Add explicit iOS simulator/device and Android device identifiers; include iPad
+  simulators and deploy physical iOS apps through `devicectl`.
+- Preserve Android SDK configuration and use a local development signing key for
+  release runs; distribution signing continues to use bundle profiles.
+- Build the configured Windows packaging architectures, reject missing requested
+  toolchains, and select only Release package inputs.
+- Honor Apple deployment/entitlements/hardened-runtime settings and Windows minimum
+  versions. Reject unsupported resource/license configuration rather than ignore it.
+- Add Linux Flatpak GPG signing profiles and explicit unsigned mode, package output
+  checks, and native signature verification for APK/AAB, MSIX, and Apple app bundles.
+- Export unsigned macOS apps directly and support explicit iOS XCArchive output.
+- Watch Linux Python UI files with debounced restarts limited to the launched app.
+- Correct debugger/reload/screenshot descriptions, host checks, and unsupported flags.
+- Add native generated-app build/package CI and release/device command regression tests.
+- Fix Windows architecture-specific DLL staging, explicit runtime/output paths,
+  publisher synchronization, and native reload errors; register apps in place
+  instead of uninstalling them on every run.
+- Correct Flatpak signed export flags and public-key embedding, isolate generated
+  repositories between signed/unsigned builds, and check default runtimes in doctor.
+
+Compatibility notes: physical iOS runs now require `--device-id`; unsigned Linux
+bundles require `--no-sign` unless a GPG profile is configured; macOS architecture
+aliases remain compatibility aliases for universal builds, with a warning directing
+users to `bundle.macos.targets` for distribution selection.
+
 ## v0.4.18 — Build and Bundle Prerequisite Boundaries
 
 - Stop requiring Flatpak Builder for ordinary Linux build and run commands.

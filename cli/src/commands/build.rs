@@ -41,8 +41,39 @@ pub fn build_project(
     deploy: bool,
 ) -> Result<()> {
     validate_project_structure()?;
+    if all && (device || deploy) {
+        anyhow::bail!("--device and --deploy require an explicit --platform");
+    }
+    if device && platform.as_deref() != Some("ios") {
+        anyhow::bail!(
+            "build --device applies only to iOS; Android libraries serve both emulator and device"
+        );
+    }
+    if deploy && platform.as_deref() != Some("windows") {
+        anyhow::bail!("--deploy applies only to Windows multi-architecture builds");
+    }
 
+    let platform = platform.map(|platform| {
+        if matches!(platform.as_str(), "macos-arm64" | "macos-x64") {
+            eprintln!("{} is a compatibility alias: JFFI builds a universal macOS library. Use bundle.macos.targets for distribution architectures.", platform);
+        }
+        Platform::from_str(&platform).map(|selected| selected.as_str().to_string()).context("Unknown build platform")
+    }).transpose()?;
     let config = crate::config::load_config()?;
+    if let Some(platform) = platform.as_deref() {
+        let selected = Platform::from_str(platform).context("Unknown build platform")?;
+        if !selected.is_host_supported() {
+            anyhow::bail!("{} cannot be built on this host", selected.as_str());
+        }
+        if !config
+            .platforms
+            .enabled
+            .iter()
+            .any(|p| p == selected.as_str())
+        {
+            anyhow::bail!("Platform '{}' is not enabled in jffi.toml", platform);
+        }
+    }
     sync_configs_to_platforms(&config)?;
 
     // Generate icons for the building platforms if configured
@@ -73,6 +104,11 @@ pub fn build_platform_with_options(
 ) -> Result<()> {
     validate_project_structure()?;
 
+    let selected = Platform::from_str(platform).context("Unknown build platform")?;
+    let platform = selected.as_str();
+    if !selected.is_host_supported() {
+        anyhow::bail!("{} cannot be built on this host", selected.as_str());
+    }
     // Check if requirements are met for this platform
     if let Some(p_enum) = Platform::from_str(platform) {
         p_enum.check_requirements()?;
@@ -151,6 +187,11 @@ fn build_all_platforms(release: bool) -> Result<()> {
 pub fn build_platform(platform: &str, release: bool) -> Result<()> {
     validate_project_structure()?;
 
+    let selected = Platform::from_str(platform).context("Unknown build platform")?;
+    let platform = selected.as_str();
+    if !selected.is_host_supported() {
+        anyhow::bail!("{} cannot be built on this host", selected.as_str());
+    }
     // Check if requirements are met for this platform
     if let Some(p_enum) = Platform::from_str(platform) {
         p_enum.check_requirements()?;
@@ -194,6 +235,7 @@ fn build_ios_target(release: bool, _target_type: &str) -> Result<()> {
 }
 
 fn build_ios_xcframework(release: bool) -> Result<()> {
+    let config = crate::config::load_config()?;
     use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
     let profile = if release { "release" } else { "debug" };
@@ -224,7 +266,10 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
 
             let status = Command::new("cargo")
                 .env("CARGO_TARGET_DIR", "target")
-                .env("IPHONEOS_DEPLOYMENT_TARGET", "16.0")
+                .env(
+                    "IPHONEOS_DEPLOYMENT_TARGET",
+                    &config.platforms.ios.deployment_target,
+                )
                 .args(&args)
                 .status()
                 .context(format!("Failed to build Rust library for {}", target))?;
@@ -255,7 +300,10 @@ fn build_ios_xcframework(release: bool) -> Result<()> {
 
             let status = Command::new("cargo")
                 .env("CARGO_TARGET_DIR", "target")
-                .env("IPHONEOS_DEPLOYMENT_TARGET", "16.0")
+                .env(
+                    "IPHONEOS_DEPLOYMENT_TARGET",
+                    &config.platforms.ios.deployment_target,
+                )
                 .args(&args)
                 .status()
                 .context(format!("Failed to build Rust library for {}", target))?;
@@ -1066,7 +1114,10 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
 
             let mut cmd = Command::new("cargo");
             cmd.env("CARGO_TARGET_DIR", "target")
-                .env("MACOSX_DEPLOYMENT_TARGET", "13.0")
+                .env(
+                    "MACOSX_DEPLOYMENT_TARGET",
+                    &config.platforms.macos.deployment_target,
+                )
                 .args(&args);
 
             let mut rustflags_val = config.platforms.macos.rustflags.clone().unwrap_or_default();
@@ -1111,7 +1162,10 @@ fn build_macos_xcframework(release: bool) -> Result<()> {
 
             let mut cmd = Command::new("cargo");
             cmd.env("CARGO_TARGET_DIR", "target")
-                .env("MACOSX_DEPLOYMENT_TARGET", "13.0")
+                .env(
+                    "MACOSX_DEPLOYMENT_TARGET",
+                    &config.platforms.macos.deployment_target,
+                )
                 .args(&args);
 
             let mut rustflags_val = config.platforms.macos.rustflags.clone().unwrap_or_default();
@@ -1332,39 +1386,26 @@ fn build_windows_all_archs(release: bool) -> Result<()> {
     // Build for all architectures (for deployment/distribution)
     ensure_uniffi_bindgen_cs()?;
 
-    let archs = ["i686", "x86_64", "aarch64"];
-    let platforms = ["x86", "x64", "ARM64"];
+    let config = crate::config::load_config()?;
+    let targets = config
+        .bundle
+        .as_ref()
+        .and_then(|b| b.windows.as_ref())
+        .map(|w| w.targets.clone())
+        .unwrap_or_else(|| {
+            vec![
+                "x86_64-pc-windows-msvc".into(),
+                "aarch64-pc-windows-msvc".into(),
+            ]
+        });
+    let pairs = windows_architectures(&targets)?;
+    let archs: Vec<&str> = pairs.iter().map(|pair| pair.0).collect();
+    let platforms: Vec<&str> = pairs.iter().map(|pair| pair.1).collect();
     let profile = if release { "release" } else { "debug" };
 
     build_windows_archs(&archs, &platforms, release, profile)?;
 
     Ok(())
-}
-
-fn check_windows_toolchain(arch: &str) -> Result<bool> {
-    // Only aarch64 requires special toolchain detection.
-    // x86_64 and i686 use MSVC which Rust's cc crate finds automatically
-    // (via registry, environment variables, or VS installation paths).
-    // cl.exe is typically NOT in global PATH but cargo build still works.
-    match arch {
-        "aarch64" => {
-            // aarch64-pc-windows-msvc requires clang for C dependencies like ring
-            let has_clang = Command::new("where")
-                .arg("clang")
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
-            Ok(has_clang)
-        }
-        "x86_64" | "i686" => {
-            // MSVC is always assumed available for x64/x86 on Windows
-            // Rust's cc crate handles MSVC discovery automatically
-            Ok(true)
-        }
-        _ => Ok(false),
-    }
 }
 
 fn build_windows_archs(
@@ -1377,72 +1418,23 @@ fn build_windows_archs(
 
     let verbose = std::env::var("JFFI_VERBOSE").is_ok();
 
-    // Filter architectures by available toolchains
-    let mut available_archs = Vec::new();
-    let mut available_platforms = Vec::new();
-    let mut skipped = Vec::new();
-
-    for (i, arch) in archs.iter().enumerate() {
-        match check_windows_toolchain(arch) {
-            Ok(true) => {
-                available_archs.push(*arch);
-                available_platforms.push(platforms[i]);
-            }
-            Ok(false) => {
-                let platform = platforms[i];
-                let msg = match *arch {
-                    "aarch64" => "Install LLVM/Clang: winget install LLVM.LLVM",
-                    "x86_64" | "i686" => "Install Visual Studio Build Tools with C++ workload",
-                    _ => "Install the required C compiler",
-                };
-                skipped.push(format!("{} ({})", platform, msg));
-            }
-            Err(_) => {
-                skipped.push(format!("{} (toolchain check failed)", platforms[i]));
-            }
-        }
+    if archs.is_empty() || archs.len() != platforms.len() {
+        anyhow::bail!("Windows build requires matching nonempty architecture and platform lists");
     }
-
-    if !skipped.is_empty() {
-        println!(
-            "  {} Skipping unsupported architectures:",
-            "⚠".bright_yellow()
-        );
-        for s in &skipped {
-            println!("     • {}", s);
-        }
-    }
-
-    if available_archs.is_empty() {
-        anyhow::bail!("No Windows toolchains available. Install Visual Studio Build Tools (x64/x86) or LLVM/Clang (ARM64).");
-    }
+    let available_archs = archs;
+    let targets: Vec<String> = archs
+        .iter()
+        .map(|arch| format!("{}-pc-windows-msvc", arch))
+        .collect();
+    let target_refs: Vec<&str> = targets.iter().map(String::as_str).collect();
+    crate::setup::ensure_rust_targets(&target_refs)?;
+    let lib_name = core_library_name(Path::new("core/Cargo.toml"))?;
 
     // Step 1: Build Rust libraries for available architectures
     if verbose {
         // Verbose mode: no progress bars, just plain output
         for arch in available_archs.iter() {
             let target = format!("{}-pc-windows-msvc", arch);
-
-            // Ensure the Rust target is installed
-            let target_installed = Command::new("rustup")
-                .args(["target", "list", "--installed"])
-                .output()
-                .map(|o| String::from_utf8_lossy(&o.stdout).contains(&target))
-                .unwrap_or(false);
-            if !target_installed {
-                println!(
-                    "  {} Installing Rust target {}...",
-                    "→".bright_blue(),
-                    target
-                );
-                let status = Command::new("rustup")
-                    .args(["target", "add", &target])
-                    .status()
-                    .context("Failed to install Rust target via rustup")?;
-                if !status.success() {
-                    anyhow::bail!("rustup target add {} failed", target);
-                }
-            }
 
             println!("  {} Building Windows {}...", "→".bright_blue(), arch);
 
@@ -1475,27 +1467,6 @@ fn build_windows_archs(
         for arch in available_archs.iter() {
             let target = format!("{}-pc-windows-msvc", arch);
 
-            // Ensure the Rust target is installed
-            let target_installed = Command::new("rustup")
-                .args(["target", "list", "--installed"])
-                .output()
-                .map(|o| String::from_utf8_lossy(&o.stdout).contains(&target))
-                .unwrap_or(false);
-            if !target_installed {
-                println!(
-                    "  {} Installing Rust target {}...",
-                    "→".bright_blue(),
-                    target
-                );
-                let status = Command::new("rustup")
-                    .args(["target", "add", &target])
-                    .status()
-                    .context("Failed to install Rust target via rustup")?;
-                if !status.success() {
-                    anyhow::bail!("rustup target add {} failed", target);
-                }
-            }
-
             let pb = multi.add(ProgressBar::new_spinner());
             pb.set_style(spinner_style.clone());
             pb.set_prefix("  →");
@@ -1526,16 +1497,8 @@ fn build_windows_archs(
         }
     }
 
-    // Step 2: Generate C# bindings once (using x64 DLL)
-    let lib_name = std::env::current_dir()?
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("core")
-        .replace("-", "_");
-    let lib_path = format!(
-        "target/x86_64-pc-windows-msvc/{}/{}_core.dll",
-        profile, lib_name
-    );
+    // UniFFI extracts metadata from the built library; no x64-only dependency.
+    let lib_path = windows_library_path(archs[0], profile, &lib_name);
 
     println!(
         "  {} Generating C# bindings with uniffi-bindgen-cs...",
@@ -1558,7 +1521,7 @@ fn build_windows_archs(
     }
 
     // Auto-fix the uniffi-bindgen-cs v0.10.x interface prefix bug
-    let cs_file_path = format!("platforms/windows/Generated/{}_core.cs", lib_name);
+    let cs_file_path = format!("platforms/windows/Generated/{}.cs", lib_name);
     if let Ok(content) = std::fs::read_to_string(&cs_file_path) {
         // uniffi-bindgen-cs v0.10.x generates `internal interface IFoo` for callback interfaces
         // but expects `Foo` everywhere else.
@@ -1608,23 +1571,6 @@ fn build_windows_archs(
         }
     }
 
-    // Step 3: Copy DLL to Windows project root (BEFORE C# build - PostBuild target needs it)
-    println!(
-        "  {} Copying DLL to project directory...",
-        "→".bright_blue()
-    );
-    let target = "x86_64-pc-windows-msvc"; // Default to x64
-    let lib_path = format!("target/{}/{}/{}_core.dll", target, profile, lib_name);
-    let dll_dest = format!("platforms/windows/{}_core.dll", lib_name);
-
-    if std::path::Path::new(&lib_path).exists() {
-        std::fs::copy(&lib_path, &dll_dest)
-            .with_context(|| format!("Failed to copy DLL to {}", dll_dest))?;
-        println!("  {} Copied DLL to platforms/windows/", "✓".green());
-    } else {
-        anyhow::bail!("Rust DLL not found at {}", lib_path);
-    }
-
     // Step 4: Build C# project for specified platforms
     println!(
         "  {} Building C# project with MSBuild...",
@@ -1650,14 +1596,40 @@ fn build_windows_archs(
         "msbuild"
     };
 
-    for platform in platforms.iter() {
+    for (arch, platform) in archs.iter().zip(platforms) {
         println!("  {} Building for {}...", "→".bright_blue(), platform);
-
+        // The C# project includes this root DLL. Stage the matching architecture before each build.
+        let source = windows_library_path(arch, profile, &lib_name);
+        fs::copy(
+            &source,
+            Path::new("platforms/windows").join(format!("{}.dll", lib_name)),
+        )
+        .with_context(|| format!("Failed to stage {}", source.display()))?;
+        let output = crate::platform::windows_output_dir(platform, release);
+        if output.exists() {
+            fs::remove_dir_all(&output)?;
+        }
+        fs::create_dir_all(&output)?;
+        let output = std::env::current_dir()?.join(output);
+        let runtime = match *platform {
+            "x86" => "win-x86",
+            "x64" => "win-x64",
+            "ARM64" => "win-arm64",
+            _ => anyhow::bail!("Unknown Windows platform {}", platform),
+        };
         let mut build_args: Vec<String> = Vec::new();
         if build_cmd == "dotnet" {
             build_args.push("build".to_string());
             build_args.push(csproj_file.to_string_lossy().into_owned());
             build_args.push(format!("-p:Platform={}", platform));
+            build_args.push(format!("-p:RuntimeIdentifier={}", runtime));
+            build_args.push(format!(
+                "-p:OutputPath={}{}",
+                output.display(),
+                std::path::MAIN_SEPARATOR
+            ));
+            build_args.push("-p:AppendTargetFrameworkToOutputPath=false".into());
+            build_args.push("-p:AppendRuntimeIdentifierToOutputPath=false".into());
             build_args.push("-p:PublishReadyToRun=false".to_string());
             build_args.push("-p:PublishTrimmed=false".to_string());
             if release {
@@ -1666,6 +1638,14 @@ fn build_windows_archs(
         } else {
             build_args.push(csproj_file.to_string_lossy().into_owned());
             build_args.push(format!("/p:Platform={}", platform));
+            build_args.push(format!("/p:RuntimeIdentifier={}", runtime));
+            build_args.push(format!(
+                "/p:OutputPath={}{}",
+                output.display(),
+                std::path::MAIN_SEPARATOR
+            ));
+            build_args.push("/p:AppendTargetFrameworkToOutputPath=false".into());
+            build_args.push("/p:AppendRuntimeIdentifierToOutputPath=false".into());
             build_args.push("/p:PublishReadyToRun=false".to_string());
             build_args.push("/p:PublishTrimmed=false".to_string());
             if release {
@@ -2618,6 +2598,26 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
                                     } else {
                                         line.to_string()
                                     }
+                                } else if trimmed.starts_with("IPHONEOS_DEPLOYMENT_TARGET = ")
+                                    || trimmed.starts_with("MACOSX_DEPLOYMENT_TARGET = ")
+                                {
+                                    let (key, value) = if platform_str == "ios" {
+                                        (
+                                            "IPHONEOS_DEPLOYMENT_TARGET",
+                                            &config.platforms.ios.deployment_target,
+                                        )
+                                    } else {
+                                        (
+                                            "MACOSX_DEPLOYMENT_TARGET",
+                                            &config.platforms.macos.deployment_target,
+                                        )
+                                    };
+                                    format!(
+                                        "{}{} = {};",
+                                        " ".repeat(line.len() - trimmed.len()),
+                                        key,
+                                        value
+                                    )
                                 } else if trimmed.starts_with("MARKETING_VERSION = ") {
                                     let parts: Vec<&str> = line.split('=').collect();
                                     if parts.len() == 2 {
@@ -2904,6 +2904,17 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
             })
             .collect();
         let new_content = lines.join("\n");
+        let new_content = sync_windows_minimum(&new_content, &config.platforms.windows.min_version);
+        let new_content = if let Some(publisher) = config
+            .bundle
+            .as_ref()
+            .and_then(|bundle| bundle.windows.as_ref())
+            .and_then(|windows| windows.publisher_id.as_deref())
+        {
+            sync_windows_publisher(&new_content, publisher)
+        } else {
+            new_content
+        };
         if new_content != content {
             fs::write(windows_path, new_content)?;
             println!(
@@ -2926,6 +2937,8 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
             }
             let content = fs::read_to_string(&path)?;
             let new_content = sync_windows_csproj_content(&content, version_name);
+            let new_content =
+                sync_windows_minimum(&new_content, &config.platforms.windows.min_version);
             if new_content != content {
                 fs::write(&path, new_content)?;
                 println!(
@@ -3077,7 +3090,7 @@ fn find_libcxx_shared(ndk_dir: &Path, target: &str) -> Option<std::path::PathBuf
     None
 }
 
-fn get_linux_app_id(config: &crate::config::Config) -> String {
+pub(crate) fn get_linux_app_id(config: &crate::config::Config) -> String {
     if let Some(ref bundle) = config.bundle {
         if let Some(ref linux) = bundle.linux {
             if let Some(ref app_id) = linux.app_id {
@@ -3301,8 +3314,261 @@ fn update_entitlements_file(path: &Path, app_groups: &[String]) -> Result<()> {
     Ok(())
 }
 
+fn sync_windows_publisher(content: &str, publisher: &str) -> String {
+    let mut result = content.to_string();
+    let Some(start) = result.find("<Identity") else {
+        return result;
+    };
+    let Some(tag_end) = result[start..].find('>') else {
+        return result;
+    };
+    let end = start + tag_end;
+    let prefix = "Publisher=\"";
+    if let Some(attribute) = result[start..end].find(prefix) {
+        let value_start = start + attribute + prefix.len();
+        if let Some(value_end) = result[value_start..end].find('"') {
+            result.replace_range(
+                value_start..value_start + value_end,
+                &xml_attribute(publisher),
+            );
+        }
+    } else {
+        result.insert_str(
+            start + "<Identity".len(),
+            &format!(" Publisher=\"{}\"", xml_attribute(publisher)),
+        );
+    }
+    result
+}
+
+fn xml_attribute(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('\'', "&apos;")
+}
+
+pub(crate) fn core_library_name(manifest: &Path) -> Result<String> {
+    let content = fs::read_to_string(manifest)
+        .with_context(|| format!("Could not read {}", manifest.display()))?;
+    let manifest: toml::Value = toml::from_str(&content)?;
+    let name = manifest
+        .get("lib")
+        .and_then(|lib| lib.get("name"))
+        .and_then(toml::Value::as_str)
+        .or_else(|| {
+            manifest
+                .get("package")
+                .and_then(|package| package.get("name"))
+                .and_then(toml::Value::as_str)
+        })
+        .context("core/Cargo.toml must define a library or package name")?;
+    Ok(name.replace('-', "_"))
+}
+
+fn windows_library_path(arch: &str, profile: &str, library: &str) -> std::path::PathBuf {
+    Path::new("target")
+        .join(format!("{}-pc-windows-msvc", arch))
+        .join(profile)
+        .join(format!("{}.dll", library))
+}
+
+fn sync_windows_minimum(content: &str, minimum: &str) -> String {
+    let mut result = content.to_string();
+    let open = "<TargetPlatformMinVersion>";
+    if let Some(start) = result.find(open) {
+        let value_start = start + open.len();
+        if let Some(end) = result[value_start..].find("</TargetPlatformMinVersion>") {
+            result.replace_range(value_start..value_start + end, minimum);
+        }
+    }
+    let mut cursor = 0;
+    while let Some(start) = result[cursor..].find("<TargetDeviceFamily") {
+        let start = cursor + start;
+        let Some(end) = result[start..].find('>') else {
+            break;
+        };
+        let end = start + end;
+        if let Some(attribute) = result[start..end].find("MinVersion=\"") {
+            let value_start = start + attribute + "MinVersion=\"".len();
+            if let Some(value_end) = result[value_start..end].find('"') {
+                result.replace_range(value_start..value_start + value_end, minimum);
+            }
+        }
+        cursor = start + result[start..].find('>').unwrap() + 1;
+    }
+    result
+}
+
+fn windows_architectures(targets: &[String]) -> Result<Vec<(&'static str, &'static str)>> {
+    if targets.is_empty() {
+        anyhow::bail!("bundle.windows.targets cannot be empty");
+    }
+    targets
+        .iter()
+        .map(|target| match target.as_str() {
+            "i686-pc-windows-msvc" => Ok(("i686", "x86")),
+            "x86_64-pc-windows-msvc" => Ok(("x86_64", "x64")),
+            "aarch64-pc-windows-msvc" => Ok(("aarch64", "ARM64")),
+            _ => anyhow::bail!("Unsupported Windows target: {}", target),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod config_sync_tests {
+
+    #[cfg(unix)]
+    #[test]
+    fn msix_publisher_sync_preserves_the_identity_tag_and_escapes_xml() {
+        let source = "<Package><Identity Name=\"Sample\" Publisher=\"CN=dev\" Version=\"1.0.0.0\" /></Package>";
+        let updated = super::sync_windows_publisher(source, "CN=Company & Friends");
+        assert_eq!(updated, "<Package><Identity Name=\"Sample\" Publisher=\"CN=Company &amp; Friends\" Version=\"1.0.0.0\" /></Package>");
+        assert_eq!(
+            super::sync_windows_publisher(&updated, "CN=Company & Friends"),
+            updated
+        );
+    }
+
+    #[test]
+    fn windows_multi_arch_build_stages_matching_dll_and_ignores_stale_outputs() {
+        use std::os::unix::fs::PermissionsExt;
+        let root =
+            std::env::temp_dir().join(format!("jffi-windows-review-{}", uuid::Uuid::new_v4()));
+        let tools = root.join("tools");
+        fs::create_dir_all(&tools).unwrap();
+        fs::create_dir_all(root.join("core")).unwrap();
+        fs::create_dir_all(root.join("platforms/windows/bin/ARM64/Release/jffi")).unwrap();
+        fs::write(
+            root.join("platforms/windows/bin/ARM64/Release/jffi/stale.dll"),
+            "stale",
+        )
+        .unwrap();
+        fs::write(root.join("core/Cargo.toml"), "[package]\nname='different-project-name'\nversion='0.1.0'\n[lib]\nname='custom_native'\n").unwrap();
+        fs::write(root.join("core/uniffi.toml"), "").unwrap();
+        fs::write(root.join("platforms/windows/app.csproj"), "<Project />").unwrap();
+        let script = r#"#!/bin/sh
+set -eu
+tool=${0##*/}
+printf '%s|%s\n' "$tool" "$*" >> commands.log
+case "$tool" in
+ rustup) printf '%s\n' aarch64-pc-windows-msvc i686-pc-windows-msvc ;;
+ cargo)
+   previous=''
+   for arg in "$@"; do
+     if [ "$previous" = --target ]; then target=$arg; fi
+     previous=$arg
+   done
+   mkdir -p "target/$target/release"
+   printf '%s' "$target" > "target/$target/release/custom_native.dll" ;;
+ uniffi-bindgen-cs)
+   test "$2" = target/aarch64-pc-windows-msvc/release/custom_native.dll
+   test -f "$2" ;;
+ dotnet)
+   if [ "${1:-}" = --version ]; then echo 8.0; exit 0; fi
+   for arg in "$@"; do
+     case "$arg" in
+       -p:Platform=*) platform=${arg#-p:Platform=} ;;
+       -p:RuntimeIdentifier=*) runtime=${arg#-p:RuntimeIdentifier=} ;;
+       -p:OutputPath=*) output=${arg#-p:OutputPath=} ;;
+     esac
+   done
+   case "$platform" in
+     ARM64) expected=aarch64-pc-windows-msvc; test "$runtime" = win-arm64 ;;
+     x86) expected=i686-pc-windows-msvc; test "$runtime" = win-x86 ;;
+     *) exit 90 ;;
+   esac
+   test "$(cat platforms/windows/custom_native.dll)" = "$expected"
+   test ! -f "$output/stale.dll"
+   mkdir -p "$output"
+   cp platforms/windows/custom_native.dll "$output/custom_native.dll"
+   printf '<Package />' > "$output/AppxManifest.xml" ;;
+esac
+"#;
+        for name in ["cargo", "rustup", "uniffi-bindgen-cs", "dotnet"] {
+            let path = tools.join(name);
+            fs::write(&path, script).unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let path = std::env::join_paths(std::iter::once(tools).chain(std::env::split_paths(
+            &std::env::var_os("PATH").unwrap_or_default(),
+        )))
+        .unwrap();
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--ignored",
+                "--exact",
+                "commands::build::config_sync_tests::windows_build_review_worker",
+                "--nocapture",
+            ])
+            .current_dir(&root)
+            .env("PATH", path)
+            .env("JFFI_WINDOWS_REVIEW_WORKER", "1")
+            .env("JFFI_NO_SETUP", "1")
+            .env("JFFI_VERBOSE", "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            fs::read_to_string(
+                root.join("platforms/windows/bin/ARM64/Release/jffi/custom_native.dll")
+            )
+            .unwrap(),
+            "aarch64-pc-windows-msvc"
+        );
+        assert_eq!(
+            fs::read_to_string(
+                root.join("platforms/windows/bin/x86/Release/jffi/custom_native.dll")
+            )
+            .unwrap(),
+            "i686-pc-windows-msvc"
+        );
+        assert!(!root.join("target/x86_64-pc-windows-msvc").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "subprocess worker for isolated environment and command shim tests"]
+    fn windows_build_review_worker() {
+        if std::env::var("JFFI_WINDOWS_REVIEW_WORKER").as_deref() != Ok("1") {
+            return;
+        }
+        super::build_windows_archs(&["aarch64", "i686"], &["ARM64", "x86"], true, "release")
+            .unwrap();
+    }
+
+    #[test]
+    fn windows_minimum_reaches_both_compiler_and_package_without_changing_sdk_ceiling() {
+        let source = "<TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>\n<TargetDeviceFamily Name=\"Windows.Desktop\" MinVersion=\"10.0.17763.0\" MaxVersionTested=\"10.0.26226.0\" />";
+        let changed = super::sync_windows_minimum(source, "10.0.19041.0");
+        assert!(!changed.contains("10.0.17763.0"));
+        assert!(changed.contains("MaxVersionTested=\"10.0.26226.0\""));
+        assert_eq!(
+            super::sync_windows_minimum(&changed, "10.0.19041.0"),
+            changed
+        );
+    }
+
+    #[test]
+    fn configured_windows_architectures_are_exact_and_strict() {
+        let selected = super::windows_architectures(&[
+            "aarch64-pc-windows-msvc".into(),
+            "i686-pc-windows-msvc".into(),
+        ])
+        .unwrap();
+        assert_eq!(selected, [("aarch64", "ARM64"), ("i686", "x86")]);
+        assert!(super::windows_architectures(&[]).is_err());
+        assert!(super::windows_architectures(&["x86_64-pc-windows-gnu".into()]).is_err());
+    }
+
     #[test]
     fn private_helpers_are_allowed_and_source_is_unchanged() {
         let root =

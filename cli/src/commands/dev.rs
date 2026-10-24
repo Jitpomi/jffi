@@ -21,7 +21,7 @@ pub fn watch_project(platform: &str) -> Result<()> {
 
     // Initial build (full build to ensure Xcode compatibility)
     println!("{}", "  → Initial Rust build...".bright_blue());
-    crate::commands::build::build_platform(platform, false)?;
+    crate::commands::build::build_project(Some(platform.to_string()), false, false, false, false)?;
     println!("{}", "  ✓ Build complete!".green());
     println!();
 
@@ -29,6 +29,7 @@ pub fn watch_project(platform: &str) -> Result<()> {
     let platform_enum = Platform::from_str(platform)
         .ok_or_else(|| anyhow::anyhow!("Unknown platform: {}", platform))?;
 
+    let mut linux_process = None;
     // Auto-open IDE or launch app
     if platform == "ios" {
         println!("{}", "  → Opening Xcode...".bright_blue());
@@ -46,7 +47,7 @@ pub fn watch_project(platform: &str) -> Result<()> {
         println!("   (Select your simulator/device and run)");
         println!();
         println!("   Development workflow:");
-        println!("   • Edit Swift files → Changes appear instantly (native hot reload)");
+        println!("   • Edit Swift files → Use Xcode previews or rebuild the app");
         println!("   • Edit Rust files → This watcher rebuilds → Press Cmd+B in Xcode");
         println!();
         println!("   Press Ctrl+C to stop watching");
@@ -67,7 +68,7 @@ pub fn watch_project(platform: &str) -> Result<()> {
         println!("   (Don't just look at the preview - actually run it)");
         println!();
         println!("   Development workflow:");
-        println!("   • Edit Swift files → Changes appear instantly (native hot reload)");
+        println!("   • Edit Swift files → Use Xcode previews or rebuild the app");
         println!("   • Edit Rust files → This watcher rebuilds → Press Cmd+B in Xcode");
         println!();
         println!("   Press Ctrl+C to stop watching");
@@ -94,7 +95,7 @@ pub fn watch_project(platform: &str) -> Result<()> {
         println!();
     } else if platform == "linux" {
         println!("{}", "  → Launching Linux app...".bright_blue());
-        launch_linux_app_background()?;
+        linux_process = Some(launch_linux_app_background()?);
         println!();
         println!("{}", "  ✓ App launched!".green());
         println!();
@@ -168,10 +169,15 @@ pub fn watch_project(platform: &str) -> Result<()> {
 
     // Watch entire core directory (catches src/, Cargo.toml, build.rs, .udl files, etc.)
     watcher.watch(Path::new("core"), RecursiveMode::Recursive)?;
+    if platform == "linux" {
+        watcher.watch(Path::new("platforms/linux"), RecursiveMode::Recursive)?;
+    }
 
     println!("{}", "  👀 Watching Rust project (core/)...".bright_cyan());
     println!();
 
+    let linux_ui_root = std::env::current_dir()?.join("platforms/linux");
+    let mut pending_linux_ui_restart: Option<std::time::Instant> = None;
     let mut last_rebuild = std::time::Instant::now();
     let debounce_duration = Duration::from_millis(500);
 
@@ -199,6 +205,23 @@ pub fn watch_project(platform: &str) -> Result<()> {
                             && !path_str.contains("core/src/android.rs")
                     });
 
+                    if platform == "linux"
+                        && event.paths.iter().all(|path| {
+                            path.starts_with(&linux_ui_root) || path.starts_with("platforms/linux")
+                        })
+                    {
+                        let ui_changed = event.paths.iter().any(|path| {
+                            path.extension().is_some_and(|ext| ext == "py")
+                                && path.file_name().is_some_and(|name| {
+                                    !name.to_string_lossy().ends_with("_core.py")
+                                })
+                                && !path.to_string_lossy().contains("__pycache__")
+                        });
+                        if ui_changed {
+                            pending_linux_ui_restart = Some(std::time::Instant::now());
+                        }
+                        continue;
+                    }
                     if !is_relevant_change {
                         continue;
                     }
@@ -240,7 +263,7 @@ pub fn watch_project(platform: &str) -> Result<()> {
                                         "{}",
                                         "  ✓ Rust rebuild complete! Restarting app...".green()
                                     );
-                                    match restart_linux_app() {
+                                    match restart_linux_app(&mut linux_process) {
                                         Ok(_) => {
                                             println!("{}", "  ✓ App restarted!".green());
                                         }
@@ -264,7 +287,9 @@ pub fn watch_project(platform: &str) -> Result<()> {
                                     println!("{}", "  ✓ Rust rebuild complete! Refresh your browser to use new code.".green());
                                 } else if platform == "windows" {
                                     // Copy updated FFI DLL to output directory for Visual Studio to pick up
-                                    let _ = copy_windows_ffi_dll();
+                                    if let Err(error) = copy_windows_ffi_dll() {
+                                        eprintln!("Native DLL reload failed: {}", error);
+                                    }
                                     println!("{}", "  ✓ Rust rebuild complete! Press F5 in Visual Studio to use new code.".green());
                                 } else {
                                     println!("{}", "  ✓ Rust rebuild complete!".green());
@@ -284,7 +309,17 @@ pub fn watch_project(platform: &str) -> Result<()> {
                 }
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                // Normal timeout, continue watching
+                if pending_linux_ui_restart
+                    .is_some_and(|changed| changed.elapsed() >= debounce_duration)
+                {
+                    pending_linux_ui_restart = None;
+                    if let Err(error) = restart_linux_app(&mut linux_process) {
+                        eprintln!(
+                            "Python UI restart failed: {}. Fix the source and save again.",
+                            error
+                        );
+                    }
+                }
                 continue;
             }
             Err(e) => {
@@ -370,7 +405,7 @@ pub fn rebuild_windows_rust_only() -> Result<()> {
     let bin_dir = std::env::current_dir()?.join("platforms/windows/bin");
     let is_first_build = !bin_dir.exists();
 
-    let target = detect_active_windows_platform().unwrap_or("x86_64-pc-windows-msvc");
+    let target = detect_host_windows_architecture();
 
     let platform_name = match target {
         "x86_64-pc-windows-msvc" => "x64",
@@ -425,107 +460,70 @@ pub fn detect_host_windows_architecture() -> &'static str {
     }
 }
 
-pub fn detect_active_windows_platform() -> Option<&'static str> {
-    // Check which platform directory was most recently modified in bin/
-    let bin_dir = std::env::current_dir().ok()?.join("platforms/windows/bin");
-    if !bin_dir.exists() {
-        // No builds yet - use host architecture as default
-        return Some(detect_host_windows_architecture());
-    }
-
-    let mut most_recent: Option<(std::time::SystemTime, &'static str)> = None;
-
-    // Map platform folder names to Rust targets
-    let platform_map = [
-        ("x64", "x86_64-pc-windows-msvc"),
-        ("x86", "i686-pc-windows-msvc"),
-        ("ARM64", "aarch64-pc-windows-msvc"),
-    ];
-
-    for (platform_name, rust_target) in &platform_map {
-        let platform_dir = bin_dir.join(platform_name);
-        if let Ok(metadata) = platform_dir.metadata() {
-            if let Ok(modified) = metadata.modified() {
-                if most_recent.is_none()
-                    || most_recent
-                        .as_ref()
-                        .map(|(t, _)| modified > *t)
-                        .unwrap_or(false)
-                {
-                    most_recent = Some((modified, rust_target));
-                }
-            }
-        }
-    }
-
-    // If no builds found, use host architecture
-    most_recent
-        .map(|(_, target)| target)
-        .or(Some(detect_host_windows_architecture()))
-}
-
 pub fn copy_windows_ffi_dll() -> Result<()> {
-    let project_dir = std::env::current_dir()?;
-
-    let lib_name = project_dir
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("core")
-        .replace('-', "_");
-
-    let dll_name = format!("{lib_name}_core.dll");
-
-    // Detect which platform was last built by checking bin/ directories
-    let target = detect_active_windows_platform().unwrap_or("x86_64-pc-windows-msvc");
-    let dll_source = project_dir
-        .join("target")
+    let name = crate::commands::build::core_library_name(Path::new("core/Cargo.toml"))?;
+    let target = detect_host_windows_architecture();
+    let platform = match target {
+        "i686-pc-windows-msvc" => "x86",
+        "aarch64-pc-windows-msvc" => "ARM64",
+        _ => "x64",
+    };
+    let source = Path::new("target")
         .join(target)
         .join("debug")
-        .join(&dll_name);
-
-    if !dll_source.exists() {
-        return Ok(()); // nothing to copy
+        .join(format!("{}.dll", name));
+    let destination = crate::platform::windows_output_dir(platform, false);
+    if !source.is_file() {
+        anyhow::bail!("Fresh Windows debug library missing: {}", source.display());
     }
-
-    // Find all output directories (MSBuild creates: bin/{platform}/{config}/{tfm}/win-{platform}/)
-    let bin_dir = project_dir.join("platforms").join("windows").join("bin");
-    if bin_dir.exists() {
-        for entry in std::fs::read_dir(&bin_dir)? {
-            let platform_dir = entry?.path();
-            if platform_dir.is_dir() {
-                // Look for Debug/Release subdirs
-                for config_entry in std::fs::read_dir(&platform_dir)? {
-                    let config_dir = config_entry?.path();
-                    if config_dir.is_dir() {
-                        // Look for TFM/win-{platform} subdirs
-                        for tfm_entry in std::fs::read_dir(&config_dir)? {
-                            let tfm_dir = tfm_entry?.path();
-                            if tfm_dir.is_dir() {
-                                for rid_entry in std::fs::read_dir(&tfm_dir)? {
-                                    let rid_dir = rid_entry?.path();
-                                    if rid_dir.is_dir()
-                                        && rid_dir
-                                            .file_name()
-                                            .and_then(|n| n.to_str())
-                                            .map(|n| n.starts_with("win-"))
-                                            .unwrap_or(false)
-                                    {
-                                        let dest = rid_dir.join(&dll_name);
-                                        std::fs::copy(&dll_source, &dest).ok(); // Ignore errors, directory might not exist yet
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
+    fs_copy_windows_library(&source, &destination.join(format!("{}.dll", name)))?;
+    fs_copy_windows_library(
+        &source,
+        &Path::new("platforms/windows").join(format!("{}.dll", name)),
+    )?;
     Ok(())
 }
 
-fn launch_linux_app_background() -> Result<()> {
+fn fs_copy_windows_library(source: &Path, destination: &Path) -> Result<()> {
+    std::fs::copy(source, destination).with_context(|| format!("Could not update {}. Stop the app/debugger in Visual Studio before reloading native code.", destination.display()))?;
+    Ok(())
+}
+
+/// Own the process so watcher errors and normal exits cannot abandon the app.
+struct LinuxApp {
+    child: std::process::Child,
+}
+
+impl LinuxApp {
+    fn stop(&mut self) -> Result<()> {
+        if self.child.try_wait()?.is_some() {
+            return Ok(());
+        }
+        // xvfb-run owns the Python and Xvfb processes directly. Stop only children
+        // of the process we launched; never match arbitrary Python command lines.
+        if cfg!(target_os = "linux") {
+            let _ = Command::new("pkill")
+                .args(["-TERM", "-P", &self.child.id().to_string()])
+                .status();
+        }
+        if let Err(error) = self.child.kill() {
+            // The xvfb wrapper may have exited after its child received TERM.
+            if self.child.try_wait()?.is_none() {
+                return Err(error.into());
+            }
+        }
+        self.child.wait()?;
+        Ok(())
+    }
+}
+
+impl Drop for LinuxApp {
+    fn drop(&mut self) {
+        let _ = self.stop();
+    }
+}
+
+fn launch_linux_app_background() -> Result<LinuxApp> {
     use std::process::Stdio;
 
     // Copy the .so file to platforms/linux
@@ -611,25 +609,22 @@ fn launch_linux_app_background() -> Result<()> {
         cmd.stdout(Stdio::null());
     }
 
-    cmd.spawn().context("Failed to launch app")?;
-
-    // Give it a moment to start
+    let mut app = LinuxApp {
+        child: cmd.spawn().context("Failed to launch app")?,
+    };
     std::thread::sleep(Duration::from_millis(500));
-
-    Ok(())
+    if let Some(status) = app.child.try_wait()? {
+        anyhow::bail!("Linux app exited during startup: {}", status);
+    }
+    Ok(app)
 }
 
-fn restart_linux_app() -> Result<()> {
-    // Kill existing processes
-    let _ = Command::new("pkill")
-        .args(["-f", "python3.*main.py"])
-        .status();
-
-    // Wait a moment for cleanup
-    std::thread::sleep(Duration::from_millis(200));
-
-    // Relaunch
-    launch_linux_app_background()
+fn restart_linux_app(app: &mut Option<LinuxApp>) -> Result<()> {
+    if let Some(mut previous) = app.take() {
+        previous.stop()?;
+    }
+    *app = Some(launch_linux_app_background()?);
+    Ok(())
 }
 
 fn touch_xcframework(platform: &str) -> Result<()> {
@@ -737,4 +732,43 @@ fn start_web_dev_server() -> Result<()> {
     println!();
 
     Ok(())
+}
+
+#[cfg(all(test, unix))]
+mod lifecycle_review_tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn stopping_owned_app_is_idempotent_and_leaves_other_processes_alive() {
+        let mut unrelated = LinuxApp {
+            child: Command::new("sleep").arg("30").spawn().unwrap(),
+        };
+        let mut owned = LinuxApp {
+            child: Command::new("sleep").arg("30").spawn().unwrap(),
+        };
+        owned.stop().unwrap();
+        owned.stop().unwrap();
+        assert!(owned.child.try_wait().unwrap().is_some());
+        assert!(unrelated.child.try_wait().unwrap().is_none());
+        unrelated.stop().unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dropping_owned_app_reaps_it_after_a_watcher_error() {
+        let child = Command::new("sleep").arg("30").spawn().unwrap();
+        let id = child.id();
+        {
+            let _app = LinuxApp { child };
+        }
+        let status = Command::new("kill")
+            .args(["-0", &id.to_string()])
+            .output()
+            .unwrap();
+        assert!(
+            !status.status.success(),
+            "the app should be stopped and reaped"
+        );
+    }
 }

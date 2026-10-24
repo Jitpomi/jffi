@@ -4,10 +4,26 @@ use std::process::Command;
 
 use crate::platform::Platform;
 
-pub fn run_project(platform_str: &str, device: bool, release: bool) -> Result<()> {
+pub fn run_project(
+    platform_str: &str,
+    device: bool,
+    release: bool,
+    device_id: Option<&str>,
+) -> Result<()> {
     let platform = Platform::from_str(platform_str)
         .ok_or_else(|| anyhow::anyhow!("Unknown platform: {}", platform_str))?;
 
+    if !platform.is_host_supported() {
+        anyhow::bail!("{} cannot be run on this host", platform.as_str());
+    }
+    if (device || device_id.is_some()) && !matches!(platform, Platform::Ios | Platform::Android) {
+        anyhow::bail!("--device and --device-id apply only to iOS and Android");
+    }
+    if device && platform == Platform::Ios && device_id.is_none() {
+        anyhow::bail!(
+            "Physical iOS runs require --device-id <UDID>; use xcrun devicectl list devices"
+        );
+    }
     let target_desc = if device && platform == Platform::Ios {
         "iOS Device"
     } else {
@@ -23,6 +39,17 @@ pub fn run_project(platform_str: &str, device: bool, release: bool) -> Result<()
 
     // Sync configurations to native projects before run
     let config = crate::config::load_config()?;
+    if !config
+        .platforms
+        .enabled
+        .iter()
+        .any(|enabled| enabled == platform.as_str())
+    {
+        anyhow::bail!(
+            "Platform '{}' is not enabled in jffi.toml",
+            platform.as_str()
+        );
+    }
     crate::commands::build::sync_configs_to_platforms(&config)?;
 
     // Build first
@@ -30,7 +57,7 @@ pub fn run_project(platform_str: &str, device: bool, release: bool) -> Result<()
         Some(platform_str.to_string()),
         false,
         release,
-        device,
+        device && platform == Platform::Ios,
         false,
     )?;
 
@@ -43,65 +70,72 @@ pub fn run_project(platform_str: &str, device: bool, release: bool) -> Result<()
     );
 
     match platform {
-        Platform::Ios if device => run_ios_device(),
-        Platform::Ios => run_ios(),
-        Platform::Macos => run_macos(),
-        Platform::Android => run_android(),
-        Platform::Windows => run_windows(),
-        Platform::Linux => run_linux(),
+        Platform::Ios if device => run_ios_device(release, device_id),
+        Platform::Ios => run_ios(release, device_id),
+        Platform::Macos => run_macos(release),
+        Platform::Android => run_android(release, device, device_id),
+        Platform::Windows => run_windows(release),
+        Platform::Linux => run_linux(release),
         Platform::Web => run_web(),
     }
 }
 
-fn run_ios_device() -> Result<()> {
+fn run_ios_device(release: bool, device_id: Option<&str>) -> Result<()> {
     use crate::platform::XcodeProject;
 
     println!("  {} Finding Xcode project...", "→".bright_blue());
     let project = XcodeProject::find(crate::platform::Platform::Ios)?;
 
-    println!(
-        "  {} Building and deploying to device...",
-        "→".bright_blue()
-    );
-    println!();
-    println!(
-        "{}",
-        "  Note: Make sure your device is connected and trusted.".yellow()
-    );
-    println!(
-        "{}",
-        "  You may need to configure code signing in Xcode first.".yellow()
-    );
-    println!();
-
-    project
-        .build("generic/platform=iOS", &[])
-        .context("Build failed. Make sure code signing is configured in Xcode.")?;
-
-    println!();
-    println!("{}", "  ✅ Build complete!".green());
-    println!();
-    println!("{}", "  To deploy to your device:".bright_cyan());
-    println!("  1. Open Xcode");
-    println!("  2. Select your connected device");
-    println!("  3. Press Cmd+R to run");
-    println!();
-    println!(
-        "{}",
-        "  Or use Xcode directly for automatic deployment.".bright_cyan()
-    );
-
+    let id = device_id.context("Pass --device-id <identifier> from `xcrun devicectl list devices` for a physical iOS device")?;
+    let destination = format!("id={}", id);
+    project.build(
+        &destination,
+        &[
+            "-configuration",
+            native_configuration(release),
+            "-derivedDataPath",
+            "target/jffi/xcode/ios-device",
+            "-allowProvisioningUpdates",
+        ],
+    )?;
+    let app = std::path::PathBuf::from("target/jffi/xcode/ios-device/Build/Products")
+        .join(format!("{}-iphoneos", native_configuration(release)))
+        .join(format!("{}.app", project.scheme));
+    let config = crate::config::load_config()?;
+    let bundle_id = config
+        .bundle
+        .as_ref()
+        .and_then(|b| b.identifier.as_deref())
+        .unwrap_or(&config.platforms.ios.bundle_id);
+    checked_status(
+        Command::new("xcrun")
+            .args(["devicectl", "device", "install", "app", "--device", id])
+            .arg(&app),
+        "iOS device installation",
+    )?;
+    checked_status(
+        Command::new("xcrun").args([
+            "devicectl",
+            "device",
+            "process",
+            "launch",
+            "--device",
+            id,
+            bundle_id,
+        ]),
+        "iOS device launch",
+    )?;
     Ok(())
 }
 
-fn run_ios() -> Result<()> {
-    use crate::platform::{find_ios_app_bundle, IOSSimulator, XcodeProject};
+fn run_ios(release: bool, device_id: Option<&str>) -> Result<()> {
+    use crate::platform::{IOSSimulator, XcodeProject};
 
     println!("  {} Finding Xcode project...", "→".bright_blue());
     let project = XcodeProject::find(crate::platform::Platform::Ios)?;
 
     println!("  {} Finding available simulator...", "→".bright_blue());
-    let (simulator_name, simulator_id) = IOSSimulator::get_available()?;
+    let (simulator_name, simulator_id) = IOSSimulator::get_available(device_id)?;
     println!(
         "  {} Using simulator: {}",
         "→".bright_blue(),
@@ -114,22 +148,28 @@ fn run_ios() -> Result<()> {
     );
 
     let destination = format!("platform=iOS Simulator,id={}", simulator_id);
-    project.build(&destination, &["CODE_SIGN_IDENTITY=-"])?;
+    project.build(
+        &destination,
+        &[
+            "CODE_SIGN_IDENTITY=-",
+            "-configuration",
+            native_configuration(release),
+            "-derivedDataPath",
+            "target/jffi/xcode/ios",
+        ],
+    )?;
 
     let app_name = &project.scheme;
 
     println!("  {} Launching app in simulator...", "→".bright_blue());
 
     // Find the built app
-    let app_path = find_ios_app_bundle(app_name)?;
+    let app_path = apple_app_path("ios", app_name, release);
 
     // Use simulator abstraction
     let sim = IOSSimulator;
     sim.boot(&simulator_id)?;
     sim.open_app()?;
-
-    // Give simulator time to boot
-    std::thread::sleep(std::time::Duration::from_secs(3));
 
     // Get bundle ID from config
     let config = crate::config::load_config()?;
@@ -141,16 +181,16 @@ fn run_ios() -> Result<()> {
 
     // Install and launch with retry logic
     for attempt in 0..3 {
-        sim.install_app(&app_path)?;
+        sim.install_app(&simulator_id, &app_path)?;
         sim.open_app()?; // Bring to foreground
 
-        match sim.launch_app(&bundle_id) {
+        match sim.launch_app(&simulator_id, &bundle_id) {
             Ok(_) => break,
             Err(e) if attempt < 2 => {
                 eprintln!("  ⚠ Launch failed (attempt {}/3): {}", attempt + 1, e);
                 eprintln!("  → Cleaning up and retrying...");
                 let _ = Command::new("xcrun")
-                    .args(["simctl", "uninstall", "booted", &bundle_id])
+                    .args(["simctl", "uninstall", &simulator_id, &bundle_id])
                     .status();
                 std::thread::sleep(std::time::Duration::from_secs(2));
             }
@@ -164,42 +204,43 @@ fn run_ios() -> Result<()> {
     Ok(())
 }
 
-fn run_android() -> Result<()> {
+fn run_android(release: bool, physical: bool, device_id: Option<&str>) -> Result<()> {
     use crate::platform::AndroidProject;
 
-    println!("  {} Preparing Android emulator...", "→".bright_blue());
+    println!("  {} Preparing Android device...", "→".bright_blue());
 
     let android = AndroidProject::find()?;
 
-    // Find emulator command
-    let emulator_cmd = android.find_tool("emulator")
-        .context("Android SDK emulator not found. Please install Android Studio and ensure the SDK is set up.")?;
-
-    // Find adb command
     let adb_cmd = android
         .find_tool("adb")
-        .context("adb not found. Please install Android SDK platform-tools.")?;
-
-    let get_emulator_serial = |adb_path: &str| -> Option<String> {
-        let output = Command::new(adb_path).arg("devices").output().ok()?;
-        let stdout_str = String::from_utf8_lossy(&output.stdout);
-        stdout_str
-            .lines()
-            .skip(1) // Skip header
-            .find(|line| line.contains("emulator") && line.contains("device"))
-            .and_then(|line| line.split_whitespace().next().map(|s| s.to_string()))
+        .context("adb not found. Install Android SDK platform-tools.")?;
+    let get_serial = |adb_path: &str| -> Result<Option<String>> {
+        let output = Command::new(adb_path).arg("devices").output()?;
+        if !output.status.success() {
+            anyhow::bail!("adb devices failed");
+        }
+        select_android_device(
+            &String::from_utf8_lossy(&output.stdout),
+            physical,
+            device_id,
+        )
     };
-
-    // Check if an emulator is already running
-    let mut serial = get_emulator_serial(&adb_cmd);
-
+    let mut serial = get_serial(&adb_cmd)?;
+    if serial.is_none() && (physical || device_id.is_some()) {
+        anyhow::bail!(
+            "Requested Android device is not connected and authorized; check `adb devices`"
+        );
+    }
     if let Some(ref s) = serial {
         println!(
-            "  {} Using already-running emulator: {}",
+            "  {} Using Android device: {}",
             "→".bright_blue(),
             s.bright_cyan()
         );
     } else {
+        let emulator_cmd = android
+            .find_tool("emulator")
+            .context("No running emulator; install an Android Virtual Device in Android Studio")?;
         // Check if emulator is available
         let emulator_output = Command::new(&emulator_cmd)
             .arg("-list-avds")
@@ -241,15 +282,20 @@ fn run_android() -> Result<()> {
         println!("  {} Waiting for emulator to boot...", "→".bright_blue());
         std::thread::sleep(std::time::Duration::from_secs(5));
 
-        serial = get_emulator_serial(&adb_cmd);
+        serial = get_serial(&adb_cmd)?;
     }
 
+    let mut ready = false;
     // Wait for device to be ready
     for i in 1..=30 {
         if serial.is_none() {
-            serial = get_emulator_serial(&adb_cmd);
+            serial = get_serial(&adb_cmd)?;
         }
 
+        if serial.is_none() {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            continue;
+        }
         let mut check_cmd = Command::new(&adb_cmd);
         if let Some(ref s) = serial {
             check_cmd.args(["-s", s]);
@@ -258,6 +304,7 @@ fn run_android() -> Result<()> {
 
         if let Ok(output) = check_cmd.output() {
             if String::from_utf8_lossy(&output.stdout).trim() == "1" {
+                ready = true;
                 break;
             }
         }
@@ -266,6 +313,10 @@ fn run_android() -> Result<()> {
             println!("  {} Still waiting... ({}/30s)", "→".bright_blue(), i);
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
+    if !ready {
+        anyhow::bail!("Android device did not finish booting within 30 seconds");
     }
 
     println!("  {} Building APK with Gradle...", "→".bright_blue());
@@ -315,11 +366,30 @@ fn run_android() -> Result<()> {
     use std::process::Stdio;
     let verbose = std::env::var("JFFI_VERBOSE").is_ok();
 
-    let mut gradle_cmd = Command::new("bash");
-    gradle_cmd.arg("-c").arg(format!(
-        "cd {} && export ANDROID_HOME=~/Library/Android/sdk && ./gradlew assembleDebug",
-        android_dir.display()
-    ));
+    let mut gradle_cmd = if cfg!(windows) {
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/C", "gradlew.bat"]);
+        cmd
+    } else {
+        let mut cmd = Command::new("sh");
+        cmd.arg("gradlew");
+        cmd
+    };
+    gradle_cmd.current_dir(android_dir);
+    if release {
+        // Local release runs use the development key; distribution uses `bundle` profiles.
+        let init_dir = std::env::current_dir()?.join("target/jffi/generated/android");
+        std::fs::create_dir_all(&init_dir)?;
+        let init_script = init_dir.join("run-release.gradle");
+        std::fs::write(&init_script, "allprojects { p -> p.plugins.withId('com.android.application') { p.extensions.getByName('androidComponents').finalizeDsl { android -> android.buildTypes.getByName('release').signingConfig = android.signingConfigs.getByName('debug') } } }\n")?;
+        gradle_cmd.arg("--init-script").arg(init_script);
+        println!("  Local release run uses the Android development signing key; use jffi bundle for distribution.");
+    }
+    gradle_cmd.arg(if release {
+        "assembleRelease"
+    } else {
+        "assembleDebug"
+    });
     if !verbose {
         gradle_cmd.stdout(Stdio::null()).stderr(Stdio::null());
     }
@@ -330,10 +400,13 @@ fn run_android() -> Result<()> {
         anyhow::bail!("Gradle build failed. Check the error messages above.");
     }
 
-    println!("  {} Installing APK to emulator...", "→".bright_blue());
+    println!("  {} Installing APK to device...", "→".bright_blue());
 
     // Find the built APK
-    let apk_path = android_dir.join("app/build/outputs/apk/debug/app-debug.apk");
+    let apk_path = android_dir.join(format!(
+        "app/build/outputs/apk/{0}/app-{0}.apk",
+        cargo_profile(release)
+    ));
 
     if !apk_path.exists() {
         anyhow::bail!("APK not found at: {}", apk_path.display());
@@ -360,7 +433,7 @@ fn run_android() -> Result<()> {
         } else {
             stderr.trim()
         };
-        anyhow::bail!("Failed to install APK on emulator: {details}");
+        anyhow::bail!("Failed to install APK on device: {details}");
     }
 
     println!("  {} Launching app...", "→".bright_blue());
@@ -381,7 +454,7 @@ fn run_android() -> Result<()> {
     if let Some(ref s) = serial {
         launch_cmd.args(["-s", s]);
     }
-    launch_cmd
+    let launch_status = launch_cmd
         .args([
             "shell",
             "am",
@@ -391,15 +464,18 @@ fn run_android() -> Result<()> {
         ])
         .status()
         .context("Failed to launch app")?;
+    if !launch_status.success() {
+        anyhow::bail!("Android activity launch failed");
+    }
 
     println!();
-    println!("{}", "  ✅ App launched on emulator!".green());
+    println!("{}", "  ✅ App launched on device!".green());
     println!();
 
     Ok(())
 }
 
-fn run_macos() -> Result<()> {
+fn run_macos(release: bool) -> Result<()> {
     use crate::platform::XcodeProject;
 
     println!("  {} Finding Xcode project...", "→".bright_blue());
@@ -409,33 +485,21 @@ fn run_macos() -> Result<()> {
         "  {} Building and launching macOS app...",
         "→".bright_blue()
     );
-    project.build("", &["CODE_SIGN_IDENTITY=-"])?; // No destination needed for macOS
+    project.build(
+        "",
+        &[
+            "CODE_SIGN_IDENTITY=-",
+            "-configuration",
+            native_configuration(release),
+            "-derivedDataPath",
+            "target/jffi/xcode/macos",
+        ],
+    )?; // No destination needed for macOS
 
     println!("  {} Launching app...", "→".bright_blue());
-    let home = std::env::var("HOME").context("HOME is not set; cannot locate Xcode DerivedData")?;
-    let derived_data = format!("{}/Library/Developer/Xcode/DerivedData", home);
+    let app_path = apple_app_path("macos", &project.scheme, release);
 
-    let app_path = std::fs::read_dir(&derived_data)
-        .context("Could not read DerivedData directory")?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_name().to_string_lossy().starts_with(&project.scheme))
-        .find_map(|project_dir| {
-            let app_path = project_dir
-                .path()
-                .join("Build/Products/Debug")
-                .join(format!("{}.app", project.scheme));
-            if app_path.exists() {
-                Some(app_path)
-            } else {
-                None
-            }
-        })
-        .context("Could not find built .app bundle")?;
-
-    Command::new("open")
-        .arg(&app_path)
-        .status()
-        .context("Failed to open app")?;
+    checked_status(Command::new("open").arg(&app_path), "macOS app launch")?;
 
     println!();
     println!("{}", "  ✅ macOS app launched!".green());
@@ -443,20 +507,7 @@ fn run_macos() -> Result<()> {
     Ok(())
 }
 
-fn launch_windows_app() -> Result<()> {
-    use std::process::{Command, Stdio};
-
-    let windows_dir = std::env::current_dir()?.join("platforms/windows");
-    let verbose = std::env::var("JFFI_VERBOSE").is_ok();
-
-    // Deploy and launch the MSIX package via PowerShell
-    // Detects host architecture and deploys only the matching build
-    let mut ps_cmd = Command::new("powershell");
-    ps_cmd.args([
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            r#"
+const WINDOWS_LAUNCH_SCRIPT: &str = r#"
             $ErrorActionPreference = 'Stop'
 
             # Detect host architecture
@@ -471,7 +522,7 @@ fn launch_windows_app() -> Result<()> {
             Write-Host "Detected architecture: $arch → $platformDir"
 
             # Look for AppxManifest.xml in the matching platform directory
-            $manifest = Get-ChildItem -Path "bin\$platformDir" -Recurse -Filter AppxManifest.xml | Select-Object -First 1
+            $manifest = Get-Item -LiteralPath (Join-Path $env:JFFI_RUN_OUTPUT 'AppxManifest.xml')
             if (-not $manifest) { 
                 throw "AppxManifest.xml not found for $platformDir. Build the project first with: jffi build --platform windows" 
             }
@@ -482,16 +533,8 @@ fn launch_windows_app() -> Result<()> {
             $xml = [xml](Get-Content $manifest.FullName)
             $identity = $xml.Package.Identity.Name
             
-            # ALWAYS remove any existing package to clear Windows package resource caches (icons, resources.pri)
-            $pkg = Get-AppxPackage -Name $identity
-            if ($pkg) {
-                Write-Host "Removing existing package to clear resource caches..."
-                Remove-AppxPackage $pkg.PackageFullName -ErrorAction SilentlyContinue
-            }
-
-            # Register the new build
-            Write-Host "Registering package from manifest..."
-            Add-AppxPackage -Register $manifest.FullName -ForceApplicationShutdown
+            # Register/update in place. Uninstalling here would discard application data.
+            Add-AppxPackage -Register $manifest.FullName -ForceApplicationShutdown -ForceUpdateFromAnyVersion
 
             # Get the Application ID from manifest
             $appId = $xml.Package.Applications.Application.Id
@@ -508,9 +551,40 @@ fn launch_windows_app() -> Result<()> {
             Write-Host "Package Family Name: $packageFamilyName"
             Write-Host "Launching: $aumid"
             Start-Process "shell:AppsFolder\$aumid"
-            "#
+            "#;
+
+fn windows_host_platform() -> &'static str {
+    match std::env::var("PROCESSOR_ARCHITECTURE").as_deref() {
+        Ok("x86") => "x86",
+        Ok("ARM64") => "ARM64",
+        _ => "x64",
+    }
+}
+
+fn launch_windows_app(release: bool) -> Result<()> {
+    use std::process::{Command, Stdio};
+
+    let windows_dir = std::env::current_dir()?.join("platforms/windows");
+    let verbose = std::env::var("JFFI_VERBOSE").is_ok();
+
+    // Deploy and launch the MSIX package via PowerShell
+    // Detects host architecture and deploys only the matching build
+    let mut ps_cmd = Command::new("powershell");
+    ps_cmd
+        .args([
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            WINDOWS_LAUNCH_SCRIPT,
         ])
-        .current_dir(&windows_dir);
+        .current_dir(&windows_dir)
+        .env(
+            "JFFI_RUN_OUTPUT",
+            std::env::current_dir()?.join(crate::platform::windows_output_dir(
+                windows_host_platform(),
+                release,
+            )),
+        );
 
     if !verbose {
         ps_cmd.stdout(Stdio::null()).stderr(Stdio::null());
@@ -525,13 +599,13 @@ fn launch_windows_app() -> Result<()> {
     Ok(())
 }
 
-fn run_windows() -> Result<()> {
+fn run_windows(release: bool) -> Result<()> {
     // Build project for host/active architecture (handles icons generation, uniffi cs, and msbuild)
     println!(
         "  {} Building Windows app (host architecture)...",
         "→".bright_blue()
     );
-    crate::commands::build::build_project(Some("windows".to_string()), false, false, false, false)?;
+    // Already built with the requested configuration by run_project.
 
     println!();
     println!(
@@ -539,7 +613,7 @@ fn run_windows() -> Result<()> {
         "  🚀 Deploying and launching Windows app...".bright_cyan()
     );
 
-    launch_windows_app()?;
+    launch_windows_app(release)?;
 
     println!();
     println!("{}", "  ✅ App launched!".green());
@@ -547,54 +621,10 @@ fn run_windows() -> Result<()> {
     Ok(())
 }
 
-fn run_linux() -> Result<()> {
-    println!("  {} Checking Linux dependencies...", "→".bright_blue());
-
-    // Check for build tools (gcc)
-    let needs_setup = !Command::new("gcc")
-        .arg("--version")
-        .output()?
-        .status
-        .success()
-        || !Command::new("python3")
-            .arg("--version")
-            .output()?
-            .status
-            .success()
-        || !Command::new("pkg-config")
-            .args(["--exists", "gtk4"])
-            .output()?
-            .status
-            .success();
-
-    if needs_setup {
-        use std::process::Stdio;
-        let verbose = std::env::var("JFFI_VERBOSE").is_ok();
-
-        println!(
-            "  {} Missing dependencies. Running setup script...",
-            "→".bright_blue()
-        );
-
-        let mut setup_cmd = Command::new("bash");
-        setup_cmd.arg("platforms/linux/setup.sh");
-        if !verbose {
-            setup_cmd.stdout(Stdio::null()).stderr(Stdio::null());
-        }
-
-        let status = setup_cmd.status().context("Failed to run setup script")?;
-
-        if !status.success() {
-            anyhow::bail!("Dependency installation failed. Run: cd platforms/linux && ./setup.sh");
-        }
-    }
-
-    // Build the Rust FFI library
-    println!("  {} Building Rust FFI library...", "→".bright_blue());
-    crate::commands::build::build_project(Some("linux".to_string()), false, false, false, false)?;
-
+fn run_linux(release: bool) -> Result<()> {
+    // run_project has already checked prerequisites and built the requested profile.
     // Copy the .so file to platforms/linux with the correct name
-    let lib_path = std::fs::read_dir("target/debug")
+    let lib_path = std::fs::read_dir(format!("target/{}", cargo_profile(release)))
         .context("Failed to read target directory")?
         .filter_map(|e| e.ok())
         .find(|e| {
@@ -686,10 +716,6 @@ fn run_linux() -> Result<()> {
 }
 
 fn run_web() -> Result<()> {
-    // Build the WASM first
-    println!("  {} Building Rust FFI library...", "→".bright_blue());
-    crate::commands::build::build_project(Some("web".to_string()), false, false, false, false)?;
-
     // Check if npm is installed
     let npm_check = Command::new("npm").arg("--version").output();
 
@@ -775,4 +801,126 @@ fn run_web() -> Result<()> {
 
     println!("{}", "  ✅ Web server stopped".green());
     Ok(())
+}
+
+fn cargo_profile(release: bool) -> &'static str {
+    if release {
+        "release"
+    } else {
+        "debug"
+    }
+}
+
+fn native_configuration(release: bool) -> &'static str {
+    if release {
+        "Release"
+    } else {
+        "Debug"
+    }
+}
+
+fn apple_app_path(platform: &str, name: &str, release: bool) -> std::path::PathBuf {
+    let configuration = native_configuration(release);
+    let products = if platform == "ios" {
+        format!("{}-iphonesimulator", configuration)
+    } else {
+        configuration.to_string()
+    };
+    std::path::PathBuf::from("target/jffi/xcode")
+        .join(platform)
+        .join("Build/Products")
+        .join(products)
+        .join(format!("{}.app", name))
+}
+
+fn checked_status(command: &mut Command, operation: &str) -> Result<()> {
+    if !command
+        .status()
+        .with_context(|| format!("Failed to execute {}", operation))?
+        .success()
+    {
+        anyhow::bail!("{} failed", operation);
+    }
+    Ok(())
+}
+
+fn select_android_device(
+    output: &str,
+    physical: bool,
+    requested: Option<&str>,
+) -> Result<Option<String>> {
+    let candidates: Vec<&str> = output
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let id = fields.next()?;
+            if fields.next()? != "device" {
+                return None;
+            }
+            if let Some(requested) = requested {
+                return (id == requested && (!physical || !id.starts_with("emulator-")))
+                    .then_some(id);
+            }
+            (physical != id.starts_with("emulator-")).then_some(id)
+        })
+        .collect();
+    if candidates.len() > 1 {
+        anyhow::bail!(
+            "Multiple Android devices match: {}. Pass --device-id",
+            candidates.join(", ")
+        );
+    }
+    Ok(candidates.first().map(|id| id.to_string()))
+}
+
+#[cfg(test)]
+mod parity_tests {
+    use super::*;
+    #[test]
+    fn windows_registration_preserves_user_data_and_uses_the_selected_output() {
+        assert!(!super::WINDOWS_LAUNCH_SCRIPT.contains("Remove-AppxPackage"));
+        assert!(!super::WINDOWS_LAUNCH_SCRIPT.contains("Get-ChildItem"));
+        assert!(super::WINDOWS_LAUNCH_SCRIPT.contains("$env:JFFI_RUN_OUTPUT"));
+        assert!(super::WINDOWS_LAUNCH_SCRIPT.contains("-ForceUpdateFromAnyVersion"));
+    }
+
+    #[test]
+    fn release_apple_paths_do_not_fall_back_to_debug() {
+        assert_eq!(
+            apple_app_path("ios", "Sample", true),
+            std::path::PathBuf::from(
+                "target/jffi/xcode/ios/Build/Products/Release-iphonesimulator/Sample.app"
+            )
+        );
+        assert_eq!(
+            apple_app_path("macos", "Sample", false),
+            std::path::PathBuf::from("target/jffi/xcode/macos/Build/Products/Debug/Sample.app")
+        );
+    }
+    #[test]
+    fn android_selection_handles_physical_emulated_and_unauthorized_devices() {
+        let devices = "List of devices attached\nemulator-5554\tdevice\nphone-1\tdevice\nphone-2\tunauthorized\n";
+        assert_eq!(
+            select_android_device(devices, true, None)
+                .unwrap()
+                .as_deref(),
+            Some("phone-1")
+        );
+        assert_eq!(
+            select_android_device(devices, false, None)
+                .unwrap()
+                .as_deref(),
+            Some("emulator-5554")
+        );
+        assert_eq!(
+            select_android_device(devices, false, Some("phone-1"))
+                .unwrap()
+                .as_deref(),
+            Some("phone-1")
+        );
+        assert!(select_android_device(devices, true, Some("phone-2"))
+            .unwrap()
+            .is_none());
+        assert!(select_android_device("one device\ntwo device", true, None).is_err());
+    }
 }

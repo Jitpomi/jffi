@@ -75,3 +75,88 @@ jobs:
       - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  native-generated-app:
+    name: Native generated app (${{ matrix.platform }}, ${{ matrix.os }})
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, platform: macos, platforms: 'macos,windows' }
+          - { os: macos-latest, platform: ios, platforms: ios }
+          - { os: ubuntu-latest, platform: android, platforms: android }
+          - { os: windows-latest, platform: windows, platforms: windows }
+          - { os: ubuntu-latest, platform: linux, platforms: linux }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Build CLI and generate native project
+        shell: bash
+        env:
+          NATIVE_PLATFORMS: ${{ matrix.platforms }}
+        run: |
+          cargo build --locked
+          target/debug/jffi new native-smoke --template hello --platforms "$NATIVE_PLATFORMS" --path "$RUNNER_TEMP/native-smoke" --no-build
+      - name: Configure non-placeholder package identifiers
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          p = Path(os.environ['RUNNER_TEMP']) / 'native-smoke' / 'jffi.toml'
+          s = p.read_text().replace('com.example.', 'com.jitpomi.ci.')
+          s = s.replace('version = "0.1.0"', 'version = "0.1.0"\nrelease_date = "2026-10-24"', 1)
+          s += '\n[bundle]\nidentifier = "com.jitpomi.ci.nativesmoke"\n'
+          s += '\n[bundle.windows]\nformats = ["msix"]\ntargets = ["x86_64-pc-windows-msvc"]\nidentity_name = "Jitpomi.NativeSmoke"\npublisher_id = "CN=JitpomiCI"\n'
+          p.write_text(s)
+      - name: Prepare Android SDK
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Prepare and build native bindings/application
+        shell: bash
+        env:
+          NATIVE_PLATFORM: ${{ matrix.platform }}
+        run: |
+          export PATH="$GITHUB_WORKSPACE/target/debug:$PATH"
+          cd "$RUNNER_TEMP/native-smoke"
+          cargo generate-lockfile
+          jffi setup --platform "$NATIVE_PLATFORM"
+          jffi build --platform "$NATIVE_PLATFORM" --release
+      - name: Compile Apple UI
+        if: matrix.platform == 'macos' || matrix.platform == 'ios'
+        shell: bash
+        env:
+          NATIVE_PLATFORM: ${{ matrix.platform }}
+        run: |
+          cd "$RUNNER_TEMP/native-smoke"
+          if [ "$NATIVE_PLATFORM" = ios ]; then
+            destination='generic/platform=iOS Simulator'
+          else
+            destination='generic/platform=macOS'
+          fi
+          xcodebuild -project "platforms/$NATIVE_PLATFORM/NativeSmoke.xcodeproj" -scheme NativeSmoke -configuration Release -destination "$destination" -derivedDataPath target/native-ci CODE_SIGNING_ALLOWED=NO build
+      - name: Compile Android UI and APK
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP/native-smoke/platforms/android"
+          "$JAVA_HOME/bin/java" -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain assembleDebug
+          test -s app/build/outputs/apk/debug/app-debug.apk
+      - name: Build unsigned native package
+        if: matrix.platform != 'android'
+        shell: bash
+        env:
+          NATIVE_PLATFORM: ${{ matrix.platform }}
+        run: |
+          export PATH="$GITHUB_WORKSPACE/target/debug:$PATH"
+          cd "$RUNNER_TEMP/native-smoke"
+          case "$NATIVE_PLATFORM" in
+            ios) jffi bundle --platform ios --format xcarchive --no-sign ;;
+            macos) jffi bundle --platform macos --format app --no-sign ;;
+            *) jffi bundle --platform "$NATIVE_PLATFORM" --no-sign ;;
+          esac

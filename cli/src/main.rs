@@ -51,7 +51,7 @@ enum Commands {
 
     /// Build the app for specific platform(s)
     Build {
-        /// Platform to build (ios, android, macos-arm64, macos-x64, windows-x64, windows-x86, linux, web)
+        /// Platform to build (ios, android, macos, windows, linux, web)
         #[arg(short, long)]
         platform: Option<String>,
 
@@ -63,7 +63,7 @@ enum Commands {
         #[arg(short, long)]
         release: bool,
 
-        /// Build for physical device (iOS only)
+        /// Prepare iOS libraries (the XCFramework includes device and simulator slices)
         #[arg(short, long)]
         device: bool,
 
@@ -93,9 +93,13 @@ enum Commands {
         #[arg(short, long, default_value = "ios")]
         platform: String,
 
-        /// Run on physical device (iOS only)
+        /// Run on a physical iOS or Android device
         #[arg(short, long)]
         device: bool,
+
+        /// Simulator UDID or connected device identifier (Android adb serial)
+        #[arg(long)]
+        device_id: Option<String>,
 
         /// Show verbose build output
         #[arg(short, long)]
@@ -116,9 +120,13 @@ enum Commands {
         #[arg(short, long, default_value = "ios")]
         platform: String,
 
-        /// Debug on a physical device (iOS only)
+        /// Run diagnostics on a physical iOS or Android device
         #[arg(short, long)]
         device: bool,
+
+        /// Simulator UDID or connected device identifier (Android adb serial)
+        #[arg(long)]
+        device_id: Option<String>,
 
         /// Skip auto-generation of Android ndk-context JNI bridge
         #[arg(long)]
@@ -212,7 +220,7 @@ enum Commands {
         platform: String,
     },
 
-    /// Generate Apple App Store and Google Play screenshots
+    /// Resize existing playstore-assets PNGs into Apple screenshot dimensions
     Screenshots,
 }
 
@@ -272,6 +280,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Run {
             platform,
             device,
+            device_id,
             verbose,
             no_android_bridge,
             release,
@@ -282,19 +291,21 @@ fn main() -> anyhow::Result<()> {
             if no_android_bridge {
                 std::env::set_var("JFFI_NO_ANDROID_BRIDGE", "1");
             }
-            commands::run::run_project(&platform, device, release)?;
+            commands::run::run_project(&platform, device, release, device_id.as_deref())?;
         }
         Commands::Debug {
             platform,
             device,
+            device_id,
             no_android_bridge,
         } => {
             std::env::set_var("JFFI_VERBOSE", "1");
             std::env::set_var("RUST_BACKTRACE", "1");
+            println!("Debug diagnostics enabled. This command does not attach a debugger; use your native IDE for breakpoints.");
             if no_android_bridge {
                 std::env::set_var("JFFI_NO_ANDROID_BRIDGE", "1");
             }
-            commands::run::run_project(&platform, device, false)?;
+            commands::run::run_project(&platform, device, false, device_id.as_deref())?;
         }
         Commands::Dev {
             platform,
@@ -352,7 +363,12 @@ fn main() -> anyhow::Result<()> {
         Commands::Icons { platform } => {
             let config = crate::config::load_config()?;
             if platform == "all" {
-                let platforms = vec!["ios", "android", "macos", "windows", "linux", "web"];
+                let platforms: Vec<&str> = config
+                    .platforms
+                    .enabled
+                    .iter()
+                    .map(String::as_str)
+                    .collect();
                 for p in platforms {
                     crate::commands::icons::generate_icons(&config, p)?;
                 }

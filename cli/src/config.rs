@@ -335,6 +335,19 @@ pub struct BundleLinuxConfig {
     pub icon: Option<String>,
 }
 
+impl Default for BundleLinuxConfig {
+    fn default() -> Self {
+        Self {
+            formats: default_linux_formats(),
+            app_id: None,
+            runtime: default_linux_runtime(),
+            runtime_version: default_linux_runtime_version(),
+            sdk: default_linux_sdk(),
+            icon: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BundleWebConfig {
@@ -362,6 +375,14 @@ pub struct SigningProfile {
     pub apple: Option<AppleSigningProfile>,
     pub android: Option<AndroidSigningProfile>,
     pub windows: Option<WindowsSigningProfile>,
+    pub linux: Option<LinuxSigningProfile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LinuxSigningProfile {
+    pub gpg_key: String,
+    pub gpg_homedir: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -495,6 +516,34 @@ pub fn load_config() -> Result<Config> {
         );
     }
 
+    if config.platforms.enabled.iter().any(|p| p == "linux")
+        && config.platforms.linux.gtk_version != "4.0"
+    {
+        anyhow::bail!("JFFI's Linux template requires gtk_version = '4.0'");
+    }
+    if config.platforms.enabled.iter().any(|p| p == "windows") {
+        let version = &config.platforms.windows.min_version;
+        if version.split('.').count() != 4
+            || !version
+                .split('.')
+                .all(|part| !part.is_empty() && part.chars().all(|ch| ch.is_ascii_digit()))
+        {
+            anyhow::bail!(
+                "platforms.windows.min_version must be a four-part numeric Windows version"
+            );
+        }
+    }
+    for platform in &config.platforms.enabled {
+        if !crate::platform::Platform::ALL
+            .iter()
+            .any(|p| p.as_str() == platform)
+        {
+            anyhow::bail!(
+                "Unknown enabled platform '{}'; use a canonical platform name",
+                platform
+            );
+        }
+    }
     Ok(config)
 }
 

@@ -80,7 +80,7 @@ jffi bundle --platform macos
 jffi bundle --platform windows
 
 # Bundle for Linux (creates a Flatpak)
-jffi bundle --platform linux
+jffi bundle --platform linux --no-sign  # Or configure a Linux GPG signing profile
 
 # Bundle for Android (creates an .aab or .apk)
 jffi bundle --platform android
@@ -230,7 +230,7 @@ uniffi::setup_scaffolding!();
 **For iOS:**
 ```bash
 jffi run --platform ios              # Simulator
-jffi run --platform ios --device     # Physical device
+jffi run --platform ios --device --device-id <UDID>     # Physical device
 ```
 
 **For Android:**
@@ -365,11 +365,11 @@ jffi build --platform ios --device          # Build for physical device
 
 # Run on platform (builds automatically)
 jffi run --platform <platform>
-jffi run --platform ios --device            # Run on physical device
+jffi run --platform ios --device --device-id <UDID>            # Run on physical device
 
 # Run a debug build with verbose JFFI output and Rust backtraces
 jffi debug --platform <platform>
-jffi debug --platform ios --device          # Debug on physical device
+jffi debug --platform ios --device --device-id <UDID>          # Verbose diagnostics on physical device
 
 # Development mode (auto-rebuild on changes)
 jffi dev --platform <platform>
@@ -540,3 +540,8 @@ GPL-3.0
 ---
 
 **Built with  and Rust**
+
+### Native workflow behavior
+
+See [native workflows](docs/native-workflows.md) for build outputs, release runs,
+device selection, signing, development reload behavior, and validation coverage.

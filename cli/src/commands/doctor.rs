@@ -45,7 +45,7 @@ fn doctor_bundle(platform: Option<&str>, release: bool, profile: &str) -> Result
     for p in &platforms_to_check {
         let selected = crate::platform::Platform::from_str(p)
             .expect("platform selection validates platform names");
-        crate::setup::reconcile_platform(&selected)?;
+        crate::setup::setup_platform_for_build(&selected)?;
 
         println!(
             "\n{}",
@@ -100,13 +100,19 @@ fn doctor_bundle(platform: Option<&str>, release: bool, profile: &str) -> Result
             }
             "windows" => {
                 check_tool(
-                    "MakeAppx",
+                    &std::env::var("JFFI_MAKEAPPX")
+                        .ok()
+                        .or_else(|| crate::commands::bundle::find_sdk_tool("makeappx"))
+                        .unwrap_or_else(|| "MakeAppx".into()),
                     &["/?"],
                     "MakeAppx.exe is required for MSIX generation (install Windows SDK)",
                 )?;
                 if release {
                     check_tool(
-                        "signtool",
+                        &std::env::var("JFFI_SIGNTOOL")
+                            .ok()
+                            .or_else(|| crate::commands::bundle::find_sdk_tool("signtool"))
+                            .unwrap_or_else(|| "signtool".into()),
                         &["/?"],
                         "signtool.exe is required for Windows package signing",
                     )?;
@@ -118,16 +124,33 @@ fn doctor_bundle(platform: Option<&str>, release: bool, profile: &str) -> Result
                     &["--version"],
                     "flatpak-builder is required for Flatpak generation",
                 )?;
-                if let Some(linux) = config
-                    .bundle
-                    .as_ref()
-                    .and_then(|bundle| bundle.linux.as_ref())
                 {
-                    crate::setup::ensure_flatpak_runtime(
-                        &linux.runtime,
-                        &linux.sdk,
-                        &linux.runtime_version,
-                    )?;
+                    let linux = config
+                        .bundle
+                        .as_ref()
+                        .and_then(|bundle| bundle.linux.as_ref())
+                        .cloned()
+                        .unwrap_or_default();
+                    for reference in [&linux.runtime, &linux.sdk] {
+                        let reference = format!("{}//{}", reference, linux.runtime_version);
+                        let installed = [true, false].iter().any(|user| {
+                            let mut command = std::process::Command::new("flatpak");
+                            command.arg("info");
+                            if *user {
+                                command.arg("--user");
+                            }
+                            command
+                                .arg(&reference)
+                                .output()
+                                .is_ok_and(|output| output.status.success())
+                        });
+                        if !installed {
+                            anyhow::bail!(
+                                "Missing Flatpak reference {}. Install it with `flatpak install --user flathub {}` after configuring Flathub, or allow `jffi bundle` to reconcile runtimes",
+                                reference, reference
+                            );
+                        }
+                    }
                 }
             }
             "web" => {

@@ -50,6 +50,14 @@ pub fn bundle_project(options: BundleOptions<'_>) -> Result<()> {
     let config = crate::config::load_config()?;
 
     validate_requested_format(platform, format)?;
+    if notarize && platform != "macos" {
+        anyhow::bail!("--notarize applies only to macOS");
+    }
+    if platform == "ios" && no_sign && format == Some("ipa") {
+        anyhow::bail!(
+            "Unsigned IPA export is not supported by Xcode; use --format xcarchive --no-sign"
+        );
+    }
     validate_enabled_platform(&config, platform)?;
 
     // Planning and dry-run modes must be safe to use as read-only CI
@@ -62,21 +70,9 @@ pub fn bundle_project(options: BundleOptions<'_>) -> Result<()> {
     // Validate configurations for store compatibility
     validate_bundle_config(&config, platform, profile, no_sign)?;
 
-    if print_plan {
-        println!("{}", "📋 Bundle Plan:".bright_cyan().bold());
-        println!("  Platform: {}", platform);
-        println!("  Format:   {}", format.unwrap_or("default"));
-        println!("  Profile:  {}", profile);
-        println!("  Sign:     {}", !no_sign);
-        println!("  Notarize: {}", notarize);
+    if print_plan || dry_run {
+        print_bundle_plan(&config, platform, format, profile, no_sign, notarize)?;
         return Ok(());
-    }
-
-    if dry_run {
-        println!(
-            "{}",
-            "🏜️ Dry run enabled. No actual commands will be executed.".yellow()
-        );
     }
 
     if should_reconcile_bundle_prerequisites(dry_run, print_plan) {
@@ -107,15 +103,96 @@ pub fn bundle_project(options: BundleOptions<'_>) -> Result<()> {
             dry_run,
             print_commands,
         ),
-        "ios" => bundle_ios(&config, profile, no_sign, dry_run, print_commands),
+        "ios" => bundle_ios(&config, format, profile, no_sign, dry_run, print_commands),
         "windows" => bundle_windows(&config, format, profile, no_sign, dry_run, print_commands),
-        "linux" => bundle_linux(&config, format, profile, dry_run, print_commands),
+        "linux" => bundle_linux(&config, format, profile, no_sign, dry_run, print_commands),
         "web" => bundle_web(&config, dry_run, print_commands),
         "all" => {
             anyhow::bail!("Bundle each platform explicitly; `--platform all` is not supported")
         }
         _ => anyhow::bail!("Unknown platform: {}", platform),
     }
+}
+
+fn print_bundle_plan(
+    config: &Config,
+    platform: &str,
+    format: Option<&str>,
+    profile: &str,
+    no_sign: bool,
+    notarize: bool,
+) -> Result<()> {
+    println!("Bundle plan (no files changed or commands executed)");
+    println!(
+        "  Platform: {} | Profile: {} | Signing: {}",
+        platform,
+        profile,
+        if no_sign {
+            "unsigned"
+        } else {
+            "selected native profile"
+        }
+    );
+    println!(
+        "  Format: {}",
+        format.unwrap_or("platform configuration/defaults")
+    );
+    println!("  1. Synchronize native configuration and generate configured icons.");
+    println!(
+        "  2. jffi build --platform {} --release{}",
+        platform,
+        if platform == "windows" {
+            " --deploy"
+        } else {
+            ""
+        }
+    );
+    match platform {
+        "ios" | "macos" => {
+            let selected = crate::platform::Platform::from_str(platform).unwrap();
+            let project = crate::platform::XcodeProject::find(selected)?;
+            println!("  3. xcodebuild archive: project={}, scheme={}, configuration=Release", project.project_path.display(), project.scheme);
+            println!("     Archive: target/bundle/{}/{}.xcarchive", platform, project.scheme);
+            if platform == "ios" && (no_sign || format.or_else(|| config.bundle.as_ref().and_then(|b| b.ios.as_ref()).map(|ios| ios.format.as_str())) == Some("xcarchive")) {
+                println!("  4. Keep xcarchive; skip IPA export.");
+            } else {
+                if platform == "macos" && no_sign {
+                    println!("  4. Export archived .app with ditto; use productbuild for an unsigned PKG if requested.");
+                } else {
+                    println!("  4. xcodebuild -exportArchive into target/bundle/{}/export using generated export options.", platform);
+                }
+                if platform == "macos" {
+                    println!("  5. Produce configured app/DMG/PKG formats and verify expected outputs.");
+                    let enabled = config.bundle.as_ref().and_then(|b| b.signing.as_ref()).and_then(|s| s.profiles.as_ref()).and_then(|p| p.get(profile)).and_then(|p| p.apple.as_ref()).and_then(|a| a.notarize).unwrap_or(notarize || config.bundle.as_ref().and_then(|b| b.macos.as_ref()).map(|m| m.notarize).unwrap_or(true));
+                    println!("     Notarize: {}", enabled && !no_sign);
+                } else { println!("  5. Verify exported IPA exists and is nonempty."); }
+                if !no_sign { println!("     Verify app code signature with codesign."); }
+            }
+        }
+        "android" => {
+            println!("  3. Generate Gradle ABI/signing configuration for the selected profile.");
+            println!("  4. Run Gradle assembleRelease (APK) / bundleRelease (AAB) for the selected formats.");
+            if !no_sign { println!("  5. Verify APK with apksigner / AAB with jarsigner."); }
+            println!("     Copy packages and requested native symbols into target/bundle/android.");
+        }
+        "windows" => {
+            let targets = config.bundle.as_ref().and_then(|b| b.windows.as_ref()).map(|w| w.targets.clone()).unwrap_or_else(|| vec!["x86_64-pc-windows-msvc".into(), "aarch64-pc-windows-msvc".into()]);
+            println!("     Required architectures: {}", targets.join(", "));
+            println!("  3. MakeAppx pack each requested architecture's Release manifest into target/bundle/windows.");
+            if !no_sign { println!("  4. SignTool sign, then SignTool verify /pa for each MSIX."); }
+        }
+        "linux" => {
+            println!("  3. Stage release library, Python UI, icons and metadata; generate Flatpak manifest.");
+            println!("  4. flatpak-builder --repo target/bundle/linux/repo --force-clean <build-dir> <generated-manifest>");
+            println!("  5. flatpak build-bundle <repo> <output.flatpak> <app-id>");
+            if let Some(signing) = linux_signing(config, profile, no_sign)? {
+                println!("     Repository commit signed with GPG key {}; export embeds its public key{}", signing.gpg_key, if signing.gpg_homedir.is_some() { " from the configured keyring" } else { "" });
+            }
+        }
+        "web" => println!("  3. Run configured web build command, optimize WASM if enabled, and copy distribution into target/bundle/web."),
+        _ => anyhow::bail!("Unknown platform: {}", platform),
+    }
+    Ok(())
 }
 
 fn validate_enabled_platform(config: &Config, platform: &str) -> Result<()> {
@@ -135,7 +212,7 @@ fn validate_requested_format(platform: &str, format: Option<&str>) -> Result<()>
     let supported: &[&str] = match platform {
         "android" => &["aab", "apk"],
         "macos" => &["app", "dmg", "pkg"],
-        "ios" => &["ipa"],
+        "ios" => &["ipa", "xcarchive"],
         "windows" => &["msix"],
         "linux" => &["flatpak"],
         "web" => &["web"],
@@ -542,6 +619,44 @@ fn bundle_android(
             if !status.success() {
                 anyhow::bail!("Gradle task {} failed", gradle_task);
             }
+            let source = match (fmt.as_str(), no_sign) {
+                ("apk", true) => PathBuf::from(
+                    "platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk",
+                ),
+                ("apk", false) => {
+                    PathBuf::from("platforms/android/app/build/outputs/apk/release/app-release.apk")
+                }
+                _ => PathBuf::from(
+                    "platforms/android/app/build/outputs/bundle/release/app-release.aab",
+                ),
+            };
+            verify_nonempty_file(&source, "Android package")?;
+            if !no_sign {
+                if fmt == "apk" {
+                    let signer = android_build_tool("apksigner")?;
+                    run_checked(
+                        Command::new(signer).arg("verify").arg(&source),
+                        "APK signature verification",
+                    )?;
+                } else {
+                    let output = Command::new("jarsigner")
+                        .args(["-J-Duser.language=en", "-verify"])
+                        .arg(&source)
+                        .output()
+                        .context("Could not execute AAB signature verification")?;
+                    if !output.status.success()
+                        || !String::from_utf8_lossy(&output.stdout).contains("jar verified.")
+                    {
+                        anyhow::bail!(
+                            "AAB signature verification failed: {}",
+                            String::from_utf8_lossy(&output.stdout)
+                        );
+                    }
+                }
+            }
+            let destination = Path::new("target/bundle/android");
+            fs::create_dir_all(destination)?;
+            fs::copy(&source, destination.join(source.file_name().unwrap()))?;
         }
     }
 
@@ -632,6 +747,50 @@ fn create_android_native_symbols_archive(jni_libs: &Path, output: &Path) -> Resu
         );
     }
     Ok(())
+}
+
+fn android_build_tool(name: &str) -> Result<PathBuf> {
+    if let Ok(path) = std::env::var(format!("JFFI_{}", name.to_uppercase())) {
+        return Ok(PathBuf::from(path));
+    }
+    let home = std::env::var("HOME").unwrap_or_default();
+    let roots = [
+        std::env::var("ANDROID_HOME").ok(),
+        std::env::var("ANDROID_SDK_ROOT").ok(),
+        Some(format!("{}/Library/Android/sdk", home)),
+        Some(format!("{}/Android/Sdk", home)),
+    ];
+    for root in roots.into_iter().flatten() {
+        if let Ok(entries) = fs::read_dir(Path::new(&root).join("build-tools")) {
+            let mut versions: Vec<_> = entries
+                .filter_map(|entry| entry.ok())
+                .map(|entry| entry.path())
+                .collect();
+            versions.sort_by_key(|path| {
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .split('.')
+                    .map(|part| part.parse::<u32>().unwrap_or(0))
+                    .collect::<Vec<_>>()
+            });
+            for version in versions.into_iter().rev() {
+                let candidate = version.join(if cfg!(windows) {
+                    format!("{}.bat", name)
+                } else {
+                    name.to_string()
+                });
+                if candidate.is_file() {
+                    return Ok(candidate);
+                }
+            }
+        }
+    }
+    anyhow::bail!(
+        "Android {} not found in SDK build-tools; set JFFI_{}",
+        name,
+        name.to_uppercase()
+    )
 }
 
 #[cfg(test)]
@@ -1043,10 +1202,18 @@ fn bundle_macos(
             }
         }
 
+        archive_cmd.arg(format!(
+            "ENABLE_HARDENED_RUNTIME={}",
+            if macos_config.hardened_runtime {
+                "YES"
+            } else {
+                "NO"
+            }
+        ));
+        apply_apple_entitlements(&mut archive_cmd, config, profile)?;
         if print_commands {
             println!("  $ {:?}", archive_cmd);
         }
-
         let status = archive_cmd.status().context("Failed to create xcarchive")?;
         if !status.success() {
             anyhow::bail!("xcodebuild archive failed");
@@ -1057,28 +1224,66 @@ fn bundle_macos(
     if !dry_run {
         fs::create_dir_all(&export_path)?;
 
-        let mut export_cmd = Command::new("xcodebuild");
-        export_cmd.args([
-            "-exportArchive",
-            "-archivePath",
-            archive_path.to_str().unwrap(),
-            "-exportPath",
-            export_path.to_str().unwrap(),
-            "-exportOptionsPlist",
-            export_plist_path.to_str().unwrap(),
-            "-allowProvisioningUpdates",
-        ]);
+        if no_sign {
+            let app = archive_path
+                .join("Products/Applications")
+                .join(format!("{}.app", project.scheme));
+            if !app.is_dir() {
+                anyhow::bail!("macOS archive contains no app at {}", app.display());
+            }
+            let exported_app = export_path.join(format!("{}.app", project.scheme));
+            if exported_app.exists() {
+                fs::remove_dir_all(&exported_app)?;
+            }
+            run_checked(
+                Command::new("ditto").arg(&app).arg(&exported_app),
+                "Unsigned macOS app export",
+            )?;
+            if formats.contains(&"pkg".to_string()) {
+                run_checked(
+                    Command::new("productbuild")
+                        .arg("--component")
+                        .arg(&exported_app)
+                        .arg("/Applications")
+                        .arg(export_path.join(format!("{}.pkg", project.scheme))),
+                    "Unsigned macOS PKG export",
+                )?;
+            }
+        } else {
+            let mut export_cmd = Command::new("xcodebuild");
+            export_cmd.args([
+                "-exportArchive",
+                "-archivePath",
+                archive_path.to_str().unwrap(),
+                "-exportPath",
+                export_path.to_str().unwrap(),
+                "-exportOptionsPlist",
+                export_plist_path.to_str().unwrap(),
+                "-allowProvisioningUpdates",
+            ]);
 
-        if print_commands {
-            println!("  $ {:?}", export_cmd);
-        }
+            if print_commands {
+                println!("  $ {:?}", export_cmd);
+            }
 
-        let status = export_cmd.status().context("Failed to export archive")?;
-        if !status.success() {
-            anyhow::bail!("xcodebuild exportArchive failed");
+            let status = export_cmd.status().context("Failed to export archive")?;
+            if !status.success() {
+                anyhow::bail!("xcodebuild exportArchive failed");
+            }
         }
     }
 
+    if !dry_run
+        && !no_sign
+        && (formats.contains(&"app".to_string()) || formats.contains(&"dmg".to_string()))
+    {
+        run_checked(
+            Command::new("codesign")
+                .args(["--verify", "--deep", "--strict"])
+                .arg(export_path.join(format!("{}.app", project.scheme))),
+            "macOS app signature verification",
+        )?;
+    }
     if formats.contains(&"dmg".to_string()) {
         println!("  {} Creating DMG...", "→".bright_blue());
         if !dry_run {
@@ -1239,6 +1444,7 @@ fn bundle_macos(
 
 fn bundle_ios(
     config: &Config,
+    format: Option<&str>,
     profile: &str,
     no_sign: bool,
     dry_run: bool,
@@ -1436,12 +1642,44 @@ fn bundle_ios(
             }
         }
 
+        apply_apple_entitlements(&mut archive_cmd, config, profile)?;
+        if print_commands {
+            println!("  $ {:?}", archive_cmd);
+        }
         let status = archive_cmd.status().context("Failed to create xcarchive")?;
         if !status.success() {
             anyhow::bail!("xcodebuild archive failed");
         }
     }
 
+    if !dry_run {
+        let app = archive_path
+            .join("Products/Applications")
+            .join(format!("{}.app", project.scheme));
+        if !app.is_dir() {
+            anyhow::bail!("iOS archive contains no app at {}", app.display());
+        }
+        if !no_sign {
+            run_checked(
+                Command::new("codesign")
+                    .args(["--verify", "--deep", "--strict"])
+                    .arg(&app),
+                "iOS archive signature verification",
+            )?;
+        }
+    }
+    if no_sign || format.unwrap_or(&ios_config.format) == "xcarchive" {
+        println!(
+            "Archive: {}{}",
+            archive_path.display(),
+            if no_sign {
+                " (unsigned; IPA export requires signing)"
+            } else {
+                ""
+            }
+        );
+        return Ok(());
+    }
     println!("  {} Exporting IPA...", "→".bright_blue());
     if !dry_run {
         fs::create_dir_all(&export_path)?;
@@ -1466,27 +1704,14 @@ fn bundle_ios(
         }
     }
 
+    if !dry_run {
+        verify_export_extension(&export_path, "ipa")?;
+    }
     println!("{}", "  ✅ iOS bundling complete!".green());
     Ok(())
 }
 
-fn find_manifest_dir(dir: &Path) -> Option<PathBuf> {
-    if dir.join("AppxManifest.xml").exists() {
-        return Some(dir.to_path_buf());
-    }
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.filter_map(|e| e.ok()) {
-            if entry.path().is_dir() {
-                if let Some(found) = find_manifest_dir(&entry.path()) {
-                    return Some(found);
-                }
-            }
-        }
-    }
-    None
-}
-
-fn find_sdk_tool(tool_name: &str) -> Option<String> {
+pub(crate) fn find_sdk_tool(tool_name: &str) -> Option<String> {
     // Check if tool is in PATH
     let check_arg = if tool_name == "signtool" {
         "sign"
@@ -1499,7 +1724,18 @@ fn find_sdk_tool(tool_name: &str) -> Option<String> {
 
     // On Windows, check standard SDK paths
     if cfg!(windows) {
-        let sdk_root = Path::new("C:\\Program Files (x86)\\Windows Kits\\10\\bin");
+        let sdk_root = std::env::var_os("WindowsSdkDir")
+            .map(PathBuf::from)
+            .map(|root| root.join("bin"))
+            .unwrap_or_else(|| {
+                PathBuf::from(
+                    std::env::var_os("ProgramFiles(x86)")
+                        .unwrap_or_else(|| r"C:\Program Files (x86)".into()),
+                )
+                .join("Windows Kits")
+                .join("10")
+                .join("bin")
+            });
         if sdk_root.exists() {
             if let Ok(entries) = fs::read_dir(sdk_root) {
                 let mut versions = Vec::new();
@@ -1556,7 +1792,7 @@ fn bundle_windows(
     println!("  {} Ensuring Rust core is built...", "→".bright_blue());
     if !dry_run {
         let mut build_cmd = Command::new(std::env::current_exe()?);
-        build_cmd.args(["build", "--platform", "windows", "--release"]);
+        build_cmd.args(["build", "--platform", "windows", "--release", "--deploy"]);
 
         let status = build_cmd.status().context("Failed to build Rust core")?;
         if !status.success() {
@@ -1571,6 +1807,7 @@ fn bundle_windows(
 
     // We expect the build system to have created platforms/windows/bin/x64 and ARM64
     let arch_dirs = vec![
+        ("i686-pc-windows-msvc", "x86"),
         ("x86_64-pc-windows-msvc", "x64"),
         ("aarch64-pc-windows-msvc", "ARM64"),
     ];
@@ -1586,9 +1823,15 @@ fn bundle_windows(
 
         println!("  {} Packaging {}...", "→".bright_blue(), target);
         if !dry_run {
-            let bin_dir = Path::new("platforms/windows/bin").join(arch_dir);
+            let bin_dir = crate::platform::windows_output_dir(arch_dir, true);
             if bin_dir.exists() {
-                let package_source = find_manifest_dir(&bin_dir).unwrap_or_else(|| bin_dir.clone());
+                if !bin_dir.join("AppxManifest.xml").is_file() {
+                    anyhow::bail!(
+                        "Fresh Windows Release output contains no AppxManifest.xml: {}",
+                        bin_dir.display()
+                    );
+                }
+                let package_source = &bin_dir;
                 let makeappx_path = std::env::var("JFFI_MAKEAPPX")
                     .ok()
                     .or_else(|| find_sdk_tool("makeappx"))
@@ -1674,6 +1917,12 @@ fn bundle_windows(
                     if !status.success() {
                         anyhow::bail!("Failed to sign {}", pkg.display());
                     }
+                    run_checked(
+                        Command::new(&signtool_path)
+                            .args(["verify", "/pa"])
+                            .arg(pkg),
+                        "MSIX signature verification",
+                    )?;
                 }
             } else {
                 anyhow::bail!(
@@ -1691,21 +1940,13 @@ fn bundle_windows(
 fn bundle_linux(
     config: &Config,
     format: Option<&str>,
-    _profile: &str,
+    profile: &str,
+    no_sign: bool,
     dry_run: bool,
     print_commands: bool,
 ) -> Result<()> {
     let bundle_config = config.bundle.clone().unwrap_or_default();
-    let linux_config = bundle_config
-        .linux
-        .unwrap_or_else(|| crate::config::BundleLinuxConfig {
-            formats: vec!["flatpak".to_string()],
-            app_id: Some("org.jffi.App".to_string()),
-            runtime: "org.gnome.Platform".to_string(),
-            runtime_version: "50".to_string(),
-            sdk: "org.gnome.Sdk".to_string(),
-            icon: None,
-        });
+    let linux_config = bundle_config.linux.unwrap_or_default();
 
     let formats = if let Some(f) = format {
         vec![f.to_string()]
@@ -1716,7 +1957,7 @@ fn bundle_linux(
 
     let app_id = linux_config
         .app_id
-        .unwrap_or_else(|| "org.jffi.App".to_string());
+        .unwrap_or_else(|| crate::commands::build::get_linux_app_id(config));
 
     println!("  {} Ensuring Rust core is built...", "→".bright_blue());
     if !dry_run {
@@ -1829,8 +2070,20 @@ fn bundle_linux(
         if !dry_run {
             let build_dir = export_path.join(format!("{}-build", app_id));
             let repo_dir = export_path.join("repo");
+            // Detached signatures are attached to commits. A fresh generated repo
+            // prevents a previous signed build leaking its signatures into --no-sign.
+            if repo_dir.exists() {
+                fs::remove_dir_all(&repo_dir)?;
+            }
 
             let mut flatpak_builder_cmd = Command::new("flatpak-builder");
+            let signing = linux_signing(config, profile, no_sign)?;
+            if let Some(signing) = signing {
+                flatpak_builder_cmd.arg(format!("--gpg-sign={}", signing.gpg_key));
+                if let Some(home) = &signing.gpg_homedir {
+                    flatpak_builder_cmd.arg(format!("--gpg-homedir={}", home));
+                }
+            }
             flatpak_builder_cmd.args([
                 "--repo",
                 repo_dir.to_str().unwrap(),
@@ -1848,13 +2101,20 @@ fn bundle_linux(
             if status.success() {
                 println!("  {} Exporting flatpak bundle...", "→".bright_blue());
                 let bundle_file = export_path.join(format!("{}.flatpak", app_id));
-                let status = Command::new("flatpak")
-                    .args([
-                        "build-bundle",
-                        repo_dir.to_str().unwrap(),
-                        bundle_file.to_str().unwrap(),
-                        &app_id,
-                    ])
+                let public_key = if let Some(signing) = signing {
+                    let key_path =
+                        PathBuf::from("target/jffi/generated/linux/signing-public-key.gpg");
+                    export_linux_public_key(signing, &key_path)?;
+                    Some(key_path)
+                } else {
+                    None
+                };
+                let mut export_cmd =
+                    flatpak_export_command(&repo_dir, &bundle_file, &app_id, public_key.as_deref());
+                if print_commands {
+                    println!("  $ {:?}", export_cmd);
+                }
+                let status = export_cmd
                     .status()
                     .context("Failed to run flatpak build-bundle")?;
                 if !status.success() {
@@ -1988,7 +2248,19 @@ pub fn validate_bundle_config(
         "→".bright_blue()
     );
 
+    if platform == "linux" {
+        linux_signing(config, profile, no_sign)?;
+    }
     if let Some(bundle) = &config.bundle {
+        if bundle.resources.as_ref().is_some_and(|r| !r.is_empty()) || bundle.license_file.is_some()
+        {
+            anyhow::bail!("bundle.resources and bundle.license_file are not implemented; include these files in the native platform project instead");
+        }
+        if platform == "ios" {
+            if let Some(ios) = &bundle.ios {
+                validate_requested_format("ios", Some(&ios.format))?;
+            }
+        }
         if let Some(android) = &bundle.android {
             if android.min_sdk != config.platforms.android.min_sdk {
                 anyhow::bail!(
@@ -2271,4 +2543,185 @@ pub fn validate_bundle_config(
 
     println!("  {} Configuration is store-ready!", "✓".green());
     Ok(())
+}
+
+fn flatpak_export_command(
+    repo: &Path,
+    bundle: &Path,
+    app_id: &str,
+    public_key: Option<&Path>,
+) -> Command {
+    let mut command = Command::new("flatpak");
+    command.arg("build-bundle");
+    if let Some(public_key) = public_key {
+        command.arg("--gpg-keys").arg(public_key);
+    }
+    command.arg(repo).arg(bundle).arg(app_id);
+    command
+}
+
+fn export_linux_public_key(
+    signing: &crate::config::LinuxSigningProfile,
+    path: &Path,
+) -> Result<()> {
+    let mut command = Command::new("gpg");
+    command.arg("--batch");
+    if let Some(home) = &signing.gpg_homedir {
+        command.arg("--homedir").arg(home);
+    }
+    let output = command
+        .args(["--export", &signing.gpg_key])
+        .output()
+        .context("Could not export the Flatpak signing public key using gpg")?;
+    if !output.status.success() || output.stdout.is_empty() {
+        anyhow::bail!(
+            "Could not export Flatpak public key {}: {}",
+            signing.gpg_key,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    fs::write(path, output.stdout).context("Could not write Flatpak signing public key")
+}
+
+fn run_checked(command: &mut Command, operation: &str) -> Result<()> {
+    let status = command
+        .status()
+        .with_context(|| format!("Could not execute {}", operation))?;
+    if !status.success() {
+        anyhow::bail!("{} failed: {}", operation, status);
+    }
+    Ok(())
+}
+
+fn linux_signing<'a>(
+    config: &'a Config,
+    profile: &str,
+    no_sign: bool,
+) -> Result<Option<&'a crate::config::LinuxSigningProfile>> {
+    if no_sign {
+        return Ok(None);
+    }
+    let signing = config.bundle.as_ref().and_then(|b| b.signing.as_ref()).and_then(|s| s.profiles.as_ref()).and_then(|p| p.get(profile)).and_then(|p| p.linux.as_ref()).context("Linux signing needs bundle.signing.profiles.<profile>.linux.gpg_key; use --no-sign for an unsigned Flatpak")?;
+    if signing.gpg_key.trim().is_empty() {
+        anyhow::bail!("Linux gpg_key cannot be empty");
+    }
+    Ok(Some(signing))
+}
+
+fn apply_apple_entitlements(command: &mut Command, config: &Config, profile: &str) -> Result<()> {
+    if let Some(path) = config
+        .bundle
+        .as_ref()
+        .and_then(|b| b.signing.as_ref())
+        .and_then(|s| s.profiles.as_ref())
+        .and_then(|p| p.get(profile))
+        .and_then(|p| p.apple.as_ref())
+        .and_then(|a| a.entitlements.as_ref())
+    {
+        if !Path::new(path).is_file() {
+            anyhow::bail!("Apple entitlements file not found: {}", path);
+        }
+        command.arg(format!(
+            "CODE_SIGN_ENTITLEMENTS={}",
+            std::env::current_dir()?.join(path).display()
+        ));
+    }
+    Ok(())
+}
+
+fn verify_export_extension(directory: &Path, extension: &str) -> Result<()> {
+    let mut found = false;
+    for entry in fs::read_dir(directory)? {
+        let path = entry?.path();
+        if path.extension().and_then(|e| e.to_str()) == Some(extension) {
+            verify_nonempty_file(&path, "Exported package")?;
+            found = true;
+        }
+    }
+    if !found {
+        anyhow::bail!(
+            "Export did not create a .{} package in {}",
+            extension,
+            directory.display()
+        );
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod distribution_parity_tests {
+    use super::*;
+    fn config(extra: &str) -> Config {
+        toml::from_str(&format!("[package]\nname = 'sample'\nversion = '1.0.0'\nrelease_date = '2026-10-24'\n[platforms]\nenabled = ['linux']\n{}", extra)).unwrap()
+    }
+    #[test]
+    fn flatpak_bundle_uses_supported_key_embedding_flags_not_commit_signing_flags() {
+        let command = super::flatpak_export_command(
+            Path::new("repo"),
+            Path::new("app.flatpak"),
+            "com.test.App",
+            Some(Path::new("public.gpg")),
+        );
+        let args: Vec<_> = command
+            .get_args()
+            .map(|arg| arg.to_str().unwrap())
+            .collect();
+        assert_eq!(
+            args,
+            [
+                "build-bundle",
+                "--gpg-keys",
+                "public.gpg",
+                "repo",
+                "app.flatpak",
+                "com.test.App"
+            ]
+        );
+        let unsigned = super::flatpak_export_command(
+            Path::new("repo"),
+            Path::new("app.flatpak"),
+            "com.test.App",
+            None,
+        );
+        assert!(unsigned
+            .get_args()
+            .all(|arg| !arg.to_string_lossy().starts_with("--gpg")));
+    }
+
+    #[test]
+    fn linux_requires_signing_profile_or_explicit_unsigned_mode() {
+        let config = config("");
+        assert!(linux_signing(&config, "release", false).is_err());
+        assert!(linux_signing(&config, "release", true).unwrap().is_none());
+        let signed = self::config(
+            "[bundle.signing.profiles.release.linux]\ngpg_key = 'ABCDEF'\ngpg_homedir = '/keys'",
+        );
+        assert_eq!(
+            linux_signing(&signed, "release", false)
+                .unwrap()
+                .unwrap()
+                .gpg_key,
+            "ABCDEF"
+        );
+        assert!(linux_signing(&signed, "other", false).is_err());
+    }
+    #[test]
+    fn rejects_resource_configuration_that_would_otherwise_be_dropped() {
+        let config = config("[bundle]\nresources = ['data.json']");
+        assert!(validate_bundle_config(&config, "linux", "release", true)
+            .unwrap_err()
+            .to_string()
+            .contains("not implemented"));
+    }
+    #[test]
+    fn export_verification_rejects_missing_and_empty_packages() {
+        let root = std::env::temp_dir().join(format!("jffi-export-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        assert!(verify_export_extension(&root, "ipa").is_err());
+        fs::write(root.join("sample.ipa"), []).unwrap();
+        assert!(verify_export_extension(&root, "ipa").is_err());
+        fs::write(root.join("sample.ipa"), b"package").unwrap();
+        assert!(verify_export_extension(&root, "ipa").is_ok());
+        fs::remove_dir_all(root).unwrap();
+    }
 }

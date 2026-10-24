@@ -170,3 +170,15 @@ source code, entitlements, manifests, and project files can still contain
 platform-specific behavior that has no JFFI setting. Review generated diffs
 after upgrades and never use `jffi.toml` to store credentials merely to make a
 pipeline self-contained.
+
+## Linux signing
+
+```toml
+[bundle.signing.profiles.release.linux]
+gpg_key = "YOUR-GPG-KEY-ID"
+# gpg_homedir = "/path/to/protected/keyring"
+```
+
+Use `jffi bundle --platform linux --no-sign` for an unsigned Flatpak. A signed
+bundle requires the selected Linux signing profile. See [native workflows](native-workflows.md)
+for profile propagation, device selection, supported resources, and verification limits.

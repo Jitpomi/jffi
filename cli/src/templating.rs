@@ -60,14 +60,10 @@ pub struct PlatformConfig {
 }
 
 fn all_platforms() -> Vec<String> {
-    vec![
-        "ios".to_string(),
-        "macos".to_string(),
-        "android".to_string(),
-        "windows".to_string(),
-        "linux".to_string(),
-        "web".to_string(),
-    ]
+    crate::platform::Platform::ALL
+        .iter()
+        .map(|p| p.as_str().to_string())
+        .collect()
 }
 
 /// A discovered template
@@ -240,6 +236,21 @@ impl TemplateEngine {
         name: &str,
         platforms: &[&str],
     ) -> Result<()> {
+        for platform in platforms {
+            if !template
+                .manifest
+                .platforms
+                .supported
+                .iter()
+                .any(|supported| supported == platform)
+            {
+                anyhow::bail!(
+                    "Platform '{}' is not supported by template '{}'",
+                    platform,
+                    template.name
+                );
+            }
+        }
         // If Windows is included, use Windows-specific context for core (for UniFFI version)
         // Otherwise use base context
         let core_platform = if platforms.contains(&"windows") {

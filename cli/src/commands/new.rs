@@ -114,14 +114,10 @@ pub fn create_project(
 
     let platform_list: Vec<String> = if let Some(platforms) = platforms {
         if platforms == "multi" {
-            vec![
-                "ios".to_string(),
-                "android".to_string(),
-                "macos".to_string(),
-                "windows".to_string(),
-                "linux".to_string(),
-                "web".to_string(),
-            ]
+            Platform::ALL
+                .iter()
+                .map(|p| p.as_str().to_string())
+                .collect()
         } else {
             platforms
                 .split(',')
@@ -130,7 +126,7 @@ pub fn create_project(
                 .collect()
         }
     } else {
-        let items = ["ios", "macos", "android", "windows", "linux", "web"];
+        let items = Platform::ALL.map(|p| p.as_str());
         let defaults = vec![true, false, false, false, false, false];
         let chosen = MultiSelect::with_theme(&theme)
             .with_prompt("Select platforms")

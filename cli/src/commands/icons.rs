@@ -7,6 +7,14 @@ use std::path::Path;
 use crate::config::Config;
 
 pub fn generate_icons(config: &Config, platform: &str) -> Result<()> {
+    let selected = crate::platform::Platform::from_str(platform)
+        .ok_or_else(|| anyhow::anyhow!("Unknown icon platform: {}", platform))?;
+    if selected.as_str() != platform || !config.platforms.enabled.iter().any(|p| p == platform) {
+        anyhow::bail!(
+            "Icon platform '{}' must be enabled using its canonical name",
+            platform
+        );
+    }
     let bundle = match &config.bundle {
         Some(b) => b,
         None => return Ok(()),

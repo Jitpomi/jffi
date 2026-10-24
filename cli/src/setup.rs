@@ -445,6 +445,9 @@ fn setup_platform_with_scope(platform: &Platform, include_bundle_tools: bool) ->
             ensure_rust_targets(&targets)?;
         }
         Platform::Linux => {
+            if !cfg!(target_os = "linux") {
+                anyhow::bail!("Linux builds require a Linux host; use a Linux VM or CI runner");
+            }
             // Helper to install system packages
             let install_system_deps = |packages: Vec<&str>| -> Result<()> {
                 if !installation_allowed() {
