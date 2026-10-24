@@ -127,6 +127,9 @@ jobs:
           cd "$RUNNER_TEMP/native-smoke"
           cargo generate-lockfile
           jffi setup --platform "$NATIVE_PLATFORM"
+          if [ "$NATIVE_PLATFORM" = windows ]; then
+            jffi doctor bundle --platform windows
+          fi
           jffi build --platform "$NATIVE_PLATFORM" --release
       - name: Compile Apple UI
         if: matrix.platform == 'macos' || matrix.platform == 'ios'

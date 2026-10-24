@@ -1,5 +1,11 @@
 # `jffi` Changelog
 
+## Unreleased
+
+- Fix Windows bundle doctor falsely rejecting an installed MakeAppx when its help
+  command returns exit code 1. Require recognizable MakeAppx help for that case;
+  missing tools, execution errors, and other failing tool probes remain errors.
+
 ## v0.4.22 — Native workflow consistency
 
 - Preserve release/debug configuration through native UI builds and launch paths.

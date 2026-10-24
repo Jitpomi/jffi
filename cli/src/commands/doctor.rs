@@ -99,13 +99,11 @@ fn doctor_bundle(platform: Option<&str>, release: bool, profile: &str) -> Result
                 }
             }
             "windows" => {
-                check_tool(
+                check_makeappx(
                     &std::env::var("JFFI_MAKEAPPX")
                         .ok()
                         .or_else(|| crate::commands::bundle::find_sdk_tool("makeappx"))
                         .unwrap_or_else(|| "MakeAppx".into()),
-                    &["/?"],
-                    "MakeAppx.exe is required for MSIX generation (install Windows SDK)",
                 )?;
                 if release {
                     check_tool(
@@ -269,10 +267,50 @@ fn check_apple_signing_identity(certificate: &str) -> Result<()> {
     Ok(())
 }
 
+// MakeAppx prints valid help with exit code 1 on Windows SDK releases. Accept
+// that specific response, not arbitrary failures or other tools' nonzero exits.
+fn makeappx_help_succeeded(code: Option<i32>, stdout: &[u8], stderr: &[u8]) -> bool {
+    if code == Some(0) {
+        return true;
+    }
+    if code != Some(1) {
+        return false;
+    }
+    let help = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(stdout),
+        String::from_utf8_lossy(stderr)
+    )
+    .to_ascii_lowercase();
+    help.contains("makeappx")
+        && ["pack", "unpack", "bundle", "/?"].iter().all(|word| {
+            help.split(|c: char| !c.is_ascii_alphanumeric() && c != '/' && c != '?')
+                .any(|token| token == *word)
+        })
+}
+
+fn check_makeappx(name: &str) -> Result<()> {
+    check_tool_with(
+        name,
+        &["/?"],
+        "MakeAppx.exe is required for MSIX generation (install Windows SDK)",
+        |output| makeappx_help_succeeded(output.status.code(), &output.stdout, &output.stderr),
+    )
+}
+
 fn check_tool(name: &str, args: &[&str], msg: &str) -> Result<()> {
+    check_tool_with(name, args, msg, |output| output.status.success())
+}
+
+fn check_tool_with(
+    name: &str,
+    args: &[&str],
+    msg: &str,
+    succeeded: impl Fn(&std::process::Output) -> bool,
+) -> Result<()> {
     use std::process::Command;
     match Command::new(name).args(args).output() {
-        Ok(output) if output.status.success() => {
+        Ok(output) if succeeded(&output) => {
             println!("  {} {} found", "✓".green(), name.bright_cyan());
             Ok(())
         }
@@ -291,7 +329,49 @@ fn check_tool(name: &str, args: &[&str], msg: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::select_platforms;
+    use super::{makeappx_help_succeeded, select_platforms};
+
+    const MAKEAPPX_HELP: &[u8] = b"Microsoft (R) MakeAppx Tool\nUsage:\n MakeAppx <command> [options]\n pack -- Create a new app package\n unpack -- Extract files\n bundle -- Create a bundle\n /? -- Display help";
+
+    #[test]
+    fn makeappx_accepts_help_exit_one_on_stdout_or_stderr() {
+        assert!(makeappx_help_succeeded(Some(1), MAKEAPPX_HELP, b""));
+        assert!(makeappx_help_succeeded(Some(1), b"", MAKEAPPX_HELP));
+        assert!(makeappx_help_succeeded(Some(0), MAKEAPPX_HELP, b""));
+    }
+
+    #[test]
+    fn makeappx_rejects_real_failures_and_unrecognized_output() {
+        for code in [Some(2), Some(-1), None] {
+            assert!(!makeappx_help_succeeded(code, MAKEAPPX_HELP, b""));
+        }
+        assert!(!makeappx_help_succeeded(Some(1), b"", b""));
+        assert!(!makeappx_help_succeeded(
+            Some(1),
+            b"",
+            b"MakeAppx: DLL initialization failed"
+        ));
+        assert!(!makeappx_help_succeeded(
+            Some(1),
+            b"some other tool /? pack unpack bundle",
+            b""
+        ));
+    }
+
+    #[test]
+    fn makeappx_missing_executable_remains_an_error() {
+        let missing =
+            std::env::temp_dir().join(format!("jffi-missing-makeappx-{}", uuid::Uuid::new_v4()));
+        let error = super::check_makeappx(missing.to_str().unwrap()).unwrap_err();
+        assert!(error.to_string().contains("Missing tool"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn other_tool_help_failures_remain_errors() {
+        let error = super::check_tool("sh", &["-c", "exit 1"], "tool required").unwrap_err();
+        assert!(error.to_string().contains("exited unsuccessfully"));
+    }
 
     #[test]
     fn rejects_unknown_or_disabled_explicit_platforms() {
