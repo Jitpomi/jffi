@@ -812,7 +812,7 @@ mod android_symbols_tests {
         let mut archive = zip::ZipArchive::new(fs::File::open(&output).unwrap()).unwrap();
         assert_eq!(archive.len(), 1);
         assert_eq!(
-            archive.by_index(0).unwrap().name(),
+            archive.by_index(0).unwrap().name().unwrap(),
             "arm64-v8a/libsample_core.so"
         );
         fs::remove_dir_all(root).unwrap();
