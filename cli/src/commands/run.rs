@@ -182,7 +182,6 @@ fn run_ios(release: bool, device_id: Option<&str>) -> Result<()> {
     // Install and launch with retry logic
     for attempt in 0..3 {
         sim.install_app(&simulator_id, &app_path)?;
-        sim.open_app()?; // Bring to foreground
 
         match sim.launch_app(&simulator_id, &bundle_id) {
             Ok(_) => break,
