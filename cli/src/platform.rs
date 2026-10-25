@@ -138,16 +138,27 @@ impl XcodeProject {
         }
         build_cmd.arg("build");
         build_cmd.args(extra_args);
-        if !verbose {
-            build_cmd.stdout(Stdio::null()).stderr(Stdio::null());
-        }
-
-        let status = build_cmd
-            .status()
-            .context("Failed to build with xcodebuild")?;
-
-        if !status.success() {
-            anyhow::bail!("Build failed");
+        if verbose {
+            let status = build_cmd
+                .status()
+                .context("Failed to build with xcodebuild")?;
+            if !status.success() {
+                anyhow::bail!("xcodebuild failed ({status})");
+            }
+        } else {
+            // Xcode sends compiler diagnostics to both stdout and stderr.
+            // Keep successful builds quiet, but preserve all output on failure.
+            let output = build_cmd
+                .output()
+                .context("Failed to build with xcodebuild")?;
+            if !output.status.success() {
+                anyhow::bail!(
+                    "xcodebuild failed ({})\n\nstdout:\n{}\nstderr:\n{}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr),
+                );
+            }
         }
         Ok(())
     }
@@ -270,9 +281,29 @@ impl IOSSimulator {
     }
 
     pub fn open_app(&self) -> Result<()> {
-        let status = Command::new("open").args(["-a", "Simulator"]).status()?;
-        if !status.success() {
-            anyhow::bail!("Could not open Simulator");
+        // Launch Services may not know about Simulator after an Xcode update.
+        // Prefer the app bundled with the currently selected developer directory.
+        if let Ok(output) = Command::new("xcode-select").arg("-p").output() {
+            if output.status.success() {
+                let developer_dir = String::from_utf8_lossy(&output.stdout);
+                let developer_dir = Path::new(developer_dir.trim());
+                let mut apps = vec![developer_dir.join("Applications/Simulator.app")];
+                if let Some(contents) = developer_dir.parent() {
+                    apps.push(contents.join("Applications/DeviceHub.app"));
+                    apps.push(contents.join("Applications/Simulator.app"));
+                }
+                for app in apps {
+                    if app.is_dir() && Command::new("open").arg(&app).output()?.status.success() {
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        let output = Command::new("open").args(["-a", "Simulator"]).output()?;
+        if !output.status.success() {
+            // simctl can install and launch apps without the graphical Simulator.
+            // A missing window app must not prevent those operations.
+            eprintln!("  Warning: Could not open the Simulator window. Continuing with simctl; the app will run without a Simulator window. Check that your Xcode installation includes Simulator or Device Hub.");
         }
         Ok(())
     }
