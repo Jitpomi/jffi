@@ -230,6 +230,9 @@ uniffi::setup_scaffolding!();
 **For iOS:**
 ```bash
 jffi run --platform ios              # Simulator
+jffi run --platform ios --device ipad                  # Available iPad simulator
+jffi run --platform ios --device iphone                # Available iPhone simulator
+jffi run --platform ios --device "iPad Pro 11-inch (M4)" # Exact simulator name
 jffi run --platform ios --device --device-id <UDID>     # Physical device
 ```
 
@@ -545,3 +548,137 @@ GPL-3.0
 
 See [native workflows](docs/native-workflows.md) for build outputs, release runs,
 device selection, signing, development reload behavior, and validation coverage.
+
+### Selecting a device for run and debug
+
+Both commands accept the same selection options:
+
+```bash
+jffi run --platform ios --device ipad
+jffi debug --platform ios --device iphone
+jffi run --platform ios --device "iPad Pro 11-inch (M4)"
+jffi run --platform android --device emulator
+jffi debug --platform android --device Pixel_Tablet
+jffi run --platform android --device-id emulator-5554
+jffi run --platform ios --device physical --device-id <UDID>
+jffi run --platform android --device physical --device-id <ADB-SERIAL>
+```
+
+For Android, use an exact AVD name from `emulator -list-avds` or a connected
+serial from `adb devices`. A named AVD is reused if already running, or started
+if stopped. `--device emulator` uses an existing emulator, or starts the first
+available AVD. Multiple connected matches require an explicit selection.
+
+For iOS, family selection prefers a booted matching simulator; exact names and
+UDIDs are also accepted. Bare `--device` still means a physical device.
+Do not combine a named `--device` selector with `--device-id`.
+macOS, Windows, Linux, and web run locally and do not accept device selectors.
+
+### Automatic web bindings
+
+Web builds regenerate `ffi-web/src/lib.rs` from the compiled UniFFI API, including
+exported methods, objects, and standalone functions. JavaScript uses camelCase names, so Rust's
+`get_count()` becomes `core.getCount()`. `run`, `build`, and Rust watch-mode
+rebuilds use the same generator; new web projects start with a generated wrapper.
+
+The generator creates matching WASM exports and TypeScript declarations for
+UniFFI records, enums (including variant payloads), errors, exported object
+references, type aliases, callback traits, UniFFI custom types, and nested `Option`, `Vec`, `HashMap`, and `BTreeMap`
+values. No serde annotations need to be added to the native core: generated
+wire conversion code lives in `ffi-web`. The required web-crate dependencies are
+reconciled automatically.
+
+| Rust API | JavaScript / TypeScript |
+| --- | --- |
+| record fields | Typed plain objects with camelCase field names |
+| enum | Tagged union: `{ tag: "Variant", value: ... }` |
+| `Option<T>` | `T \| null` |
+| `Vec<T>` | `Array<T>` |
+| byte buffers (`Vec<u8>`) | `Uint8Array` (`JffiBytes`) |
+| `SystemTime` | `bigint` nanoseconds since the Unix epoch (`JffiTimestamp`) |
+| `Duration` | Nonnegative `bigint` nanoseconds (`JffiDuration`) |
+| maps | `Map<K, V>` |
+| `u64`, `i64` | `bigint`, preserving all integer bits |
+| `Arc<ExportedObject>` | Live typed JS class with shared Rust state; call `.free()` when done |
+| `Result<T, E>` | Returns `T`; throws `Error` with typed exported error data in `.details` |
+| async methods and callbacks | `Promise<T>` |
+| callback traits (`Box<dyn ...>` / `Arc<dyn ...>`) | Typed JS interfaces, callable in both directions |
+| `custom_type!` / `custom_newtype!` | Named TS alias of the builtin representation, with native UniFFI validation and normalization |
+
+Parameterized constructors are supported; alternate Rust constructors become
+static camelCase factories. Async constructors, including `new`, become async
+static factories (`await Class.new(...)`). Objects do not need a constructor
+named `new`. Custom conversions reuse the core's `FfiConverter`
+implementation with the same UniFFI version and tag; their logic is not duplicated
+in JavaScript. Remote types and the default `Into`/`TryFrom` converter form are
+supported too.
+
+JavaScript callback objects must implement the exported camelCase methods. Rust
+can retain them, return native trait implementations to JavaScript, or nest them
+in records. JavaScript method receivers are preserved. `self: Arc<Self>` receivers
+and callbacks with more than eight arguments are supported too. Async callback methods
+accept Promises; both local and Send future modes are supported when matching the
+core's UniFFI/async-trait configuration. Callbacks execute on the WASM instance's
+event loop; this does not add browser worker/native-thread support.
+
+A declared callback error is thrown as `Error` with its exported error value in
+`.details`. Unexpected callback exceptions and invalid return values follow
+UniFFI's native `LiftReturn` policy, including the core's
+`From<UnexpectedUniFFICallbackError>` implementation. An infallible callback must
+honor its return/exception contract, just as on native platforms.
+
+Standalone `#[uniffi::export] pub fn` and async functions become top-level
+camelCase JavaScript exports with generated TypeScript signatures, using the
+same type and error conversions as object methods. A Core object is optional.
+
+The exported contract is read from the compiled WASM library's UniFFI metadata
+(0.29.x and 0.31.x), after Rust resolves macros, includes, features, build scripts,
+and conditional compilation. The generated adapter calls UniFFI's exported C ABI
+symbols and uses the UniFFI wire format, object ownership rules, callback tables,
+and future protocol. It does not import the original Rust types or call Rust
+methods by source path. Private modules, private exported types/fields/functions,
+renamed exports, and arbitrary compiler-expanded legacy macros therefore need no
+public reexports or manual web adapters. This includes macros defined in dependencies.
+
+Exported dependency types are included from compiled metadata, including custom
+types reached through transitive or renamed dependencies and separate workspaces.
+The adapter links Core's existing dependency graph; it does not add direct imports
+of those dependencies. Custom validation/normalization and unexpected callback
+error conversion run in the original UniFFI scaffolding. Conflicting public type
+names are qualified with their metadata namespace. Only APIs actually exported
+by UniFFI are included; ordinary private Rust helpers remain internal.
+
+Disabled declarations disappear from JavaScript and `.d.ts` on the next build.
+Generic APIs and external types without UniFFI metadata/custom mappings require
+an explicit adapter. Platform-specific Rust APIs must themselves work on wasm32;
+code generation cannot supply native OS facilities or browser worker support.
+On Rust's `wasm32-unknown-unknown` target, `SystemTime` cannot represent pre-epoch
+timestamps; those inputs return a type error. Nanoseconds and large durations
+otherwise remain exact. UniFFI 0.31.1 requires its
+`wasm-unstable-single-threaded` feature for WASM futures; the suite tests that
+supported mode and tests both local and Send future modes with 0.29.4.
+
+The compatibility suite compiles real WASM, generates and loads native UniFFI
+Python bindings, compares normalized results across both runtimes, type-checks
+valid/invalid TypeScript calls, tests native Rust behavior, and checks removal of
+exports after feature/profile/source changes. CI runs it for 0.29.4 and 0.31.1:
+
+```bash
+JFFI_TYPESCRIPT_TSC=/path/to/typescript/lib/tsc.js \
+  cargo test -p jffi --test web_bindings_wasm -- --ignored --nocapture
+# To exercise the current metadata format, put matching uniffi-bindgen on PATH:
+JFFI_COMPAT_UNIFFI_VERSION=0.31.1 JFFI_TYPESCRIPT_TSC=/path/to/typescript/lib/tsc.js \
+  cargo test -p jffi --test web_bindings_wasm -- --ignored --nocapture
+```
+
+It requires Node, Python, the wasm32 Rust target, wasm-pack, matching
+uniffi-bindgen, and wasm-bindgen-cli 0.2.129. TypeScript checks run when
+`JFFI_TYPESCRIPT_TSC` is supplied; CI always supplies it. An optional absolute
+`JFFI_WASM_TEST_TARGET_DIR` reuses a build cache. Regular unit tests do not install
+or invoke these tools. The suite defines tested compatibility coverage rather
+than claiming every possible Rust/UniFFI API has been verified.
+
+The original greeting-only JFFI scaffold is migrated automatically. Custom
+wrappers are preserved: back up and remove `ffi-web/src/lib.rs` to opt into
+generation. Edit exported methods in `core/src`, not the generated wrapper.
+UI elements and event handlers remain application code.
