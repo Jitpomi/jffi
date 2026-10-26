@@ -359,7 +359,24 @@ fn select_ios_simulator(
             let Some(name) = device.get("name").and_then(|v| v.as_str()) else {
                 continue;
             };
-            if requested.is_some_and(|requested| requested != id) {
+            if requested.is_some_and(|requested| {
+                let selector = requested.to_lowercase();
+                let name = name.to_lowercase();
+                requested != id
+                    && selector != name
+                    && !(selector == "ipad"
+                        && device
+                            .get("deviceTypeIdentifier")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .contains(".iPad"))
+                    && !(selector == "iphone"
+                        && device
+                            .get("deviceTypeIdentifier")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .contains(".iPhone"))
+            }) {
                 continue;
             }
             candidates.push((
@@ -370,12 +387,32 @@ fn select_ios_simulator(
         }
     }
     candidates.sort();
-    candidates.into_iter().next().map(|(_, name, id)| (name, id)).context("No available iOS simulator matches; install an iPhone/iPad runtime in Xcode or check --device-id")
+    candidates.into_iter().next().map(|(_, name, id)| (name, id)).context("No available iOS simulator matches the requested ID, family, or name; use `xcrun simctl list devices available` to see installed simulators")
 }
 
 #[cfg(test)]
 mod simulator_tests {
     use super::*;
+    #[test]
+    fn selects_requested_family_or_exact_name() {
+        let devices = serde_json::json!({"devices": {
+            "com.apple.CoreSimulator.SimRuntime.iOS-18-2": [
+                {"name":"iPhone 16", "udid":"phone", "deviceTypeIdentifier":"com.apple.CoreSimulator.SimDeviceType.iPhone-16", "isAvailable":true, "state":"Booted"},
+                {"name":"iPad Pro", "udid":"pad", "deviceTypeIdentifier":"com.apple.CoreSimulator.SimDeviceType.iPad-Pro", "isAvailable":true, "state":"Shutdown"}]
+        }});
+        for selector in ["ipad", "IPAD", "iPad Pro", "pad"] {
+            assert_eq!(
+                select_ios_simulator(&devices, Some(selector)).unwrap().1,
+                "pad"
+            );
+        }
+        assert_eq!(
+            select_ios_simulator(&devices, Some("iphone")).unwrap().1,
+            "phone"
+        );
+        assert!(select_ios_simulator(&devices, Some("missing")).is_err());
+    }
+
     #[test]
     fn selects_ipad_and_excludes_other_runtimes() {
         let devices = serde_json::json!({"devices": {

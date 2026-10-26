@@ -52,7 +52,16 @@ case "$tool" in
   adb)
     case "${1:-}" in
       --version) echo 'Android Debug Bridge' ;;
-      devices) printf 'List of devices attached\nselected-phone\tdevice\n' ;;
+      devices)
+        if [ "${JFFI_TEST_NAMED_EMULATOR:-0}" = 1 ]; then
+          printf 'List of devices attached\nemulator-5554\tdevice\nemulator-5556\tdevice\n'
+        else
+          printf 'List of devices attached\nselected-phone\tdevice\n'
+        fi ;;
+      -s)
+        if [ "${3:-}" = emu ]; then
+          if [ "$2" = emulator-5556 ]; then echo Pixel_Tablet; else echo Pixel_Phone; fi
+        elif [ "${3:-}" = shell ] && [ "${4:-}" = getprop ]; then echo 1; fi ;;
       *) if [ "${3:-}" = shell ] && [ "${4:-}" = getprop ]; then echo 1; fi ;;
     esac ;;
 esac
@@ -86,7 +95,7 @@ echo APK > app/build/outputs/apk/release/app-release.apk
     fs::create_dir_all(&sdk).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_jffi"))
         .current_dir(&project)
-        .env("PATH", path)
+        .env("PATH", &path)
         .env("ANDROID_HOME", &sdk)
         .env("ANDROID_NDK_HOME", root.join("ndk"))
         .env("JFFI_TEST_LOG", &log)
@@ -121,5 +130,38 @@ echo APK > app/build/outputs/apk/release/app-release.apk
     );
     assert!(!commands.contains("assembleDebug"));
     assert!(!commands.contains("emulator|"));
+    fs::write(&log, "").unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_jffi"))
+        .current_dir(&project)
+        .env("PATH", &path)
+        .env("ANDROID_HOME", &sdk)
+        .env("ANDROID_NDK_HOME", root.join("ndk"))
+        .env("JFFI_TEST_LOG", &log)
+        .env("JFFI_TEST_NAMED_EMULATOR", "1")
+        .args([
+            "run",
+            "--platform",
+            "android",
+            "--release",
+            "--device",
+            "Pixel_Tablet",
+            "--no-setup",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let commands = fs::read_to_string(&log).unwrap();
+    assert!(
+        commands.contains("adb|-s emulator-5556 install -r"),
+        "{commands}"
+    );
+    assert!(
+        !commands.contains("adb|-s emulator-5554 install"),
+        "{commands}"
+    );
     fs::remove_dir_all(root).unwrap();
 }

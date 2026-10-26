@@ -7,6 +7,7 @@ mod platform;
 mod setup;
 mod templates;
 mod templating;
+mod web_bindings;
 
 #[derive(Parser)]
 #[command(name = "jffi")]
@@ -93,9 +94,9 @@ enum Commands {
         #[arg(short, long, default_value = "ios")]
         platform: String,
 
-        /// Run on a physical iOS or Android device
-        #[arg(short, long)]
-        device: bool,
+        /// iOS simulator family/name, Android AVD name/serial, or physical when omitted
+        #[arg(short, long, num_args = 0..=1, default_missing_value = "physical")]
+        device: Option<String>,
 
         /// Simulator UDID or connected device identifier (Android adb serial)
         #[arg(long)]
@@ -120,9 +121,9 @@ enum Commands {
         #[arg(short, long, default_value = "ios")]
         platform: String,
 
-        /// Run diagnostics on a physical iOS or Android device
-        #[arg(short, long)]
-        device: bool,
+        /// iOS simulator family/name, Android AVD name/serial, or physical when omitted
+        #[arg(short, long, num_args = 0..=1, default_missing_value = "physical")]
+        device: Option<String>,
 
         /// Simulator UDID or connected device identifier (Android adb serial)
         #[arg(long)]
@@ -291,7 +292,12 @@ fn main() -> anyhow::Result<()> {
             if no_android_bridge {
                 std::env::set_var("JFFI_NO_ANDROID_BRIDGE", "1");
             }
-            commands::run::run_project(&platform, device, release, device_id.as_deref())?;
+            commands::run::run_project(
+                &platform,
+                device.as_deref(),
+                release,
+                device_id.as_deref(),
+            )?;
         }
         Commands::Debug {
             platform,
@@ -305,7 +311,7 @@ fn main() -> anyhow::Result<()> {
             if no_android_bridge {
                 std::env::set_var("JFFI_NO_ANDROID_BRIDGE", "1");
             }
-            commands::run::run_project(&platform, device, false, device_id.as_deref())?;
+            commands::run::run_project(&platform, device.as_deref(), false, device_id.as_deref())?;
         }
         Commands::Dev {
             platform,
@@ -401,13 +407,33 @@ mod cli_tests {
             Cli::try_parse_from(["jffi", "debug", "--platform", "ios", "--device"])
                 .unwrap()
                 .command,
-            Commands::Debug { platform, device: true, .. } if platform == "ios"
+            Commands::Debug { platform, device: Some(value), .. } if platform == "ios" && value == "physical"
         ));
         assert!(matches!(
             Cli::try_parse_from(["jffi", "dev", "--platform", "linux"])
                 .unwrap()
                 .command,
             Commands::Dev { platform, .. } if platform == "linux"
+        ));
+    }
+
+    #[test]
+    fn parses_friendly_simulator_and_physical_device_selection() {
+        for platform in ["ios", "android"] {
+            assert!(matches!(
+                Cli::try_parse_from(["jffi", "debug", "--platform", platform, "--device", "example"]).unwrap().command,
+                Commands::Debug { device: Some(value), .. } if value == "example"
+            ));
+        }
+        for selector in ["ipad", "iphone", "iPad Pro 11-inch (M4)"] {
+            assert!(matches!(
+                Cli::try_parse_from(["jffi", "run", "--platform", "ios", "--device", selector]).unwrap().command,
+                Commands::Run { device: Some(value), .. } if value == selector
+            ));
+        }
+        assert!(matches!(
+            Cli::try_parse_from(["jffi", "run", "--device", "--device-id", "phone-id"]).unwrap().command,
+            Commands::Run { device: Some(value), device_id: Some(id), .. } if value == "physical" && id == "phone-id"
         ));
     }
 

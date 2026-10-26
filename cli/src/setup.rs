@@ -3,20 +3,20 @@ use anyhow::{Context, Result};
 use colored::*;
 use std::process::Command;
 
+fn automatic_setup_allowed(no_setup: Option<&str>, offline: Option<&str>) -> bool {
+    no_setup != Some("1") && !matches!(offline, Some("1") | Some("true"))
+}
+
 pub(crate) fn installation_allowed() -> bool {
-    std::env::var("JFFI_INSTALL_MISSING").as_deref() == Ok("1")
+    managed_tool_reconciliation_allowed()
+        && std::env::var("JFFI_INSTALL_MISSING").as_deref() == Ok("1")
 }
 
 fn managed_tool_reconciliation_allowed() -> bool {
-    if installation_allowed() {
-        return true;
-    }
-
-    std::env::var("JFFI_NO_SETUP").as_deref() != Ok("1")
-        && !matches!(
-            std::env::var("CARGO_NET_OFFLINE").as_deref(),
-            Ok("1") | Ok("true")
-        )
+    automatic_setup_allowed(
+        std::env::var("JFFI_NO_SETUP").ok().as_deref(),
+        std::env::var("CARGO_NET_OFFLINE").ok().as_deref(),
+    )
 }
 
 pub(crate) fn reconcile_platform(platform: &Platform) -> Result<()> {
@@ -407,6 +407,9 @@ pub fn setup_platform(platform: &Platform) -> Result<()> {
 /// Check prerequisites needed to compile and run a platform without requiring
 /// packaging-only tooling. Bundle commands use the full platform setup above.
 pub(crate) fn setup_platform_for_build(platform: &Platform) -> Result<()> {
+    if managed_tool_reconciliation_allowed() {
+        std::env::set_var("JFFI_INSTALL_MISSING", "1");
+    }
     setup_platform_with_scope(platform, false)
 }
 
@@ -656,6 +659,15 @@ mod tests {
         android_rust_targets, flatpak_ref, missing_linux_system_packages,
         parse_uniffi_bindgen_version, windows_rust_targets,
     };
+
+    #[test]
+    fn automatic_setup_is_default_and_opt_outs_take_precedence() {
+        assert!(super::automatic_setup_allowed(None, None));
+        assert!(!super::automatic_setup_allowed(Some("1"), None));
+        assert!(!super::automatic_setup_allowed(None, Some("true")));
+        assert!(!super::automatic_setup_allowed(None, Some("1")));
+        assert!(!super::automatic_setup_allowed(Some("1"), Some("true")));
+    }
 
     #[test]
     fn parses_uniffi_bindgen_version() {

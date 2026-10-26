@@ -1,6 +1,6 @@
 [package]
 name = "jffi"
-version = "0.4.23"
+version = "0.4.24"
 edition = "2021"
 authors = ["JFFI Contributors"]
 description = "Cross-platform framework for building native apps with Rust business logic and platform-native UIs"
@@ -31,6 +31,10 @@ rand = "0.10"
 uuid = { version = "1.23", features = ["v4"] }
 syn = { version = "2.0.96", features = ["full", "parsing", "visit"] }
 quote = "1.0.45"
+prettyplease = "0.2.37"
+uniffi_meta = "=0.29.4"
+uniffi_meta_031 = { package = "uniffi_meta", version = "=0.31.1" }
+wasmparser = { version = "0.244", default-features = false, features = ["std", "features"] }
 proc-macro2 = "1.0.106"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "ico"] }
 include_dir = "0.7"

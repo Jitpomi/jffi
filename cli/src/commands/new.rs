@@ -320,31 +320,7 @@ wasm-bindgen = "0.2"
     );
     fs::write(ffi_web_dir.join("Cargo.toml"), cargo_toml)?;
 
-    let module_name = name.replace("-", "_");
-    let lib_rs = format!(
-        r#"use {}_core::Core;
-use wasm_bindgen::prelude::*;
-
-#[wasm_bindgen(js_name = Core)]
-pub struct FfiCore {{
-    core: Core,
-}}
-
-#[wasm_bindgen(js_class = Core)]
-impl FfiCore {{
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {{
-        Self {{ core: Core::new() }}
-    }}
-    
-    pub fn greeting(&self) -> String {{
-        self.core.greeting()
-    }}
-}}
-"#,
-        module_name
-    );
-    fs::write(ffi_web_dir.join("src/lib.rs"), lib_rs)?;
+    crate::web_bindings::sync(dir)?;
 
     println!("  {} ffi-web/", "✓".green());
     Ok(())

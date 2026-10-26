@@ -1919,6 +1919,23 @@ fn build_linux(release: bool) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn configure_wasm_compiler(cmd: &mut Command) {
+    // Auto-fix for macOS Apple Clang lacking WASM support
+    if std::env::consts::OS == "macos" && std::env::var("CC_wasm32_unknown_unknown").is_err() {
+        if let Ok(output) = Command::new("brew").args(["--prefix", "llvm"]).output() {
+            if output.status.success() {
+                let prefix = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                let clang = format!("{}/bin/clang", prefix);
+                let ar = format!("{}/bin/llvm-ar", prefix);
+                if std::path::Path::new(&clang).exists() {
+                    cmd.env("CC_wasm32_unknown_unknown", clang);
+                    cmd.env("AR_wasm32_unknown_unknown", ar);
+                }
+            }
+        }
+    }
+}
+
 fn build_web(release: bool) -> Result<()> {
     use indicatif::{ProgressBar, ProgressStyle};
 
@@ -1928,6 +1945,8 @@ fn build_web(release: bool) -> Result<()> {
     ensure_wasm_target()?;
 
     let profile = if release { "release" } else { "debug" };
+
+    crate::web_bindings::sync_for_build(std::path::Path::new("."), release)?;
 
     // Build the ffi-web crate for wasm32
     let mut args = vec!["build", "--target", "wasm32-unknown-unknown"];
@@ -1942,20 +1961,7 @@ fn build_web(release: bool) -> Result<()> {
 
         let mut cmd = Command::new("cargo");
 
-        // Auto-fix for macOS Apple Clang lacking WASM support
-        if std::env::consts::OS == "macos" && std::env::var("CC_wasm32_unknown_unknown").is_err() {
-            if let Ok(output) = Command::new("brew").args(["--prefix", "llvm"]).output() {
-                if output.status.success() {
-                    let prefix = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                    let clang = format!("{}/bin/clang", prefix);
-                    let ar = format!("{}/bin/llvm-ar", prefix);
-                    if std::path::Path::new(&clang).exists() {
-                        cmd.env("CC_wasm32_unknown_unknown", clang);
-                        cmd.env("AR_wasm32_unknown_unknown", ar);
-                    }
-                }
-            }
-        }
+        configure_wasm_compiler(&mut cmd);
 
         let status = cmd
             .args(&args)
@@ -1978,20 +1984,7 @@ fn build_web(release: bool) -> Result<()> {
 
         let mut cmd = Command::new("cargo");
 
-        // Auto-fix for macOS Apple Clang lacking WASM support
-        if std::env::consts::OS == "macos" && std::env::var("CC_wasm32_unknown_unknown").is_err() {
-            if let Ok(output) = Command::new("brew").args(["--prefix", "llvm"]).output() {
-                if output.status.success() {
-                    let prefix = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                    let clang = format!("{}/bin/clang", prefix);
-                    let ar = format!("{}/bin/llvm-ar", prefix);
-                    if std::path::Path::new(&clang).exists() {
-                        cmd.env("CC_wasm32_unknown_unknown", clang);
-                        cmd.env("AR_wasm32_unknown_unknown", ar);
-                    }
-                }
-            }
-        }
+        configure_wasm_compiler(&mut cmd);
 
         let status = cmd
             .args(&args)

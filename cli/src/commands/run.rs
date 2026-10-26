@@ -6,17 +6,24 @@ use crate::platform::Platform;
 
 pub fn run_project(
     platform_str: &str,
-    device: bool,
+    selector: Option<&str>,
     release: bool,
     device_id: Option<&str>,
 ) -> Result<()> {
+    let device = selector == Some("physical");
+    let named = selector.filter(|_| !device);
+    if named.is_some() && device_id.is_some() {
+        anyhow::bail!("Use either --device <family/name> or --device-id, not both");
+    }
     let platform = Platform::from_str(platform_str)
         .ok_or_else(|| anyhow::anyhow!("Unknown platform: {}", platform_str))?;
 
     if !platform.is_host_supported() {
         anyhow::bail!("{} cannot be run on this host", platform.as_str());
     }
-    if (device || device_id.is_some()) && !matches!(platform, Platform::Ios | Platform::Android) {
+    if (selector.is_some() || device_id.is_some())
+        && !matches!(platform, Platform::Ios | Platform::Android)
+    {
         anyhow::bail!("--device and --device-id apply only to iOS and Android");
     }
     if device && platform == Platform::Ios && device_id.is_none() {
@@ -24,6 +31,14 @@ pub fn run_project(
             "Physical iOS runs require --device-id <UDID>; use xcrun devicectl list devices"
         );
     }
+    let resolved_id = if platform == Platform::Ios {
+        named
+            .map(|name| crate::platform::IOSSimulator::get_available(Some(name)).map(|(_, id)| id))
+            .transpose()?
+    } else {
+        None
+    };
+    let device_id = resolved_id.as_deref().or(device_id);
     let target_desc = if device && platform == Platform::Ios {
         "iOS Device"
     } else {
@@ -73,7 +88,7 @@ pub fn run_project(
         Platform::Ios if device => run_ios_device(release, device_id),
         Platform::Ios => run_ios(release, device_id),
         Platform::Macos => run_macos(release),
-        Platform::Android => run_android(release, device, device_id),
+        Platform::Android => run_android(release, device, device_id, named),
         Platform::Windows => run_windows(release),
         Platform::Linux => run_linux(release),
         Platform::Web => run_web(),
@@ -203,7 +218,12 @@ fn run_ios(release: bool, device_id: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-fn run_android(release: bool, physical: bool, device_id: Option<&str>) -> Result<()> {
+fn run_android(
+    release: bool,
+    physical: bool,
+    device_id: Option<&str>,
+    selector: Option<&str>,
+) -> Result<()> {
     use crate::platform::AndroidProject;
 
     println!("  {} Preparing Android device...", "→".bright_blue());
@@ -218,11 +238,38 @@ fn run_android(release: bool, physical: bool, device_id: Option<&str>) -> Result
         if !output.status.success() {
             anyhow::bail!("adb devices failed");
         }
-        select_android_device(
-            &String::from_utf8_lossy(&output.stdout),
-            physical,
-            device_id,
-        )
+        let devices = String::from_utf8_lossy(&output.stdout);
+        if let Some(selector) = selector {
+            if selector == "emulator" {
+                return select_android_device(&devices, false, None);
+            }
+            if let Some(id) = select_android_device(&devices, false, Some(selector))? {
+                return Ok(Some(id));
+            }
+            let mut matches = Vec::new();
+            for line in devices.lines() {
+                let fields: Vec<_> = line.split_whitespace().collect();
+                if fields.len() < 2 || fields[1] != "device" || !fields[0].starts_with("emulator-")
+                {
+                    continue;
+                }
+                let output = Command::new(adb_path)
+                    .args(["-s", fields[0], "emu", "avd", "name"])
+                    .output()?;
+                if output.status.success()
+                    && String::from_utf8_lossy(&output.stdout).lines().next() == Some(selector)
+                {
+                    matches.push(fields[0].to_string());
+                }
+            }
+            if matches.len() > 1 {
+                anyhow::bail!(
+                    "Multiple emulators match {selector}; pass --device-id with an adb serial"
+                );
+            }
+            return Ok(matches.pop());
+        }
+        select_android_device(&devices, physical, device_id)
     };
     let mut serial = get_serial(&adb_cmd)?;
     if serial.is_none() && (physical || device_id.is_some()) {
@@ -256,8 +303,7 @@ fn run_android(release: bool, physical: bool, device_id: Option<&str>) -> Result
             );
         }
 
-        // Use the first available AVD
-        let avd_name = avd_list[0];
+        let avd_name = select_android_avd(&avd_list, selector)?;
         println!(
             "  {} Available AVDs: {}",
             "→".bright_blue(),
@@ -843,6 +889,14 @@ fn checked_status(command: &mut Command, operation: &str) -> Result<()> {
     Ok(())
 }
 
+fn select_android_avd<'a>(avds: &[&'a str], selector: Option<&str>) -> Result<&'a str> {
+    match selector {
+        Some(name) if name != "emulator" => avds.iter().copied().find(|avd| *avd == name)
+            .with_context(|| format!("No Android AVD named '{name}'. Available AVDs: {}. Use --device-id for a connected device serial.", avds.join(", "))),
+        _ => avds.first().copied().context("No Android AVDs available"),
+    }
+}
+
 fn select_android_device(
     output: &str,
     physical: bool,
@@ -875,6 +929,21 @@ fn select_android_device(
 #[cfg(test)]
 mod parity_tests {
     use super::*;
+    #[test]
+    fn android_avd_selection_uses_exact_name_and_rejects_unknown_names() {
+        let avds = ["Pixel_9", "Pixel_Tablet"];
+        assert_eq!(
+            select_android_avd(&avds, Some("Pixel_Tablet")).unwrap(),
+            "Pixel_Tablet"
+        );
+        assert_eq!(
+            select_android_avd(&avds, Some("emulator")).unwrap(),
+            "Pixel_9"
+        );
+        assert!(select_android_avd(&avds, Some("missing")).is_err());
+        assert!(select_android_avd(&[], None).is_err());
+    }
+
     #[test]
     fn windows_registration_preserves_user_data_and_uses_the_selected_output() {
         assert!(!super::WINDOWS_LAUNCH_SCRIPT.contains("Remove-AppxPackage"));
