@@ -2617,24 +2617,51 @@ fn create_macos_dmg(app: &Path, output: &Path, volume: &str, print_commands: boo
         String::from_utf8_lossy(&version.stderr)
     );
     let major = parse_macos_major_version(&String::from_utf8_lossy(&version.stdout))?;
-    let mut command = macos_dmg_command(&app, &output, volume, major);
-    println!(
-        "  {} Creating UDZO disk image with {} (macOS {})...",
-        "→".bright_blue(),
-        command.get_program().to_string_lossy(),
-        major
-    );
-    if print_commands {
-        println!("  $ {:?}", command);
-    }
-    run_checked(&mut command, "macOS DMG creation").with_context(|| {
-        format!(
-            "DMG source: {}; output: {}",
-            app.display(),
-            output.display()
-        )
-    })?;
-    verify_nonempty_file(&output, "macOS DMG")
+    // diskutil copies a folder's contents, whereas hdiutil treats a .app as
+    // an enclosing bundle. Stage the bundle itself for a drag-installable DMG.
+    let staging = if major >= 27 {
+        let path = std::env::temp_dir().join(format!("jffi-dmg-stage-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&path).context("Could not create DMG staging directory")?;
+        Some(path)
+    } else {
+        None
+    };
+    let result = (|| -> Result<()> {
+        if let Some(stage) = &staging {
+            run_checked(
+                Command::new("ditto")
+                    .arg(&app)
+                    .arg(stage.join(app.file_name().context("App needs a bundle name")?)),
+                "DMG app staging",
+            )?;
+        }
+        let source = staging.as_deref().unwrap_or(&app);
+        let mut command = macos_dmg_command(source, &output, volume, major);
+        println!(
+            "  {} Creating UDZO disk image with {} (macOS {})...",
+            "→".bright_blue(),
+            command.get_program().to_string_lossy(),
+            major
+        );
+        if print_commands {
+            println!("  $ {:?}", command);
+        }
+        run_checked(&mut command, "macOS DMG creation").with_context(|| {
+            format!(
+                "DMG source: {}; output: {}",
+                source.display(),
+                output.display()
+            )
+        })?;
+        verify_nonempty_file(&output, "macOS DMG")
+    })();
+    let cleanup = staging
+        .map(fs::remove_dir_all)
+        .transpose()
+        .context("Could not remove DMG staging directory");
+    result?;
+    cleanup?;
+    Ok(())
 }
 
 fn run_checked(command: &mut Command, operation: &str) -> Result<()> {
@@ -2773,6 +2800,28 @@ mod distribution_parity_tests {
             result.status.success(),
             "{}",
             String::from_utf8_lossy(&result.stderr)
+        );
+        let mount = root.join("mounted");
+        fs::create_dir(&mount).unwrap();
+        run_checked(
+            Command::new("hdiutil")
+                .args(["attach", "-readonly", "-nobrowse", "-mountpoint"])
+                .arg(&mount)
+                .arg(&output),
+            "DMG test mount",
+        )
+        .unwrap();
+        let contents = fs::read_to_string(mount.join("Sample.app/fixture.txt"));
+        let detach = run_checked(
+            Command::new("hdiutil").arg("detach").arg(&mount),
+            "DMG test detach",
+        );
+        // Detach even if the layout is wrong so a failed test leaves no mount.
+        detach.unwrap();
+        assert_eq!(
+            contents.unwrap(),
+            "JFFI disk image regression",
+            "DMG must contain the enclosing .app bundle"
         );
         fs::remove_dir_all(root).unwrap();
     }

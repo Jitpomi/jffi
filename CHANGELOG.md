@@ -4,6 +4,8 @@
 
 - Use `diskutil image create from` for UDZO disk images on macOS 27 and later;
   retain `hdiutil create` on older macOS versions.
+- Preserve the enclosing `.app` bundle in modern disk images with metadata-
+  preserving staging; mount regression-test images to verify installable layout.
 - Resolve app/output paths before packaging, report the selected backend and
   include source/output paths when image creation fails. Signing, signature
   verification and notarization remain unchanged.

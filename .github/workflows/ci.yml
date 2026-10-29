@@ -116,6 +116,9 @@ jobs:
           s += '\n[bundle]\nidentifier = "com.jitpomi.ci.nativesmoke"\n'
           s += '\n[bundle.windows]\nformats = ["msix"]\ntargets = ["x86_64-pc-windows-msvc"]\nidentity_name = "Jitpomi.NativeSmoke"\npublisher_id = "CN=JitpomiCI"\n'
           p.write_text(s)
+      - name: Verify mounted DMG layout on macOS 27
+        if: matrix.os == 'xcode-27'
+        run: cargo test -p jffi macos_dmg --locked
       - name: Prepare Android SDK
         if: matrix.platform == 'android'
         shell: bash
