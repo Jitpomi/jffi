@@ -1290,36 +1290,7 @@ fn bundle_macos(
             let app_path = export_path.join(format!("{}.app", project.scheme));
             let dmg_path = export_path.join(format!("{}.dmg", project.scheme));
 
-            if app_path.exists() {
-                // Remove existing DMG to avoid hdiutil error
-                if dmg_path.exists() {
-                    let _ = fs::remove_file(&dmg_path);
-                }
-
-                let mut hdiutil_cmd = Command::new("hdiutil");
-                hdiutil_cmd.args([
-                    "create",
-                    "-volname",
-                    &project.scheme,
-                    "-srcfolder",
-                    app_path.to_str().unwrap(),
-                    "-ov",
-                    "-format",
-                    "UDZO",
-                    dmg_path.to_str().unwrap(),
-                ]);
-                if print_commands {
-                    println!("  $ {:?}", hdiutil_cmd);
-                }
-                let status = hdiutil_cmd.status().context("Failed to create DMG")?;
-
-                if !status.success() {
-                    anyhow::bail!("Failed to create DMG using hdiutil");
-                }
-                verify_nonempty_file(&dmg_path, "macOS DMG")?;
-            } else {
-                anyhow::bail!("Exported macOS app was not found at {}", app_path.display());
-            }
+            create_macos_dmg(&app_path, &dmg_path, &project.scheme, print_commands)?;
         }
     }
 
@@ -2583,6 +2554,89 @@ fn export_linux_public_key(
     fs::write(path, output.stdout).context("Could not write Flatpak signing public key")
 }
 
+fn macos_dmg_command(app: &Path, output: &Path, volume: &str, major: u32) -> Command {
+    if major >= 27 {
+        let mut command = Command::new("diskutil");
+        command.args([
+            "image",
+            "create",
+            "from",
+            "--format",
+            "UDZO",
+            "--volumeName",
+            volume,
+        ]);
+        command.arg(app).arg(output);
+        command
+    } else {
+        let mut command = Command::new("hdiutil");
+        command.args(["create", "-volname", volume, "-srcfolder"]);
+        command
+            .arg(app)
+            .args(["-ov", "-format", "UDZO"])
+            .arg(output);
+        command
+    }
+}
+
+fn parse_macos_major_version(version: &str) -> Result<u32> {
+    version
+        .trim()
+        .split('.')
+        .next()
+        .unwrap_or("")
+        .parse()
+        .with_context(|| format!("Invalid macOS product version: {:?}", version.trim()))
+}
+
+fn create_macos_dmg(app: &Path, output: &Path, volume: &str, print_commands: bool) -> Result<()> {
+    anyhow::ensure!(
+        app.is_dir(),
+        "Exported macOS app was not found at {}",
+        app.display()
+    );
+    let app = fs::canonicalize(app).context("Could not resolve exported macOS app path")?;
+    let parent = output
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    fs::create_dir_all(parent).context("Could not create DMG output directory")?;
+    let output =
+        fs::canonicalize(parent)?.join(output.file_name().context("DMG output needs a filename")?);
+    if output.exists() {
+        fs::remove_file(&output)
+            .with_context(|| format!("Could not replace DMG {}", output.display()))?;
+    }
+    let version = Command::new("sw_vers")
+        .arg("-productVersion")
+        .output()
+        .context("Could not detect macOS version for DMG packaging")?;
+    anyhow::ensure!(
+        version.status.success(),
+        "macOS version detection failed: {}",
+        String::from_utf8_lossy(&version.stderr)
+    );
+    let major = parse_macos_major_version(&String::from_utf8_lossy(&version.stdout))?;
+    let mut command = macos_dmg_command(&app, &output, volume, major);
+    println!(
+        "  {} Creating UDZO disk image with {} (macOS {})...",
+        "→".bright_blue(),
+        command.get_program().to_string_lossy(),
+        major
+    );
+    if print_commands {
+        println!("  $ {:?}", command);
+    }
+    run_checked(&mut command, "macOS DMG creation").with_context(|| {
+        format!(
+            "DMG source: {}; output: {}",
+            app.display(),
+            output.display()
+        )
+    })?;
+    verify_nonempty_file(&output, "macOS DMG")
+}
+
 fn run_checked(command: &mut Command, operation: &str) -> Result<()> {
     let status = command
         .status()
@@ -2654,6 +2708,75 @@ mod distribution_parity_tests {
     fn config(extra: &str) -> Config {
         toml::from_str(&format!("[package]\nname = 'sample'\nversion = '1.0.0'\nrelease_date = '2026-10-24'\n[platforms]\nenabled = ['linux']\n{}", extra)).unwrap()
     }
+    #[test]
+    fn macos_dmg_selects_the_supported_image_api() {
+        let source = Path::new("/build with spaces/Sample.app");
+        let output = Path::new("/build with spaces/Sample.dmg");
+        let modern = macos_dmg_command(source, output, "Sample app", 27);
+        assert_eq!(modern.get_program(), "diskutil");
+        assert_eq!(
+            modern.get_args().collect::<Vec<_>>(),
+            [
+                "image",
+                "create",
+                "from",
+                "--format",
+                "UDZO",
+                "--volumeName",
+                "Sample app",
+                "/build with spaces/Sample.app",
+                "/build with spaces/Sample.dmg"
+            ]
+        );
+        let older = macos_dmg_command(source, output, "Sample app", 26);
+        assert_eq!(older.get_program(), "hdiutil");
+        assert_eq!(
+            older.get_args().collect::<Vec<_>>(),
+            [
+                "create",
+                "-volname",
+                "Sample app",
+                "-srcfolder",
+                "/build with spaces/Sample.app",
+                "-ov",
+                "-format",
+                "UDZO",
+                "/build with spaces/Sample.dmg"
+            ]
+        );
+        assert_eq!(
+            macos_dmg_command(source, output, "Sample app", 28).get_program(),
+            "diskutil"
+        );
+        assert_eq!(parse_macos_major_version("27.0.1\n").unwrap(), 27);
+        assert_eq!(parse_macos_major_version("26.6").unwrap(), 26);
+        assert!(parse_macos_major_version("unknown").is_err());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_dmg_can_be_created_replaced_and_inspected() {
+        let root = std::env::temp_dir().join(format!("jffi-dmg-{}", uuid::Uuid::new_v4()));
+        let source = root.join("folder with spaces/Sample.app");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join("fixture.txt"), "JFFI disk image regression").unwrap();
+        let output = root.join("output with spaces/Sample.dmg");
+        for _ in 0..2 {
+            create_macos_dmg(&source, &output, "Sample app", false).unwrap();
+        }
+        let result = Command::new("hdiutil")
+            .arg("imageinfo")
+            .arg(&output)
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn flatpak_bundle_uses_supported_key_embedding_flags_not_commit_signing_flags() {
         let command = super::flatpak_export_command(

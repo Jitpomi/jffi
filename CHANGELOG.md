@@ -1,5 +1,15 @@
 # `jffi` Changelog
 
+## v0.4.25 — macOS 27 disk image packaging
+
+- Use `diskutil image create from` for UDZO disk images on macOS 27 and later;
+  retain `hdiutil create` on older macOS versions.
+- Resolve app/output paths before packaging, report the selected backend and
+  include source/output paths when image creation fails. Signing, signature
+  verification and notarization remain unchanged.
+- Add real disk-image creation/replacement tests and a macOS 27 generated-app
+  DMG packaging job.
+
 ## v0.4.24 — Automatic web ABI bindings and development setup
 
 - Generate web APIs from compiler-selected UniFFI metadata and call its exported
