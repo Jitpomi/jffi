@@ -74,7 +74,24 @@ pub fn build_project(
             anyhow::bail!("Platform '{}' is not enabled in jffi.toml", platform);
         }
     }
-    sync_configs_to_platforms(&config)?;
+    if !all && platform.is_none() {
+        anyhow::bail!("Specify --platform <platform> or --all");
+    }
+    let sync_targets: Vec<&str> = if all {
+        config
+            .platforms
+            .enabled
+            .iter()
+            .filter_map(|name| {
+                Platform::from_str(name)
+                    .filter(|p| p.is_host_supported())
+                    .map(|_| name.as_str())
+            })
+            .collect()
+    } else {
+        platform.as_deref().into_iter().collect()
+    };
+    sync_configs_to_platforms(&config, &sync_targets)?;
 
     // Generate icons for the building platforms if configured
     if all {
@@ -2366,7 +2383,24 @@ fn sync_linux_metainfo_content(
     content.to_string()
 }
 
-pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
+pub fn sync_configs_to_platforms(config: &crate::config::Config, platforms: &[&str]) -> Result<()> {
+    sync_configs_at(config, platforms, Path::new("."))
+}
+
+fn preserve_line_format(original: &str, lines: Vec<String>) -> String {
+    let newline = if original.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let mut result = lines.join(newline);
+    if original.ends_with('\n') {
+        result.push_str(newline);
+    }
+    result
+}
+
+fn sync_configs_at(config: &crate::config::Config, platforms: &[&str], root: &Path) -> Result<()> {
     println!(
         "  {} Syncing jffi.toml configurations to native platform builds...",
         "→".bright_blue()
@@ -2395,9 +2429,9 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
     }
 
     // 1. Android
-    let gradle_path = Path::new("platforms/android/app/build.gradle.kts");
-    if gradle_path.exists() {
-        let content = fs::read_to_string(gradle_path)?;
+    let gradle_path = root.join("platforms/android/app/build.gradle.kts");
+    if platforms.contains(&"android") && gradle_path.exists() {
+        let content = fs::read_to_string(&gradle_path)?;
 
         let package = &config.platforms.android.package;
 
@@ -2493,9 +2527,9 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
             })
             .collect();
 
-        let new_content = lines.join("\n");
+        let new_content = preserve_line_format(&content, lines);
         if new_content != content {
-            fs::write(gradle_path, new_content)?;
+            fs::write(&gradle_path, new_content)?;
             println!(
                 "    {} Synced Android gradle configurations (package: {})",
                 "✓".green(),
@@ -2503,12 +2537,12 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
             );
         }
 
-        let gradle_props_path = Path::new("platforms/android/gradle.properties");
+        let gradle_props_path = root.join("platforms/android/gradle.properties");
         if gradle_props_path.exists() {
-            let props_content = fs::read_to_string(gradle_props_path)?;
+            let props_content = fs::read_to_string(&gradle_props_path)?;
             let new_props = sync_android_gradle_properties(&props_content, shrink_resources);
             if new_props != props_content {
-                fs::write(gradle_props_path, new_props)?;
+                fs::write(&gradle_props_path, new_props)?;
                 println!(
                     "    {} Synced Android gradle.properties (enableResourceOptimizations: {})",
                     "✓".green(),
@@ -2525,10 +2559,12 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
         .and_then(|b| b.identifier.clone())
         .unwrap_or_else(|| config.platforms.ios.bundle_id.clone());
 
-    let platforms = vec!["ios", "macos"];
-    for platform_str in platforms {
-        let platform_dir = format!("platforms/{}", platform_str);
-        if !Path::new(&platform_dir).exists() {
+    for platform_str in ["ios", "macos"] {
+        if !platforms.contains(&platform_str) {
+            continue;
+        }
+        let platform_dir = root.join(format!("platforms/{}", platform_str));
+        if !platform_dir.exists() {
             continue;
         }
 
@@ -2583,10 +2619,9 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
                                             bundle_id.clone()
                                         };
                                         format!(
-                                            "{:width$}PRODUCT_BUNDLE_IDENTIFIER = {};",
-                                            "",
-                                            final_id,
-                                            width = indent
+                                            "{}PRODUCT_BUNDLE_IDENTIFIER = {};",
+                                            &line[..indent],
+                                            final_id
                                         )
                                     } else {
                                         line.to_string()
@@ -2607,7 +2642,7 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
                                     };
                                     format!(
                                         "{}{} = {};",
-                                        " ".repeat(line.len() - trimmed.len()),
+                                        &line[..line.len() - trimmed.len()],
                                         key,
                                         value
                                     )
@@ -2616,10 +2651,9 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
                                     if parts.len() == 2 {
                                         let indent = line.len() - trimmed.len();
                                         format!(
-                                            "{:width$}MARKETING_VERSION = {};",
-                                            "",
-                                            version_name,
-                                            width = indent
+                                            "{}MARKETING_VERSION = {};",
+                                            &line[..indent],
+                                            version_name
                                         )
                                     } else {
                                         line.to_string()
@@ -2629,10 +2663,9 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
                                     if parts.len() == 2 {
                                         let indent = line.len() - trimmed.len();
                                         format!(
-                                            "{:width$}CURRENT_PROJECT_VERSION = {};",
-                                            "",
-                                            version_code,
-                                            width = indent
+                                            "{}CURRENT_PROJECT_VERSION = {};",
+                                            &line[..indent],
+                                            version_code
                                         )
                                     } else {
                                         line.to_string()
@@ -2643,7 +2676,7 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
                             })
                             .collect();
 
-                        let new_content = lines.join("\n");
+                        let new_content = preserve_line_format(&content, lines);
                         if new_content != content {
                             fs::write(&pbxproj_path, new_content)?;
                             println!("    {} Synced {} Xcode bundle settings (id: {}, version: {}, build: {})", "✓".green(), platform_str, bundle_id, version_name, version_code);
@@ -2654,19 +2687,19 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
         }
         if platform_str == "ios" {
             if let Some(ref groups) = config.platforms.ios.app_groups {
-                sync_entitlements(Path::new("platforms/ios"), groups)?;
+                sync_entitlements(&root.join("platforms/ios"), groups)?;
             }
         }
         if platform_str == "macos" {
             if let Some(ref groups) = config.platforms.macos.app_groups {
-                sync_entitlements(Path::new("platforms/macos"), groups)?;
+                sync_entitlements(&root.join("platforms/macos"), groups)?;
             }
         }
     }
 
     // 3. Web - sync SEO & meta tags to index.html
-    let index_path = Path::new("platforms/web/index.html");
-    if index_path.exists() {
+    let index_path = root.join("platforms/web/index.html");
+    if platforms.contains(&"web") && index_path.exists() {
         let web = &config.platforms.web;
         let name_pascal = config
             .package
@@ -2684,7 +2717,7 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
         let title = web.title.as_deref().unwrap_or(&name_pascal);
         let lang = &web.lang;
 
-        let content = fs::read_to_string(index_path)?;
+        let content = fs::read_to_string(&index_path)?;
         let mut new_content = content.clone();
 
         // Sync lang attribute
@@ -2813,7 +2846,7 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
         }
 
         if new_content != content {
-            fs::write(index_path, new_content)?;
+            fs::write(&index_path, new_content)?;
             println!(
                 "    {} Synced web SEO & meta tags (title: {})",
                 "✓".green(),
@@ -2823,9 +2856,9 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
     }
 
     // 4. Rust Core Cargo.toml
-    let cargo_path = Path::new("core/Cargo.toml");
+    let cargo_path = root.join("core/Cargo.toml");
     if cargo_path.exists() {
-        let content = fs::read_to_string(cargo_path)?;
+        let content = fs::read_to_string(&cargo_path)?;
         let lines: Vec<String> = content
             .lines()
             .map(|line| {
@@ -2836,17 +2869,17 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
                 }
             })
             .collect();
-        let new_content = lines.join("\n");
+        let new_content = preserve_line_format(&content, lines);
         if new_content != content {
-            fs::write(cargo_path, new_content)?;
+            fs::write(&cargo_path, new_content)?;
             println!("    {} Synced Rust core Cargo.toml version", "✓".green());
         }
     }
 
     // 5. Windows Package.appxmanifest
-    let windows_path = Path::new("platforms/windows/Package.appxmanifest");
-    if windows_path.exists() {
-        let content = fs::read_to_string(windows_path)?;
+    let windows_path = root.join("platforms/windows/Package.appxmanifest");
+    if platforms.contains(&"windows") && windows_path.exists() {
+        let content = fs::read_to_string(&windows_path)?;
         let parts: Vec<&str> = version_name.split('.').collect();
         let windows_version = if parts.len() == 3 {
             // Microsoft Store requires the revision (4th component) to always be 0.
@@ -2896,7 +2929,7 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
                 result
             })
             .collect();
-        let new_content = lines.join("\n");
+        let new_content = preserve_line_format(&content, lines);
         let new_content = sync_windows_minimum(&new_content, &config.platforms.windows.min_version);
         let new_content = if let Some(publisher) = config
             .bundle
@@ -2909,7 +2942,7 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
             new_content
         };
         if new_content != content {
-            fs::write(windows_path, new_content)?;
+            fs::write(&windows_path, new_content)?;
             println!(
                 "    {} Synced Windows Package.appxmanifest identity & version (id: {})",
                 "✓".green(),
@@ -2921,9 +2954,9 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
     // Keep the unpackaged Windows executable metadata aligned with the MSIX
     // identity. SDK-style projects use these values for file properties and
     // assembly metadata even when Package.appxmanifest is also present.
-    let windows_dir = Path::new("platforms/windows");
-    if windows_dir.is_dir() {
-        for entry in fs::read_dir(windows_dir)?.filter_map(|entry| entry.ok()) {
+    let windows_dir = root.join("platforms/windows");
+    if platforms.contains(&"windows") && windows_dir.is_dir() {
+        for entry in fs::read_dir(&windows_dir)?.filter_map(|entry| entry.ok()) {
             let path = entry.path();
             if path.extension().and_then(|ext| ext.to_str()) != Some("csproj") {
                 continue;
@@ -2944,9 +2977,9 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
     }
 
     // 6. Linux GTK Application ID
-    let linux_app_py = Path::new("platforms/linux/app.py");
-    if linux_app_py.exists() {
-        let content = fs::read_to_string(linux_app_py)?;
+    let linux_app_py = root.join("platforms/linux/app.py");
+    if platforms.contains(&"linux") && linux_app_py.exists() {
+        let content = fs::read_to_string(&linux_app_py)?;
         let app_id = get_linux_app_id(config);
 
         let lines: Vec<String> = content
@@ -2971,9 +3004,9 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
             })
             .collect();
 
-        let new_content = lines.join("\n");
+        let new_content = preserve_line_format(&content, lines);
         if new_content != content {
-            fs::write(linux_app_py, new_content)?;
+            fs::write(&linux_app_py, new_content)?;
             println!(
                 "    {} Synced Linux application ID (id: {})",
                 "✓".green(),
@@ -2984,9 +3017,9 @@ pub fn sync_configs_to_platforms(config: &crate::config::Config) -> Result<()> {
 
     // AppStream metadata is the version source displayed by Linux software
     // centers. Preserve older releases and prepend the configured version.
-    let linux_dir = Path::new("platforms/linux");
-    if linux_dir.is_dir() {
-        for entry in fs::read_dir(linux_dir)?.filter_map(|entry| entry.ok()) {
+    let linux_dir = root.join("platforms/linux");
+    if platforms.contains(&"linux") && linux_dir.is_dir() {
+        for entry in fs::read_dir(&linux_dir)?.filter_map(|entry| entry.ok()) {
             let path = entry.path();
             let is_metainfo = path
                 .file_name()
@@ -3412,6 +3445,66 @@ fn windows_architectures(targets: &[String]) -> Result<Vec<(&'static str, &'stat
 
 #[cfg(test)]
 mod config_sync_tests {
+    #[test]
+    fn selected_sync_preserves_unrelated_projects_and_xcode_formatting() {
+        let root = std::env::temp_dir().join(format!("jffi-sync-{}", uuid::Uuid::new_v4()));
+        let config: crate::config::Config = toml::from_str(
+            r#"
+[package]
+name = "sample"
+version = "2.1.5"
+[platforms]
+enabled = ["windows", "ios", "macos", "android", "linux", "web"]
+"#,
+        )
+        .unwrap();
+        let files = [
+            ("core/Cargo.toml", "[package]\nversion = \"2.1.5\"\n"),
+            (
+                "platforms/ios/Sample.xcodeproj/project.pbxproj",
+                "\t\tMARKETING_VERSION = 0.1.0;\r\n\t\tCURRENT_PROJECT_VERSION = 1;\r\n",
+            ),
+            (
+                "platforms/macos/Sample.xcodeproj/project.pbxproj",
+                "\tMARKETING_VERSION = 0.1.0;\n",
+            ),
+            (
+                "platforms/android/app/build.gradle.kts",
+                "versionName = \"0.1.0\"\n",
+            ),
+            ("platforms/linux/app.py", "application_id='old',\n"),
+            (
+                "platforms/web/index.html",
+                "<html lang=\"old\"><head></head></html>\n",
+            ),
+            (
+                "platforms/windows/Package.appxmanifest",
+                "<Package>\n<Identity\nName=\"Sample\"\nVersion=\"0.1.0.0\" />\n</Package>\n",
+            ),
+        ];
+        for (path, content) in files {
+            let path = root.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, content).unwrap();
+        }
+        super::sync_configs_at(&config, &["windows"], &root).unwrap();
+        for (path, original) in files.iter().filter(|(path, _)| !path.contains("windows")) {
+            assert_eq!(
+                std::fs::read_to_string(root.join(path)).unwrap(),
+                *original,
+                "Windows changed {path}"
+            );
+        }
+        super::sync_configs_at(&config, &["ios"], &root).unwrap();
+        let path = root.join(files[1].0);
+        let updated = std::fs::read_to_string(&path).unwrap();
+        assert!(updated.starts_with("\t\tMARKETING_VERSION = 2.1.5;\r\n"));
+        assert!(updated.ends_with("\r\n"));
+        super::sync_configs_at(&config, &["ios"], &root).unwrap();
+        assert_eq!(std::fs::read_to_string(path).unwrap(), updated);
+        assert_eq!(super::preserve_line_format("a", vec!["a".into()]), "a");
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn msix_publisher_sync_preserves_the_identity_tag_and_escapes_xml() {

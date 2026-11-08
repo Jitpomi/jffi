@@ -65,7 +65,7 @@ pub fn run_project(
             platform.as_str()
         );
     }
-    crate::commands::build::sync_configs_to_platforms(&config)?;
+    crate::commands::build::sync_configs_to_platforms(&config, &[platform.as_str()])?;
 
     // Build first
     crate::commands::build::build_project(

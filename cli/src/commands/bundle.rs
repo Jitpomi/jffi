@@ -64,7 +64,7 @@ pub fn bundle_project(options: BundleOptions<'_>) -> Result<()> {
     // preflights. Native project synchronization can rewrite generated files,
     // so perform it only for an actual bundle operation.
     if should_sync_native_configs(dry_run, print_plan) {
-        crate::commands::build::sync_configs_to_platforms(&config)?;
+        crate::commands::build::sync_configs_to_platforms(&config, &[platform])?;
     }
 
     // Validate configurations for store compatibility
