@@ -708,7 +708,7 @@ fn build_android(release: bool) -> Result<()> {
             }
 
             let ndk_platform = std::env::var("CARGO_NDK_PLATFORM")
-                .unwrap_or_else(|_| config.platforms.android.min_sdk.to_string());
+                .unwrap_or_else(|_| android_config.min_sdk.to_string());
 
             let mut cmd = Command::new("cargo");
             cmd.env("CARGO_TARGET_DIR", "target")
@@ -759,7 +759,7 @@ fn build_android(release: bool) -> Result<()> {
             }
 
             let ndk_platform = std::env::var("CARGO_NDK_PLATFORM")
-                .unwrap_or_else(|_| config.platforms.android.min_sdk.to_string());
+                .unwrap_or_else(|_| android_config.min_sdk.to_string());
 
             let mut cmd = Command::new("cargo");
             cmd.env("CARGO_TARGET_DIR", "target")

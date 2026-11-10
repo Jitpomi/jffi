@@ -295,10 +295,10 @@ pub struct BundleIosConfig {
 pub struct BundleAndroidConfig {
     #[serde(default = "default_android_formats")]
     pub formats: Vec<String>,
-    #[serde(default = "default_android_abis")]
-    pub abis: Vec<String>,
-    #[serde(default = "default_android_min_sdk_bundle")]
-    pub min_sdk: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub abis: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_sdk: Option<u32>,
     #[serde(default = "default_android_compile_sdk")]
     pub compile_sdk: u32,
     #[serde(default = "default_android_build_type")]
@@ -459,9 +459,6 @@ fn default_android_abis() -> Vec<String> {
         "x86_64".to_string(),
     ]
 }
-fn default_android_min_sdk_bundle() -> u32 {
-    23
-}
 fn default_android_compile_sdk() -> u32 {
     36
 }
@@ -502,53 +499,65 @@ fn default_signing_profile() -> String {
     "release".to_string()
 }
 
-/// Resolve one ABI/SDK contract for Rust builds and Gradle packaging.
-pub fn android_bundle_config(config: &Config) -> Result<BundleAndroidConfig> {
-    let explicit = config.bundle.as_ref().and_then(|b| b.android.as_ref());
-    let mut android = explicit.cloned().unwrap_or_else(|| BundleAndroidConfig {
-        formats: default_android_formats(),
-        abis: default_android_abis(),
-        min_sdk: config.platforms.android.min_sdk,
-        compile_sdk: default_android_compile_sdk(),
-        build_type: default_android_build_type(),
-        split_debug_symbols: true,
-        icon: None,
-    });
-    if let Some(abis) = &config.platforms.android.abis {
-        if explicit.is_some()
-            && abis.iter().collect::<std::collections::BTreeSet<_>>()
-                != android.abis.iter().collect()
-        {
-            anyhow::bail!("platforms.android.abis and bundle.android.abis must match");
-        }
-        android.abis = abis.clone();
-    }
-    let mut seen = std::collections::BTreeSet::new();
-    for abi in &android.abis {
-        if !matches!(abi.as_str(), "arm64-v8a" | "armeabi-v7a" | "x86_64") {
-            anyhow::bail!(
+/// Validated values shared by setup, Rust compilation and native packaging.
+pub struct ResolvedAndroidConfig {
+    pub formats: Vec<String>,
+    pub abis: Vec<String>,
+    pub min_sdk: u32,
+    pub compile_sdk: u32,
+    pub split_debug_symbols: bool,
+}
+
+/// Omitted bundle settings inherit platform settings; only explicit values can conflict.
+pub fn android_bundle_config(config: &Config) -> Result<ResolvedAndroidConfig> {
+    let bundle = config.bundle.as_ref().and_then(|b| b.android.as_ref());
+    let platform_abis = config.platforms.android.abis.as_deref();
+    let bundle_abis = bundle.and_then(|a| a.abis.as_deref());
+    for abis in [platform_abis, bundle_abis].into_iter().flatten() {
+        let mut seen = std::collections::BTreeSet::new();
+        anyhow::ensure!(!abis.is_empty(), "Android ABI list cannot be empty");
+        for abi in abis {
+            anyhow::ensure!(
+                matches!(abi.as_str(), "arm64-v8a" | "armeabi-v7a" | "x86_64"),
                 "Unsupported Android ABI: {abi}; supported: arm64-v8a, armeabi-v7a, x86_64"
             );
-        }
-        if !seen.insert(abi) {
-            anyhow::bail!("Duplicate Android ABI: {abi}");
+            anyhow::ensure!(seen.insert(abi), "Duplicate Android ABI: {abi}");
         }
     }
-    if seen.is_empty() {
-        anyhow::bail!("Android ABI list cannot be empty");
+    if let (Some(platform), Some(bundle)) = (platform_abis, bundle_abis) {
+        anyhow::ensure!(
+            platform.iter().collect::<std::collections::BTreeSet<_>>() == bundle.iter().collect(),
+            "platforms.android.abis and bundle.android.abis must match"
+        );
     }
-    let target = config
-        .platforms
-        .android
-        .target_sdk
-        .unwrap_or(android.compile_sdk);
-    if android.min_sdk != config.platforms.android.min_sdk {
-        anyhow::bail!("Conflicting Android min SDK values in platforms.android and bundle.android");
-    }
-    if android.min_sdk > target || target > android.compile_sdk {
-        anyhow::bail!("Android SDKs must satisfy min_sdk <= target_sdk <= compile_sdk");
-    }
-    Ok(android)
+    let abis = platform_abis
+        .or(bundle_abis)
+        .map(<[String]>::to_vec)
+        .unwrap_or_else(default_android_abis);
+    let min_sdk = bundle
+        .and_then(|a| a.min_sdk)
+        .unwrap_or(config.platforms.android.min_sdk);
+    let compile_sdk = bundle
+        .map(|a| a.compile_sdk)
+        .unwrap_or_else(default_android_compile_sdk);
+    let target = config.platforms.android.target_sdk.unwrap_or(compile_sdk);
+    anyhow::ensure!(
+        min_sdk == config.platforms.android.min_sdk,
+        "Conflicting Android min SDK values in platforms.android and bundle.android"
+    );
+    anyhow::ensure!(
+        min_sdk <= target && target <= compile_sdk,
+        "Android SDKs must satisfy min_sdk <= target_sdk <= compile_sdk"
+    );
+    Ok(ResolvedAndroidConfig {
+        formats: bundle
+            .map(|a| a.formats.clone())
+            .unwrap_or_else(default_android_formats),
+        abis,
+        min_sdk,
+        compile_sdk,
+        split_debug_symbols: bundle.map(|a| a.split_debug_symbols).unwrap_or(true),
+    })
 }
 
 pub fn load_config() -> Result<Config> {
@@ -665,6 +674,42 @@ enabled = []
             "[platforms.android]\ntarget_sdk = 37\n[bundle.android]\nmin_sdk = 26\ncompile_sdk = 36",
             "[platforms.android]\nabis = [\"arm64-v8a\"]\n[bundle.android]\nmin_sdk = 26\nabis = [\"x86_64\"]",
         ] { assert!(android_bundle_config(&config(extra)).is_err(), "{extra}"); }
+    }
+
+    #[test]
+    fn omitted_bundle_architecture_and_minimum_inherit_platform_values() {
+        let source = format!(
+            r#"{MINIMAL}
+[platforms.android]
+package = "com.example.test"
+min_sdk = 29
+abis = ["arm64-v8a"]
+[bundle.android]
+formats = ["apk"]
+"#
+        );
+        let config: Config = toml::from_str(&source).unwrap();
+        let resolved = android_bundle_config(&config).unwrap();
+        assert_eq!(resolved.abis, ["arm64-v8a"]);
+        assert_eq!(resolved.min_sdk, 29);
+        assert_eq!(resolved.formats, ["apk"]);
+        let saved = toml::to_string(&config).unwrap();
+        let roundtrip: Config = toml::from_str(&saved).unwrap();
+        let bundle = roundtrip.bundle.as_ref().unwrap().android.as_ref().unwrap();
+        assert!(bundle.abis.is_none());
+        assert!(bundle.min_sdk.is_none());
+        assert_eq!(
+            android_bundle_config(&roundtrip).unwrap().abis,
+            ["arm64-v8a"]
+        );
+        for extra in [
+            "abis = []",
+            "abis = [\"arm64-v8a\", \"arm64-v8a\"]",
+            "min_sdk = 30",
+        ] {
+            let config: Config = toml::from_str(&format!("{source}\n{extra}\n")).unwrap();
+            assert!(android_bundle_config(&config).is_err(), "{extra}");
+        }
     }
 
     #[test]
