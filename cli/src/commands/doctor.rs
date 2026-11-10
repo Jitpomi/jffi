@@ -103,15 +103,15 @@ fn doctor_bundle(platform: Option<&str>, release: bool, profile: &str) -> Result
                     "Java is required for Android builds",
                 )?;
 
-                if std::env::var("ANDROID_HOME").is_err()
-                    && std::env::var("ANDROID_SDK_ROOT").is_err()
-                {
-                    anyhow::bail!(
-                        "ANDROID_HOME or ANDROID_SDK_ROOT is required for Android builds"
-                    );
-                } else {
-                    println!("  {} Env Var: Android SDK path found", "✓".green());
-                }
+                let sdk = crate::platform::android_sdk_root().ok_or_else(|| {
+                    anyhow::anyhow!("Android SDK not found; set ANDROID_HOME or ANDROID_SDK_ROOT")
+                })?;
+                anyhow::ensure!(
+                    sdk.is_dir(),
+                    "Android SDK directory does not exist: {}",
+                    sdk.display()
+                );
+                println!("  {} Android SDK: {}", "✓".green(), sdk.display());
 
                 if release {
                     println!(

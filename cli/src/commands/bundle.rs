@@ -2202,12 +2202,15 @@ fn bundle_web(config: &Config, dry_run: bool, print_commands: bool) -> Result<()
             anyhow::bail!("platforms/web directory not found.");
         }
 
+        let managed_vite = web_config.build_command == "npm run build";
         let mut build_cmd_str = web_config.build_command.clone();
         if build_cmd_str == "npm run build" {
+            let mut manager_declared = false;
             // Auto detect
             if let Ok(pkg_json) = fs::read_to_string(web_dir.join("package.json")) {
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(&pkg_json) {
                     if let Some(pm) = v.get("packageManager").and_then(|v| v.as_str()) {
+                        manager_declared = true;
                         if pm.starts_with("yarn") {
                             build_cmd_str = "yarn build".to_string();
                         } else if pm.starts_with("pnpm") {
@@ -2218,7 +2221,7 @@ fn bundle_web(config: &Config, dry_run: bool, print_commands: bool) -> Result<()
                     }
                 }
             }
-            if build_cmd_str == "npm run build" {
+            if build_cmd_str == "npm run build" && !manager_declared {
                 if web_dir.join("pnpm-lock.yaml").exists() {
                     build_cmd_str = "pnpm run build".to_string();
                 } else if web_dir.join("yarn.lock").exists() {
@@ -2227,18 +2230,27 @@ fn bundle_web(config: &Config, dry_run: bool, print_commands: bool) -> Result<()
             }
         }
 
-        let cmd_parts = shell_words::split(&build_cmd_str)
+        let mut cmd_parts = shell_words::split(&build_cmd_str)
             .context("Invalid quoting in bundle.web.build_command")?;
         if cmd_parts.is_empty() {
             anyhow::bail!("Invalid build_command in jffi.toml");
         }
 
+        if managed_vite {
+            super::web_server::build_config()?;
+            if cmd_parts[0] == "npm" {
+                cmd_parts.push("--".into());
+            }
+            cmd_parts.extend(["--config".into(), ".jffi-build.config.mjs".into()]);
+        }
+
         if print_commands {
-            println!("  $ {}", build_cmd_str.dimmed());
+            println!("  $ {}", cmd_parts.join(" ").dimmed());
         }
 
         let status = Command::new(&cmd_parts[0])
             .args(&cmd_parts[1..])
+            .env("JFFI_WEB_TARGET", &config.platforms.web.target)
             .env("JFFI_BASE_PATH", &web_config.base_path)
             .env("BASE_PATH", &web_config.base_path)
             .current_dir(web_dir)
