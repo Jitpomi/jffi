@@ -293,16 +293,24 @@ impl IOSSimulator {
                     apps.push(contents.join("Applications/Simulator.app"));
                 }
                 for app in apps {
-                    if app.is_dir() && Command::new("open").arg(&app).output()?.status.success() {
+                    if app.is_dir()
+                        && Command::new("open")
+                            .arg(&app)
+                            .output()
+                            .is_ok_and(|output| output.status.success())
+                    {
                         return Ok(());
                     }
                 }
             }
         }
-        let output = Command::new("open").args(["-a", "Simulator"]).output()?;
-        if !output.status.success() {
+        if !Command::new("open")
+            .args(["-a", "Simulator"])
+            .output()
+            .is_ok_and(|output| output.status.success())
+        {
             // simctl can install and launch apps without the graphical Simulator.
-            // A missing window app must not prevent those operations.
+            // A missing launcher or window app must not prevent those operations.
             eprintln!("  Warning: Could not open the Simulator window. Continuing with simctl; the app will run without a Simulator window. Check that your Xcode installation includes Simulator or Device Hub.");
         }
         Ok(())

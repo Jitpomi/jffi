@@ -159,6 +159,53 @@ esac
             .count(),
         1
     );
+    // A restricted/headless PATH may provide Xcode tooling but no GUI launcher.
+    // Cover both a discovered app bundle and the name-based fallback.
+    for (name, target) in [("mkdir", "/bin/mkdir"), ("touch", "/usr/bin/touch")] {
+        std::os::unix::fs::symlink(target, tools.join(name)).unwrap();
+    }
+    fs::rename(tools.join("open"), tools.join("open-disabled")).unwrap();
+    for (case, developer_dir) in [
+        ("bundle", contents.join("Developer")),
+        ("fallback", root.join("missing-developer")),
+    ] {
+        let missing_log = root.join(format!("missing-open-{case}.log"));
+        let output = Command::new(env!("CARGO_BIN_EXE_jffi"))
+            .current_dir(&project)
+            .env("PATH", &tools)
+            .env("JFFI_TEST_LOG", &missing_log)
+            .env("JFFI_TEST_DEVELOPER_DIR", developer_dir)
+            .args([
+                "run",
+                "--platform",
+                "ios",
+                "--release",
+                "--no-setup",
+                "--device-id",
+                "selected-pad",
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr)
+                .matches("Continuing with simctl")
+                .count(),
+            1,
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        succeeds(output);
+        let commands = fs::read_to_string(&missing_log).unwrap();
+        assert!(
+            commands.contains("xcrun|simctl install selected-pad"),
+            "{commands}"
+        );
+        assert!(
+            commands.contains("xcrun|simctl launch selected-pad com.example.regression"),
+            "{commands}"
+        );
+    }
+    fs::rename(tools.join("open-disabled"), tools.join("open")).unwrap();
     // Both default and verbose mode must surface diagnostics and stop before launch.
     for verbose in [false, true] {
         let failure_log = root.join(format!("failure-{verbose}.log"));
