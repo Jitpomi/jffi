@@ -159,6 +159,8 @@ Omitted bundle ABI and minimum-SDK settings inherit their platform values;
 explicit empty, duplicate or conflicting lists still fail. AAB configuration
 larger than 1 MiB is rejected instead of checking a truncated prefix. Native
 inspection excludes application assets and bundle/signature metadata.
+The generated ABI selection is applied at Gradle's DSL finalization stage, so an
+app's later `android {}` block cannot add the template's default ABIs back.
 Windows already supports `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`, and
 `i686-pc-windows-msvc` through `bundle.windows.targets`; empty, duplicate and
 unknown selections are rejected. These are CPU architectures, not certification
