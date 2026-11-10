@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::config::{BundleAndroidConfig, Config};
+use crate::config::Config;
 
 const LINUX_ICON_INSTALL_COMMAND: &str =
     "if [ -d data/icons/hicolor ]; then install -d /app/share/icons && cp -a data/icons/hicolor /app/share/icons/; fi";
@@ -79,6 +79,13 @@ pub fn bundle_project(options: BundleOptions<'_>) -> Result<()> {
         let platform = crate::platform::Platform::from_str(platform)
             .ok_or_else(|| anyhow::anyhow!("Unknown platform: {}", platform))?;
         crate::setup::reconcile_platform(&platform)?;
+    }
+
+    if !no_sign
+        && matches!(platform, "ios" | "macos")
+        && is_apple_store_export(&config, platform, profile)
+    {
+        super::release_checks::apple_store_toolchain(platform)?;
     }
 
     println!(
@@ -167,6 +174,9 @@ fn print_bundle_plan(
                     println!("     Notarize: {}", enabled && !no_sign);
                 } else { println!("  5. Verify exported IPA exists and is nonempty."); }
                 if !no_sign { println!("     Verify app code signature with codesign."); }
+                if !no_sign && is_apple_store_export(config, platform, profile) {
+                    println!("     Check the selected store toolchain and the iOS archive's embedded SDK.");
+                }
             }
         }
         "android" => {
@@ -193,6 +203,27 @@ fn print_bundle_plan(
         _ => anyhow::bail!("Unknown platform: {}", platform),
     }
     Ok(())
+}
+
+pub(crate) fn is_apple_store_export(config: &Config, platform: &str, profile: &str) -> bool {
+    let bundle = config.bundle.as_ref();
+    let method = bundle
+        .and_then(|b| b.signing.as_ref())
+        .and_then(|s| s.profiles.as_ref())
+        .and_then(|p| p.get(profile))
+        .and_then(|p| p.apple.as_ref())
+        .and_then(|a| a.method.as_deref());
+    let method = method.or_else(|| {
+        if platform == "ios" {
+            bundle
+                .and_then(|b| b.ios.as_ref())
+                .map(|i| i.export_method.as_str())
+        } else {
+            None
+        }
+    });
+    matches!(method, Some("app-store" | "app-store-connect"))
+        || (platform == "ios" && method.is_none())
 }
 
 fn validate_enabled_platform(config: &Config, platform: &str) -> Result<()> {
@@ -315,21 +346,7 @@ fn bundle_android(
     print_commands: bool,
 ) -> Result<()> {
     let bundle_config = config.bundle.clone().unwrap_or_default();
-    let android_config = bundle_config
-        .android
-        .unwrap_or_else(|| BundleAndroidConfig {
-            formats: vec!["aab".to_string(), "apk".to_string()],
-            abis: vec![
-                "arm64-v8a".to_string(),
-                "armeabi-v7a".to_string(),
-                "x86_64".to_string(),
-            ],
-            min_sdk: 23,
-            compile_sdk: 36,
-            build_type: "release".to_string(),
-            split_debug_symbols: true,
-            icon: None,
-        });
+    let android_config = crate::config::android_bundle_config(config)?;
 
     let formats = if let Some(f) = format {
         vec![f.to_string()]
@@ -631,6 +648,7 @@ fn bundle_android(
                 ),
             };
             verify_nonempty_file(&source, "Android package")?;
+            verify_android_package(config, &source)?;
             if !no_sign {
                 if fmt == "apk" {
                     let signer = android_build_tool("apksigner")?;
@@ -691,6 +709,32 @@ fn bundle_android(
     }
 
     println!("{}", "  ✅ Android bundling complete!".green());
+    Ok(())
+}
+
+pub(crate) fn verify_android_package(config: &Config, source: &Path) -> Result<()> {
+    let android = crate::config::android_bundle_config(config)?;
+    let manifest: toml::Value = toml::from_str(&fs::read_to_string("core/Cargo.toml")?)?;
+    let name = manifest
+        .get("lib")
+        .and_then(|v| v.get("name"))
+        .or_else(|| manifest.get("package").and_then(|v| v.get("name")))
+        .and_then(toml::Value::as_str)
+        .context("Missing Rust core library name")?;
+    super::release_checks::android_native_package(
+        source,
+        &android.abis,
+        &format!("lib{}.so", name.replace('-', "_")),
+    )?;
+    if source.extension().is_some_and(|e| e == "apk") {
+        run_checked(
+            Command::new(android_build_tool("zipalign")?)
+                .args(["-c", "-P", "16", "4"])
+                .arg(source),
+            "APK 16 KB ZIP alignment verification",
+        )?;
+    }
+
     Ok(())
 }
 
@@ -776,7 +820,11 @@ fn android_build_tool(name: &str) -> Result<PathBuf> {
             });
             for version in versions.into_iter().rev() {
                 let candidate = version.join(if cfg!(windows) {
-                    format!("{}.bat", name)
+                    format!(
+                        "{}.{}",
+                        name,
+                        if name == "apksigner" { "bat" } else { "exe" }
+                    )
                 } else {
                     name.to_string()
                 });
@@ -1631,6 +1679,9 @@ fn bundle_ios(
             anyhow::bail!("iOS archive contains no app at {}", app.display());
         }
         if !no_sign {
+            if is_apple_store_export(config, "ios", profile) {
+                super::release_checks::apple_store_archive(&app, "ios")?;
+            }
             run_checked(
                 Command::new("codesign")
                     .args(["--verify", "--deep", "--strict"])
@@ -2219,6 +2270,17 @@ pub fn validate_bundle_config(
         "→".bright_blue()
     );
 
+    if platform == "android" {
+        let android = crate::config::android_bundle_config(config)?;
+        let target = config
+            .platforms
+            .android
+            .target_sdk
+            .unwrap_or(android.compile_sdk);
+        if target < 36 {
+            eprintln!("Warning: target SDK {target} is below Google Play's current API 36 submission requirement. Update target_sdk and compile_sdk before submitting to Play.");
+        }
+    }
     if platform == "linux" {
         linux_signing(config, profile, no_sign)?;
     }

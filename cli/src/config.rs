@@ -502,6 +502,55 @@ fn default_signing_profile() -> String {
     "release".to_string()
 }
 
+/// Resolve one ABI/SDK contract for Rust builds and Gradle packaging.
+pub fn android_bundle_config(config: &Config) -> Result<BundleAndroidConfig> {
+    let explicit = config.bundle.as_ref().and_then(|b| b.android.as_ref());
+    let mut android = explicit.cloned().unwrap_or_else(|| BundleAndroidConfig {
+        formats: default_android_formats(),
+        abis: default_android_abis(),
+        min_sdk: config.platforms.android.min_sdk,
+        compile_sdk: default_android_compile_sdk(),
+        build_type: default_android_build_type(),
+        split_debug_symbols: true,
+        icon: None,
+    });
+    if let Some(abis) = &config.platforms.android.abis {
+        if explicit.is_some()
+            && abis.iter().collect::<std::collections::BTreeSet<_>>()
+                != android.abis.iter().collect()
+        {
+            anyhow::bail!("platforms.android.abis and bundle.android.abis must match");
+        }
+        android.abis = abis.clone();
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for abi in &android.abis {
+        if !matches!(abi.as_str(), "arm64-v8a" | "armeabi-v7a" | "x86_64") {
+            anyhow::bail!(
+                "Unsupported Android ABI: {abi}; supported: arm64-v8a, armeabi-v7a, x86_64"
+            );
+        }
+        if !seen.insert(abi) {
+            anyhow::bail!("Duplicate Android ABI: {abi}");
+        }
+    }
+    if seen.is_empty() {
+        anyhow::bail!("Android ABI list cannot be empty");
+    }
+    let target = config
+        .platforms
+        .android
+        .target_sdk
+        .unwrap_or(android.compile_sdk);
+    if android.min_sdk != config.platforms.android.min_sdk {
+        anyhow::bail!("Conflicting Android min SDK values in platforms.android and bundle.android");
+    }
+    if android.min_sdk > target || target > android.compile_sdk {
+        anyhow::bail!("Android SDKs must satisfy min_sdk <= target_sdk <= compile_sdk");
+    }
+    Ok(android)
+}
+
 pub fn load_config() -> Result<Config> {
     let config_path = "jffi.toml";
     let contents = fs::read_to_string(config_path)
@@ -544,6 +593,26 @@ pub fn load_config() -> Result<Config> {
             );
         }
     }
+    if config.platforms.enabled.iter().any(|p| p == "android") {
+        android_bundle_config(&config)?;
+    }
+    if let Some(windows) = config.bundle.as_ref().and_then(|b| b.windows.as_ref()) {
+        let mut seen = std::collections::BTreeSet::new();
+        anyhow::ensure!(
+            !windows.targets.is_empty(),
+            "bundle.windows.targets cannot be empty"
+        );
+        for target in &windows.targets {
+            anyhow::ensure!(
+                matches!(
+                    target.as_str(),
+                    "i686-pc-windows-msvc" | "x86_64-pc-windows-msvc" | "aarch64-pc-windows-msvc"
+                ),
+                "Unsupported Windows target: {target}"
+            );
+            anyhow::ensure!(seen.insert(target), "Duplicate Windows target: {target}");
+        }
+    }
     Ok(config)
 }
 
@@ -570,6 +639,33 @@ version = "0.1.0"
 [platforms]
 enabled = []
 "#;
+
+    #[test]
+    fn android_build_and_package_share_one_strict_architecture_contract() {
+        let config = |extra: &str| {
+            toml::from_str::<Config>(&format!(
+                "{MINIMAL}\n{}",
+                extra.replace(
+                    "[platforms.android]",
+                    "[platforms.android]\npackage = \"com.example.test\""
+                )
+            ))
+            .unwrap()
+        };
+        let selected = config("[bundle.android]\nabis = [\"x86_64\"]\nmin_sdk = 26");
+        assert_eq!(android_bundle_config(&selected).unwrap().abis, ["x86_64"]);
+        let selected = config("[platforms.android]\nabis = [\"arm64-v8a\"]");
+        let resolved = android_bundle_config(&selected).unwrap();
+        assert_eq!(resolved.abis, ["arm64-v8a"]);
+        assert_eq!(resolved.min_sdk, 26);
+        for extra in [
+            "[platforms.android]\nabis = []",
+            "[platforms.android]\nabis = [\"arm64-v8a\", \"typo\"]",
+            "[platforms.android]\nabis = [\"x86_64\", \"x86_64\"]",
+            "[platforms.android]\ntarget_sdk = 37\n[bundle.android]\nmin_sdk = 26\ncompile_sdk = 36",
+            "[platforms.android]\nabis = [\"arm64-v8a\"]\n[bundle.android]\nmin_sdk = 26\nabis = [\"x86_64\"]",
+        ] { assert!(android_bundle_config(&config(extra)).is_err(), "{extra}"); }
+    }
 
     #[test]
     fn accepts_schema_version_one() {
