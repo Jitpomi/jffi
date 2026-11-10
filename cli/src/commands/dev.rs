@@ -8,6 +8,26 @@ use std::time::Duration;
 
 use crate::platform::{AndroidProject, Platform, XcodeProject};
 
+#[derive(Default)]
+struct PendingChange(Option<std::time::Instant>);
+
+impl PendingChange {
+    fn record(&mut self, now: std::time::Instant) {
+        self.0 = Some(now);
+    }
+    fn take_ready(&mut self, now: std::time::Instant, delay: Duration) -> bool {
+        if self
+            .0
+            .is_some_and(|changed| now.duration_since(changed) >= delay)
+        {
+            self.0 = None;
+            true
+        } else {
+            false
+        }
+    }
+}
+
 pub fn watch_project(platform: &str) -> Result<()> {
     println!(
         "{}",
@@ -177,153 +197,129 @@ pub fn watch_project(platform: &str) -> Result<()> {
     println!();
 
     let linux_ui_root = std::env::current_dir()?.join("platforms/linux");
-    let mut pending_linux_ui_restart: Option<std::time::Instant> = None;
-    let mut last_rebuild = std::time::Instant::now();
+    let mut rust_change = PendingChange::default();
+    let mut ui_change = PendingChange::default();
     let debounce_duration = Duration::from_millis(500);
-
     loop {
         match rx.recv_timeout(Duration::from_millis(100)) {
             Ok(event) => {
-                // Check if this is any relevant file system event
-                // Include: Modify, Create, Remove, and other events
-                // Note: We process all events and filter by file type instead
-                let should_process = !matches!(
-                    event.kind,
-                    notify::EventKind::Access(_) // Ignore file access events (too noisy)
-                );
-
-                if should_process {
-                    // Filter out irrelevant files (target/, .git/, temp files, etc.)
-                    let is_relevant_change = event.paths.iter().any(|p| {
-                        let path_str = p.to_string_lossy();
-                        // Ignore target directory, hidden files, and temp files
-                        !path_str.contains("/target/")
-                            && !path_str.contains("/.")
-                            && !path_str.ends_with('~')
-                            && !path_str.contains(".swp")
-                            && !path_str.contains(".tmp")
-                            && !path_str.contains("core/src/android.rs")
-                    });
-
-                    if platform == "linux"
+                if !matches!(event.kind, notify::EventKind::Access(_)) {
+                    let linux_ui = platform == "linux"
                         && event.paths.iter().all(|path| {
                             path.starts_with(&linux_ui_root) || path.starts_with("platforms/linux")
-                        })
-                    {
-                        let ui_changed = event.paths.iter().any(|path| {
+                        });
+                    if linux_ui {
+                        if event.paths.iter().any(|path| {
                             path.extension().is_some_and(|ext| ext == "py")
                                 && path.file_name().is_some_and(|name| {
                                     !name.to_string_lossy().ends_with("_core.py")
                                 })
                                 && !path.to_string_lossy().contains("__pycache__")
-                        });
-                        if ui_changed {
-                            pending_linux_ui_restart = Some(std::time::Instant::now());
+                        }) {
+                            ui_change.record(std::time::Instant::now());
                         }
-                        continue;
-                    }
-                    if !is_relevant_change {
-                        continue;
-                    }
-
-                    // Debug: show which files changed
-                    for path in &event.paths {
-                        let ext = path.extension().and_then(|s| s.to_str());
-                        let filename = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
-
-                        // Show changes to Rust files, Cargo.toml, UDL files, build scripts
-                        if ext == Some("rs")
-                            || ext == Some("toml")
-                            || ext == Some("udl")
-                            || filename == "build.rs"
-                        {
-                            println!("  📝 Detected change: {}", path.display());
+                    } else if event.paths.iter().any(|path| {
+                        let path = path.to_string_lossy();
+                        !path.contains("/target/")
+                            && !path.contains("/.")
+                            && !path.ends_with('~')
+                            && !path.contains(".swp")
+                            && !path.contains(".tmp")
+                            && !path.contains("core/src/android.rs")
+                    }) {
+                        for path in &event.paths {
+                            if path.extension().is_some_and(|ext| {
+                                matches!(ext.to_str(), Some("rs" | "toml" | "udl"))
+                            }) {
+                                println!("  📝 Detected change: {}", path.display());
+                            }
                         }
+                        rust_change.record(std::time::Instant::now());
                     }
+                }
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            Err(error) => anyhow::bail!("Watch error: {}", error),
+        }
+        // Keep pending changes until a quiet interval has elapsed, including the first save.
+        // Check after every event as well as timeouts so unrelated events cannot starve a rebuild.
+        if rust_change.take_ready(std::time::Instant::now(), debounce_duration) {
+            println!();
 
-                    // Debounce: only rebuild if enough time has passed
-                    let now = std::time::Instant::now();
-                    if now.duration_since(last_rebuild) > debounce_duration {
-                        println!();
+            println!("{}", "  🔄 Rust changes detected, rebuilding...".yellow());
 
-                        println!("{}", "  🔄 Rust changes detected, rebuilding...".yellow());
+            // For Windows, only build the active platform architecture
+            let build_result = if platform == "windows" {
+                rebuild_windows_rust_only()
+            } else {
+                crate::commands::build::build_platform(platform, false)
+            };
 
-                        // For Windows, only build the active platform architecture
-                        let build_result = if platform == "windows" {
-                            rebuild_windows_rust_only()
-                        } else {
-                            crate::commands::build::build_platform(platform, false)
-                        };
-
-                        match build_result {
+            match build_result {
+                Ok(_) => {
+                    println!();
+                    if platform == "linux" {
+                        println!("{}", "  ✓ Rust rebuild complete! Restarting app...".green());
+                        match restart_linux_app(&mut linux_process) {
                             Ok(_) => {
-                                println!();
-                                if platform == "linux" {
-                                    println!(
-                                        "{}",
-                                        "  ✓ Rust rebuild complete! Restarting app...".green()
-                                    );
-                                    match restart_linux_app(&mut linux_process) {
-                                        Ok(_) => {
-                                            println!("{}", "  ✓ App restarted!".green());
-                                        }
-                                        Err(e) => {
-                                            println!(
-                                                "{}",
-                                                format!("  ✗ Failed to restart app: {}", e).red()
-                                            );
-                                        }
-                                    }
-                                } else if platform == "ios" {
-                                    // Touch XCFramework to update timestamp
-                                    let _ = touch_xcframework(platform);
-
-                                    println!("{}", "  ✓ Rust rebuild complete! Press Cmd+B in Xcode to use new code.".green());
-                                } else if platform == "macos" {
-                                    // Touch XCFramework to update timestamp and notify Xcode
-                                    let _ = touch_xcframework(platform);
-                                    println!("{}", "  ✓ Rust rebuild complete! Press Cmd+B in Xcode to use new code.".green());
-                                } else if platform == "web" {
-                                    println!("{}", "  ✓ Rust rebuild complete! Refresh your browser to use new code.".green());
-                                } else if platform == "windows" {
-                                    // Copy updated FFI DLL to output directory for Visual Studio to pick up
-                                    if let Err(error) = copy_windows_ffi_dll() {
-                                        eprintln!("Native DLL reload failed: {}", error);
-                                    }
-                                    println!("{}", "  ✓ Rust rebuild complete! Press F5 in Visual Studio to use new code.".green());
-                                } else {
-                                    println!("{}", "  ✓ Rust rebuild complete!".green());
-                                }
-                                println!();
+                                println!("{}", "  ✓ App restarted!".green());
                             }
                             Err(e) => {
-                                println!();
-                                println!("{}", format!("  ✗ Build failed: {}", e).red());
-                                println!("{}", "  → Fix the error and save again...".yellow());
-                                println!();
+                                println!("{}", format!("  ✗ Failed to restart app: {}", e).red());
                             }
                         }
+                    } else if platform == "ios" {
+                        // Touch XCFramework to update timestamp
+                        let _ = touch_xcframework(platform);
 
-                        last_rebuild = now;
-                    }
-                }
-            }
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                if pending_linux_ui_restart
-                    .is_some_and(|changed| changed.elapsed() >= debounce_duration)
-                {
-                    pending_linux_ui_restart = None;
-                    if let Err(error) = restart_linux_app(&mut linux_process) {
-                        eprintln!(
-                            "Python UI restart failed: {}. Fix the source and save again.",
-                            error
+                        println!(
+                            "{}",
+                            "  ✓ Rust rebuild complete! Press Cmd+B in Xcode to use new code."
+                                .green()
                         );
+                    } else if platform == "macos" {
+                        // Touch XCFramework to update timestamp and notify Xcode
+                        let _ = touch_xcframework(platform);
+                        println!(
+                            "{}",
+                            "  ✓ Rust rebuild complete! Press Cmd+B in Xcode to use new code."
+                                .green()
+                        );
+                    } else if platform == "web" {
+                        println!(
+                            "{}",
+                            "  ✓ Rust rebuild complete! Refresh your browser to use new code."
+                                .green()
+                        );
+                    } else if platform == "windows" {
+                        // Copy updated FFI DLL to output directory for Visual Studio to pick up
+                        if let Err(error) = copy_windows_ffi_dll() {
+                            eprintln!("Native DLL reload failed: {}", error);
+                        }
+                        println!(
+                            "{}",
+                            "  ✓ Rust rebuild complete! Press F5 in Visual Studio to use new code."
+                                .green()
+                        );
+                    } else {
+                        println!("{}", "  ✓ Rust rebuild complete!".green());
                     }
+                    println!();
                 }
-                continue;
+                Err(e) => {
+                    println!();
+                    println!("{}", format!("  ✗ Build failed: {}", e).red());
+                    println!("{}", "  → Fix the error and save again...".yellow());
+                    println!();
+                }
             }
-            Err(e) => {
-                anyhow::bail!("Watch error: {}", e);
+        }
+        if ui_change.take_ready(std::time::Instant::now(), debounce_duration) {
+            if let Err(error) = restart_linux_app(&mut linux_process) {
+                eprintln!(
+                    "Python UI restart failed: {}. Fix the source and save again.",
+                    error
+                );
             }
         }
     }
@@ -732,6 +728,25 @@ fn start_web_dev_server() -> Result<()> {
     println!();
 
     Ok(())
+}
+
+#[cfg(test)]
+mod debounce_tests {
+    use super::*;
+    #[test]
+    fn first_and_final_saves_are_retained_until_quiet_and_consumed_once() {
+        let start = std::time::Instant::now();
+        let delay = Duration::from_millis(500);
+        let mut pending = PendingChange::default();
+        pending.record(start);
+        assert!(!pending.take_ready(start + Duration::from_millis(100), delay));
+        pending.record(start + Duration::from_millis(200));
+        assert!(!pending.take_ready(start + Duration::from_millis(500), delay));
+        assert!(pending.take_ready(start + Duration::from_millis(700), delay));
+        assert!(!pending.take_ready(start + Duration::from_secs(1), delay));
+        pending.record(start + Duration::from_secs(1));
+        assert!(pending.take_ready(start + Duration::from_millis(1500), delay));
+    }
 }
 
 #[cfg(all(test, unix))]

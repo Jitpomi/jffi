@@ -92,3 +92,66 @@ esac
     }
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn web_setup_resolves_missing_lockfile_before_selecting_bindgen() {
+    let root = std::env::temp_dir().join(format!("jffi-web-lock-{}", uuid::Uuid::new_v4()));
+    let project = root.join("project");
+    let tools = root.join("tools");
+    fs::create_dir_all(&tools).unwrap();
+    assert!(Command::new(env!("CARGO_BIN_EXE_jffi"))
+        .args([
+            "new",
+            "fresh",
+            "--platforms",
+            "web",
+            "--no-build",
+            "--template",
+            "hello",
+            "--path"
+        ])
+        .arg(&project)
+        .status()
+        .unwrap()
+        .success());
+    let script = r#"#!/bin/sh
+set -eu
+case "${0##*/}" in
+uniffi-bindgen) echo 'uniffi-bindgen 0.31.1' ;;
+rustup) echo wasm32-unknown-unknown ;;
+wasm-pack) echo 'wasm-pack 0.13.1' ;;
+wasm-bindgen) test -f Cargo.lock; echo 'wasm-bindgen 0.2.100' ;;
+cargo)
+ test "$1" = generate-lockfile
+ printf '[[package]]\nname = "uniffi"\nversion = "0.31.1"\n[[package]]\nname = "wasm-bindgen"\nversion = "0.2.100"\n' > Cargo.lock ;;
+esac
+"#;
+    for tool in [
+        "uniffi-bindgen",
+        "rustup",
+        "wasm-pack",
+        "wasm-bindgen",
+        "cargo",
+    ] {
+        let path = tools.join(tool);
+        fs::write(&path, script).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let path = std::env::join_paths(std::iter::once(tools).chain(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    )))
+    .unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_jffi"))
+        .current_dir(&project)
+        .env("PATH", path)
+        .args(["--offline", "setup", "--platform", "web"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(project.join("Cargo.lock").is_file());
+    fs::remove_dir_all(root).unwrap();
+}

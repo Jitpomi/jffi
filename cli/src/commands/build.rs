@@ -1762,69 +1762,94 @@ fn ensure_uniffi_bindgen() -> Result<()> {
     crate::setup::ensure_uniffi_bindgen()
 }
 
+fn uniffi_release_line(version: &str) -> Option<(u32, u32)> {
+    let mut parts = version.split('.');
+    Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
+}
+
+fn cs_generator_matches(output: &str, required: &str) -> bool {
+    output
+        .split_whitespace()
+        .find_map(|word| word.split_once("+v").map(|(_, v)| v))
+        .and_then(uniffi_release_line)
+        .zip(uniffi_release_line(required))
+        .is_some_and(|(found, needed)| found == needed)
+}
+
+fn default_cs_generator_tag(required: &str) -> Result<&'static str> {
+    match uniffi_release_line(required) {
+        Some((0, 29)) => Ok("v0.10.0+v0.29.4"),
+        Some((0, 31)) => Ok("v0.11.1+v0.31.0"),
+        Some((0, 32)) => Ok("v0.12.0+v0.32.0"),
+        _ => anyhow::bail!("No default C# generator for UniFFI {}; configure JFFI_UNIFFI_BINDGEN_CS_GIT and JFFI_UNIFFI_BINDGEN_CS_TAG/BRANCH with a matching generator", required),
+    }
+}
+
 pub(crate) fn ensure_uniffi_bindgen_cs() -> Result<()> {
     println!("  {} Checking uniffi-bindgen-cs...", "→".bright_blue());
-
-    let check = Command::new("uniffi-bindgen-cs").arg("--version").output();
-
-    if check.is_err() || !check.unwrap().status.success() {
-        if !crate::setup::installation_allowed() {
-            anyhow::bail!("uniffi-bindgen-cs is required. Run `jffi setup --platform windows`");
-        }
-        // Use git CLI for fetching (more reliable than libgit2 on Windows).
-        // See Cargo docs: https://doc.rust-lang.org/cargo/reference/config.html#netgit-fetch-with-cli
-        let repo = std::env::var("JFFI_UNIFFI_BINDGEN_CS_GIT").unwrap_or_else(|_| {
-            // The previously-used microsoft/uniffi-bindgen-cs URL is no longer available.
-            // NordSecurity maintains the widely-used fork.
-            "https://github.com/NordSecurity/uniffi-bindgen-cs".to_string()
-        });
-
-        // NOTE: uniffi-bindgen-cs v0.10 targets UniFFI 0.29; JFFI uses UniFFI 0.31.
-        // The generated C# bindings work in practice for our use case.
-        // If you encounter compatibility issues with a specific UniFFI feature,
-        // override with JFFI_UNIFFI_BINDGEN_CS_GIT / JFFI_UNIFFI_BINDGEN_CS_TAG env vars.
-
-        // Prefer an explicit tag for repeatable installs; users can override to a fork/branch
-        // that matches their UniFFI version.
-        let tag = std::env::var("JFFI_UNIFFI_BINDGEN_CS_TAG")
-            .unwrap_or_else(|_| "v0.10.0+v0.29.4".to_string());
-        let branch = std::env::var("JFFI_UNIFFI_BINDGEN_CS_BRANCH").ok();
-
+    let required = crate::setup::resolved_uniffi_version()?;
+    let matches = || {
+        Command::new("uniffi-bindgen-cs")
+            .arg("--version")
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .is_some_and(|output| {
+                cs_generator_matches(&String::from_utf8_lossy(&output.stdout), &required)
+            })
+    };
+    if matches() {
         println!(
-            "    Installing uniffi-bindgen-cs ({} @ {})...",
-            repo,
-            branch.as_deref().unwrap_or(&tag)
+            "    {} C# generator matches UniFFI {}",
+            "✓".green(),
+            required
         );
-        println!("    {} If you use UniFFI v0.31+, you may need a newer uniffi-bindgen-cs fork; set JFFI_UNIFFI_BINDGEN_CS_GIT/JFFI_UNIFFI_BINDGEN_CS_TAG.", "⚠".yellow());
-
-        let mut cmd = Command::new("cargo");
-        cmd.env("CARGO_NET_GIT_FETCH_WITH_CLI", "true").args([
-            "install",
-            "uniffi-bindgen-cs",
-            "--git",
-            &repo,
-        ]);
-        if let Some(branch) = branch.as_deref() {
-            cmd.args(["--branch", branch]);
-        } else {
-            cmd.args(["--tag", &tag]);
-        }
-
-        let status = cmd
-            .status()
-            .context("Failed to install uniffi-bindgen-cs")?;
-
-        if !status.success() {
-            anyhow::bail!("Failed to install uniffi-bindgen-cs");
-        }
-        println!(
-            "    {} uniffi-bindgen-cs installed successfully",
-            "✓".green()
-        );
-    } else {
-        println!("    {} uniffi-bindgen-cs is already installed", "✓".green());
+        return Ok(());
     }
-
+    if !crate::setup::installation_allowed() {
+        anyhow::bail!(
+            "A C# generator matching UniFFI {} is required; run `jffi setup --platform windows`",
+            required
+        );
+    }
+    let repo = std::env::var("JFFI_UNIFFI_BINDGEN_CS_GIT")
+        .unwrap_or_else(|_| "https://github.com/NordSecurity/uniffi-bindgen-cs".to_string());
+    let branch = std::env::var("JFFI_UNIFFI_BINDGEN_CS_BRANCH").ok();
+    let tag = match std::env::var("JFFI_UNIFFI_BINDGEN_CS_TAG").ok() {
+        Some(tag) => tag,
+        None if branch.is_some() => String::new(),
+        None => default_cs_generator_tag(&required)?.to_string(),
+    };
+    println!(
+        "    Installing matching C# generator ({} @ {})...",
+        repo,
+        branch.as_deref().unwrap_or(&tag)
+    );
+    let mut cmd = Command::new("cargo");
+    cmd.env("CARGO_NET_GIT_FETCH_WITH_CLI", "true").args([
+        "install",
+        "--force",
+        "--locked",
+        "uniffi-bindgen-cs",
+        "--git",
+        &repo,
+    ]);
+    if let Some(branch) = branch {
+        cmd.args(["--branch", &branch]);
+    } else {
+        cmd.args(["--tag", &tag]);
+    }
+    anyhow::ensure!(
+        cmd.status()
+            .context("Failed to install matching C# generator")?
+            .success(),
+        "C# generator installation failed"
+    );
+    anyhow::ensure!(
+        matches(),
+        "Installed C# generator does not report compatibility with UniFFI {}",
+        required
+    );
     Ok(())
 }
 
@@ -2081,7 +2106,18 @@ fn ensure_wasm_target() -> Result<()> {
 pub(crate) fn ensure_wasm_bindgen_cli() -> Result<()> {
     println!("  {} Checking wasm-bindgen-cli...", "→".bright_blue());
 
-    // Read exact resolved wasm-bindgen version from Cargo.lock (generated by cargo build)
+    // Setup must also work on a scaffold created with --no-build.
+    // Cargo inherits CARGO_NET_OFFLINE, so dependency resolution respects --offline.
+    if !std::path::Path::new("Cargo.lock").exists() {
+        let status = Command::new("cargo")
+            .arg("generate-lockfile")
+            .status()
+            .context("Failed to resolve dependencies for Web setup")?;
+        anyhow::ensure!(
+            status.success(),
+            "Failed to generate Cargo.lock for Web setup"
+        );
+    }
     let lock_content = std::fs::read_to_string("Cargo.lock")
         .context("Failed to read Cargo.lock. Run cargo build first.")?;
 
@@ -3446,6 +3482,96 @@ fn windows_architectures(targets: &[String]) -> Result<Vec<(&'static str, &'stat
 
 #[cfg(test)]
 mod config_sync_tests {
+    #[cfg(unix)]
+    #[test]
+    fn cs_generator_reconciles_mismatch_and_checks_installation() {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(case) = std::env::var("JFFI_CS_PROBE") {
+            let result = super::ensure_uniffi_bindgen_cs();
+            if case == "replace" {
+                result.unwrap();
+            } else {
+                assert!(result.is_err());
+            }
+            return;
+        }
+        let root = std::env::temp_dir().join(format!("jffi-cs-probe-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(root.join("core")).unwrap();
+        fs::create_dir_all(root.join("tools")).unwrap();
+        fs::write(
+            root.join("core/Cargo.toml"),
+            "[dependencies]\nuniffi = '=0.29.4'\n",
+        )
+        .unwrap();
+        for (tool, script) in [
+            ("uniffi-bindgen-cs", "#!/bin/sh\ncat \"$JFFI_TEST_VERSION\"\n"),
+            ("cargo", "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$JFFI_TEST_LOG\"\nif [ \"$JFFI_CS_PROBE\" = replace ]; then echo 'uniffi-bindgen 0.10.0+v0.29.4' > \"$JFFI_TEST_VERSION\"; fi\n"),
+        ] {
+            let path = root.join("tools").join(tool); fs::write(&path, script).unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let path = std::env::join_paths(std::iter::once(root.join("tools")).chain(
+            std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()),
+        ))
+        .unwrap();
+        for case in ["offline", "replace", "bad-install"] {
+            fs::write(root.join("version"), "uniffi-bindgen 0.11.0+v0.31.0").unwrap();
+            fs::write(root.join("install.log"), "").unwrap();
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+            child.current_dir(&root).args(["--exact", "commands::build::config_sync_tests::cs_generator_reconciles_mismatch_and_checks_installation", "--nocapture"])
+                .env("PATH", &path).env("JFFI_CS_PROBE", case)
+                .env("JFFI_TEST_VERSION", root.join("version")).env("JFFI_TEST_LOG", root.join("install.log"))
+                .env("JFFI_INSTALL_MISSING", "1").env_remove("JFFI_NO_SETUP").env_remove("CARGO_NET_OFFLINE")
+                .env_remove("JFFI_UNIFFI_BINDGEN_CS_GIT").env_remove("JFFI_UNIFFI_BINDGEN_CS_TAG").env_remove("JFFI_UNIFFI_BINDGEN_CS_BRANCH");
+            if case == "offline" {
+                child.env("CARGO_NET_OFFLINE", "true");
+            }
+            let output = child.output().unwrap();
+            assert!(
+                output.status.success(),
+                "{} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let log = fs::read_to_string(root.join("install.log")).unwrap();
+            if case == "offline" {
+                assert!(log.is_empty());
+            } else {
+                assert!(log.contains("--force --locked uniffi-bindgen-cs --git https://github.com/NordSecurity/uniffi-bindgen-cs --tag v0.10.0+v0.29.4"), "{log}");
+            }
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cs_generator_checks_project_release_line_and_uses_matching_tags() {
+        assert!(!super::cs_generator_matches(
+            "uniffi-bindgen 0.11.0+v0.31.0",
+            "0.29.4"
+        ));
+        assert!(super::cs_generator_matches(
+            "uniffi-bindgen 0.10.0+v0.29.4",
+            "0.29.4"
+        ));
+        assert!(super::cs_generator_matches(
+            "uniffi-bindgen 0.11.1+v0.31.0",
+            "0.31.1"
+        ));
+        assert!(!super::cs_generator_matches(
+            "uniffi-bindgen 0.11.1",
+            "0.31.1"
+        ));
+        assert_eq!(
+            super::default_cs_generator_tag("0.29.4").unwrap(),
+            "v0.10.0+v0.29.4"
+        );
+        assert_eq!(
+            super::default_cs_generator_tag("0.31.1").unwrap(),
+            "v0.11.1+v0.31.0"
+        );
+        assert!(super::default_cs_generator_tag("0.30.0").is_err());
+    }
+
     #[test]
     fn selected_sync_preserves_unrelated_projects_and_xcode_formatting() {
         let root = std::env::temp_dir().join(format!("jffi-sync-{}", uuid::Uuid::new_v4()));

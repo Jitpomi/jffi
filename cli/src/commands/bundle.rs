@@ -563,7 +563,9 @@ fn bundle_android(
                 println!("  {} Generating Gradle wrapper...", "→".bright_blue());
                 let wrapper_jar = "gradle/wrapper/gradle-wrapper.jar";
                 if android_dir.join(wrapper_jar).exists() {
-                    let wrapper_status = Command::new(crate::platform::java_executable())
+                    let mut wrapper_cmd = Command::new(crate::platform::java_executable());
+                    crate::platform::configure_android_command(&mut wrapper_cmd);
+                    let wrapper_status = wrapper_cmd
                         .args([
                             "-classpath",
                             wrapper_jar,
@@ -615,6 +617,7 @@ fn bundle_android(
 
             let mut cmd = Command::new(gradlew);
             cmd.args(&gradle_args).current_dir(android_dir);
+            crate::platform::configure_android_command(&mut cmd);
 
             for (k, v) in gradle_envs {
                 cmd.env(k, v);

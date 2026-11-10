@@ -62,7 +62,7 @@ jffi build --platform ios --no-setup
 jffi build --platform ios --offline
 ```
 
-JFFI automatically reconciles `uniffi-bindgen` to the exact UniFFI version resolved by the project's `Cargo.lock`, then resumes `build`, `run`, `debug`, or `dev`. Use `--no-setup`, `--offline`, or `JFFI_NO_SETUP=1` when tool installation must remain explicit.
+JFFI automatically reconciles `uniffi-bindgen` to the exact UniFFI version resolved by the project's `Cargo.lock`, then resumes `build`, `run`, `debug`, or `dev`. Use `--no-setup`, `--offline`, or `JFFI_NO_SETUP=1` when tool installation must remain explicit. Windows also checks the UniFFI release line reported by `uniffi-bindgen-cs` and replaces incompatible generators before building. Custom C# generator forks must report their UniFFI version in `--version` output (for example, `0.11.1+v0.31.0`); configure their source with `JFFI_UNIFFI_BINDGEN_CS_GIT` and `JFFI_UNIFFI_BINDGEN_CS_TAG` or `JFFI_UNIFFI_BINDGEN_CS_BRANCH`. Web setup resolves a missing `Cargo.lock`, including after `new --no-build`, while honoring offline mode.
 
 ### Bundle Your App for Distribution
 
