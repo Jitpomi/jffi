@@ -307,9 +307,14 @@ pub(crate) fn apple_store_archive(app: &Path, platform: &str) -> Result<()> {
                 .is_some_and(|v| v >= 27)
         {
             ensure!(
-                info.get("UILaunchScreen").is_some()
-                    || info.get("UILaunchStoryboardName").is_some()
-                    || info.get("UILaunchStoryboards").is_some(),
+                [
+                    "UILaunchScreen",
+                    "UILaunchScreens",
+                    "UILaunchStoryboardName",
+                    "UILaunchStoryboards"
+                ]
+                .iter()
+                .any(|key| info.get(key).is_some()),
                 "iOS 27 archives require a launch screen in Info.plist"
             );
         }
@@ -441,6 +446,18 @@ mod tests {
         };
         std::fs::write(app.join("Info.plist"), plist("iphoneos27.1", true)).unwrap();
         assert!(apple_store_archive(&app, "ios").is_ok());
+        for key in [
+            "UILaunchScreens",
+            "UILaunchStoryboardName",
+            "UILaunchStoryboards",
+        ] {
+            std::fs::write(
+                app.join("Info.plist"),
+                plist("iphoneos27.1", true).replace("UILaunchScreen", key),
+            )
+            .unwrap();
+            assert!(apple_store_archive(&app, "ios").is_ok(), "{key}");
+        }
         std::fs::write(app.join("Info.plist"), plist("iphoneos27.1", false)).unwrap();
         assert!(apple_store_archive(&app, "ios").is_err());
         std::fs::write(app.join("Info.plist"), plist("iphoneos26.0", false)).unwrap();
