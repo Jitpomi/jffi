@@ -94,6 +94,29 @@ echo APK > app/build/outputs/apk/release/app-release.apk
     let home = root.join("home");
     let sdk = home.join("Library/Android/sdk");
     fs::create_dir_all(&sdk).unwrap();
+    let config_path = project.join("jffi.toml");
+    let config = fs::read_to_string(&config_path).unwrap();
+    fs::write(
+        &config_path,
+        config.replace("com.example.regression", "com.jitpomi.regression"),
+    )
+    .unwrap();
+    let doctor = Command::new(env!("CARGO_BIN_EXE_jffi"))
+        .current_dir(&project)
+        .env("PATH", &path)
+        .env("HOME", &home)
+        .env_remove("ANDROID_HOME")
+        .env_remove("ANDROID_SDK_ROOT")
+        .env("JFFI_TEST_LOG", &log)
+        .args(["--no-setup", "doctor", "bundle", "--platform", "android"])
+        .output()
+        .unwrap();
+    assert!(
+        doctor.status.success(),
+        "{}",
+        String::from_utf8_lossy(&doctor.stderr)
+    );
+    assert!(String::from_utf8_lossy(&doctor.stdout).contains(&sdk.display().to_string()));
     let output = Command::new(env!("CARGO_BIN_EXE_jffi"))
         .current_dir(&project)
         .env("PATH", &path)

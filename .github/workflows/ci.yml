@@ -46,6 +46,14 @@ jobs:
           cd platforms/web
           npm install --package-lock-only --ignore-scripts
           npm audit --audit-level=high
+      - name: Verify all platform selections
+        run: python3 scripts/test-platform-matrix.py "$RUNNER_TEMP/jffi-install/bin/jffi"
+      - name: Verify Web server options and bundle configuration
+        run: |
+          cd "$RUNNER_TEMP/jffi-smoke/platforms/web"
+          npm install --ignore-scripts
+          cd "$GITHUB_WORKSPACE"
+          python3 scripts/test-web-server.py "$RUNNER_TEMP/jffi-install/bin/jffi" "$RUNNER_TEMP/jffi-smoke"
 
   cross-platform-compile:
     name: Compile CLI (${{ matrix.os }})

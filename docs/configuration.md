@@ -182,3 +182,9 @@ gpg_key = "YOUR-GPG-KEY-ID"
 Use `jffi bundle --platform linux --no-sign` for an unsigned Flatpak. A signed
 bundle requires the selected Linux signing profile. See [native workflows](native-workflows.md)
 for profile propagation, device selection, supported resources, and verification limits.
+
+### Web development HTTPS
+
+`platforms.web.https = true` requires certificates in `server.https` or an SSL plugin in your application's `vite.config`. JFFI preserves that configuration and checks that TLS is enabled. It does not create or trust certificates. Vite documents certificate setup at https://vite.dev/config/server-options#server-https.
+
+The default Web bundle command applies `platforms.web.target` and `bundle.web.base_path` through a generated Vite configuration. Custom `bundle.web.build_command` commands receive `JFFI_WEB_TARGET`, `JFFI_BASE_PATH`, and `BASE_PATH` and must use them as appropriate for their bundler.

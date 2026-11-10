@@ -689,9 +689,7 @@ fn start_web_dev_server() -> Result<()> {
     if web_config.host {
         args.push("--host".to_string());
     }
-    if web_config.https {
-        args.push("--https".to_string());
-    }
+    super::web_server::configure_https(&mut vite_cmd, &mut args, web_config.https)?;
     if web_config.open {
         args.push("--open".to_string());
     }
@@ -703,12 +701,18 @@ fn start_web_dev_server() -> Result<()> {
     if !verbose {
         vite_cmd.stdout(Stdio::null()).stderr(Stdio::null());
     }
-    vite_cmd
+    let mut server = vite_cmd
         .spawn()
         .context("Failed to start Vite dev server")?;
 
     // Give it a moment to start
     std::thread::sleep(Duration::from_millis(1500));
+    if let Some(status) = server.try_wait()? {
+        anyhow::bail!(
+            "Vite dev server exited during startup: {}. Run with --verbose for diagnostics.",
+            status
+        );
+    }
 
     let protocol = if web_config.https { "https" } else { "http" };
     let host_str = if web_config.host {

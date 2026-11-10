@@ -21,14 +21,19 @@ fn java_executable_for(home: Option<&std::ffi::OsStr>) -> PathBuf {
 /// Give Gradle the same conventional SDK locations that JFFI discovers for native tools.
 /// Explicit environment settings remain authoritative; local.properties still takes precedence in Gradle.
 pub(crate) fn configure_android_command(command: &mut Command) {
-    if std::env::var_os("ANDROID_HOME").is_some_and(|value| !value.is_empty()) {
-        return;
+    if let Some(root) = android_sdk_root() {
+        command.env("ANDROID_HOME", root);
+    }
+}
+
+/// Resolve the SDK consistently for Gradle commands and diagnostics.
+pub(crate) fn android_sdk_root() -> Option<PathBuf> {
+    for name in ["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
+        if let Some(root) = std::env::var_os(name).filter(|value| !value.is_empty()) {
+            return Some(PathBuf::from(root));
+        }
     }
     let mut roots = Vec::new();
-    if let Some(root) = std::env::var_os("ANDROID_SDK_ROOT").filter(|v| !v.is_empty()) {
-        command.env("ANDROID_HOME", root);
-        return;
-    }
     if let Some(home) = std::env::var_os("HOME") {
         let home = PathBuf::from(home);
         roots.extend([
@@ -40,9 +45,7 @@ pub(crate) fn configure_android_command(command: &mut Command) {
     if let Some(local) = std::env::var_os("LOCALAPPDATA") {
         roots.push(PathBuf::from(local).join("Android/Sdk"));
     }
-    if let Some(root) = roots.into_iter().find(|root| root.is_dir()) {
-        command.env("ANDROID_HOME", root);
-    }
+    roots.into_iter().find(|root| root.is_dir())
 }
 
 /// Supported platforms

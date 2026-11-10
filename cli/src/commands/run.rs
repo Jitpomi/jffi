@@ -832,9 +832,7 @@ fn run_web() -> Result<()> {
     if web_config.host {
         args.push("--host".to_string());
     }
-    if web_config.https {
-        args.push("--https".to_string());
-    }
+    super::web_server::configure_https(&mut vite_cmd, &mut args, web_config.https)?;
     if web_config.open {
         args.push("--open".to_string());
     }

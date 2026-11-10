@@ -37,7 +37,7 @@ enum Commands {
         #[arg(short, long)]
         platforms: Option<String>,
 
-        /// Project template (todo, hello, counter)
+        /// Project template (hello; todo and counter are coming soon)
         #[arg(short, long)]
         template: Option<String>,
 
@@ -68,7 +68,7 @@ enum Commands {
         #[arg(short, long)]
         device: bool,
 
-        /// Build for deployment (all architectures for Windows, otherwise same as default)
+        /// Build all configured Windows deployment architectures (Windows only)
         #[arg(long)]
         deploy: bool,
 
@@ -167,7 +167,7 @@ enum Commands {
         #[arg(short, long)]
         platform: String,
 
-        /// Output format (e.g. aab, apk, dmg, app, ipa, msixbundle, flatpak)
+        /// Output format (e.g. aab, apk, dmg, app, ipa, msix, flatpak)
         #[arg(short, long)]
         format: Option<String>,
 

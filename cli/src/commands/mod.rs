@@ -10,3 +10,5 @@ pub mod run;
 pub mod screenshots;
 
 pub(crate) mod release_checks;
+
+mod web_server;
