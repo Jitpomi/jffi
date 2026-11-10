@@ -8,3 +8,5 @@ pub mod new;
 pub mod remove;
 pub mod run;
 pub mod screenshots;
+
+pub(crate) mod release_checks;

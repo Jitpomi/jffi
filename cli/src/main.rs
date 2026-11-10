@@ -198,8 +198,12 @@ enum Commands {
 
     /// Diagnostics and health checks
     Doctor {
-        /// Subsystem to check (e.g. bundle)
+        /// Subsystem to check (config, bundle, or artifact)
         subcommand: Option<String>,
+
+        /// APK/AAB to inspect for native payload and 16 KB compatibility
+        #[arg(long, required_if_eq("subcommand", "artifact"))]
+        artifact: Option<std::path::PathBuf>,
 
         /// Platform to check
         #[arg(short, long)]
@@ -355,6 +359,7 @@ fn main() -> anyhow::Result<()> {
         }
         Commands::Doctor {
             subcommand,
+            artifact,
             platform,
             release,
             profile,
@@ -364,6 +369,7 @@ fn main() -> anyhow::Result<()> {
                 platform.as_deref(),
                 release,
                 &profile,
+                artifact.as_deref(),
             )?;
         }
         Commands::Icons { platform } => {

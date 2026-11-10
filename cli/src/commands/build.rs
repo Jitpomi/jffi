@@ -663,22 +663,15 @@ fn build_android(release: bool) -> Result<()> {
         .context("core/Cargo.toml must define a package or library name")?
         .replace('-', "_");
 
-    // Build for all Android architectures
-    let mut architectures = vec![
+    let android_config = crate::config::android_bundle_config(&config)?;
+    let architectures: Vec<_> = [
         ("aarch64-linux-android", "arm64-v8a"),
         ("armv7-linux-androideabi", "armeabi-v7a"),
         ("x86_64-linux-android", "x86_64"),
-    ];
-
-    if let Some(abis) = &config.platforms.android.abis {
-        architectures.retain(|(_, abi)| abis.contains(&abi.to_string()));
-        if architectures.is_empty() {
-            anyhow::bail!(
-                "No valid Android ABIs configured in jffi.toml. Enabled ABIs: {:?}",
-                abis
-            );
-        }
-    }
+    ]
+    .into_iter()
+    .filter(|(_, abi)| android_config.abis.iter().any(|a| a == abi))
+    .collect();
 
     let profile = if release { "release" } else { "debug" };
 
@@ -2486,6 +2479,14 @@ fn sync_configs_at(config: &crate::config::Config, platforms: &[&str], root: &Pa
                 } else if trimmed.starts_with("minSdk =") {
                     let indent = line.len() - line.trim_start().len();
                     format!("{:width$}minSdk = {}", "", min_sdk, width = indent)
+                } else if trimmed.starts_with("compileSdk =") {
+                    let indent = line.len() - line.trim_start().len();
+                    format!(
+                        "{:width$}compileSdk = {}",
+                        "",
+                        bundle_compile_sdk.unwrap_or(36),
+                        width = indent
+                    )
                 } else if trimmed.starts_with("targetSdk =") {
                     let indent = line.len() - line.trim_start().len();
                     format!("{:width$}targetSdk = {}", "", target_sdk, width = indent)
@@ -3503,6 +3504,44 @@ enabled = ["windows", "ios", "macos", "android", "linux", "web"]
         super::sync_configs_at(&config, &["ios"], &root).unwrap();
         assert_eq!(std::fs::read_to_string(path).unwrap(), updated);
         assert_eq!(super::preserve_line_format("a", vec!["a".into()]), "a");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn android_compile_target_and_minimum_sdks_sync_together() {
+        let root = std::env::temp_dir().join(format!("jffi-sdk-sync-{}", uuid::Uuid::new_v4()));
+        let config: crate::config::Config = toml::from_str(
+            r#"
+[package]
+name = "sample"
+version = "1.0.0"
+[platforms]
+enabled = ["android"]
+[platforms.android]
+package = "com.example.test"
+min_sdk = 29
+target_sdk = 36
+[bundle.android]
+min_sdk = 29
+compile_sdk = 37
+"#,
+        )
+        .unwrap();
+        let path = root.join("platforms/android/app/build.gradle.kts");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            "    compileSdk = 34\n        minSdk = 23\n        targetSdk = 34\n",
+        )
+        .unwrap();
+        super::sync_configs_at(&config, &["android"], &root).unwrap();
+        let updated = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(
+            updated,
+            "    compileSdk = 37\n        minSdk = 29\n        targetSdk = 36\n"
+        );
+        super::sync_configs_at(&config, &["android"], &root).unwrap();
+        assert_eq!(std::fs::read_to_string(path).unwrap(), updated);
         std::fs::remove_dir_all(root).unwrap();
     }
 
