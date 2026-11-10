@@ -6,8 +6,28 @@ pub fn run_doctor(
     platform: Option<&str>,
     release: bool,
     profile: &str,
+    artifact: Option<&std::path::Path>,
 ) -> Result<()> {
+    if artifact.is_some() && subcommand != Some("artifact") {
+        anyhow::bail!("--artifact is only valid with doctor artifact");
+    }
     match subcommand {
+        Some("artifact") => {
+            anyhow::ensure!(
+                platform == Some("android"),
+                "doctor artifact currently requires --platform android"
+            );
+            let path = artifact
+                .ok_or_else(|| anyhow::anyhow!("doctor artifact requires --artifact <APK/AAB>"))?;
+            anyhow::ensure!(
+                path.extension().is_some_and(|e| e == "apk" || e == "aab"),
+                "Expected an APK or AAB artifact"
+            );
+            let config = crate::config::load_config()?;
+            crate::commands::bundle::verify_android_package(&config, path)?;
+            println!("Native payload and 16 KB checks passed: {} (store declarations and runtime QA remain separate)", path.display());
+            Ok(())
+        }
         Some("bundle") => doctor_bundle(platform, release, profile),
         Some("config") => {
             let config = crate::config::load_config()?;
@@ -66,6 +86,9 @@ fn doctor_bundle(platform: Option<&str>, release: bool, profile: &str) -> Result
                     &["--find", "lipo"],
                     "lipo is required for universal binaries",
                 )?;
+                if release && crate::commands::bundle::is_apple_store_export(&config, p, profile) {
+                    crate::commands::release_checks::apple_store_toolchain(p)?;
+                }
             }
             "android" => {
                 check_tool(

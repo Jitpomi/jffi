@@ -140,10 +140,41 @@ When building for Android, JFFI automatically:
 
 **Result:** Android apps using networking libraries (iroh, hickory-resolver, etc.) work out of the box with zero configuration.
 
-**Note on 16 KB Alignment:**
-- Your Rust code: ✅ Automatically aligned via linker flags
-- Prebuilt AARs (JNA, ML Kit): ❌ Not aligned (upstream issue)
-- Solution: `extractNativeLibs="true"` extracts libraries at install time (official Android approach)
+**16 KB native-library support:**
+JFFI applies 16 KB linker flags to the Rust core. Bundling also checks the finished
+APK/AAB: every packaged native library must match its ABI, all 64-bit ELF LOAD
+segments must support 16 KB pages, and each configured ABI must contain the core.
+This includes libraries supplied by JNA and other AARs. An incompatible dependency
+must be updated or rebuilt; extracting it at install time does not repair its ELF
+alignment. APK ZIP alignment is checked with SDK `zipalign` (`JFFI_ZIPALIGN` can
+select the executable). AABs with uncompressed native libraries must request
+16 KB or 64 KB alignment in `BundleConfig.pb`.
+
+Android Rust builds and packaging use the same ABI selection. Configure
+`platforms.android.abis`, `bundle.android.abis`, or both with matching sets.
+Supported ABIs are `arm64-v8a`, `armeabi-v7a`, and `x86_64`. Unknown, duplicate,
+empty or conflicting lists fail before building. `compile_sdk`, `target_sdk`, and
+`min_sdk` must agree, and Gradle's `compileSdk` is synchronized too.
+Windows already supports `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`, and
+`i686-pc-windows-msvc` through `bundle.windows.targets`; empty, duplicate and
+unknown selections are rejected. These are CPU architectures, not certification
+of tablet, foldable, desktop-window or accessibility behavior.
+
+To inspect an existing Android artifact without rebuilding or checking signing:
+
+```bash
+jffi --no-setup doctor artifact --platform android --artifact path/to/app.aab
+jffi --no-setup doctor artifact --platform android --artifact path/to/app.apk
+```
+
+Signed Apple App Store exports and `doctor bundle --release` check the selected
+Xcode and device SDK. Current iOS submission minimums are Xcode 26 / SDK 26;
+Apple has announced SDK 27 for April 2027. Labeled beta/RC toolchain paths are
+rejected, including `DEVELOPER_DIR` overrides. The iOS archive and embedded app
+extensions are checked for the actual device SDK; SDK 27 apps must declare a
+launch screen. Development and website exports do not inherit the App Store SDK
+floor. Store declarations, privacy-reason accuracy, screenshots, account tasks,
+physical-device QA and Windows App Certification Kit remain app/release work.
 
 **Note on Production Bundling & Signing Environment:**
 - When running `jffi bundle --platform android`, JFFI's build orchestrator automatically generates a production signing configuration block derived from your `jffi.toml` profiles.

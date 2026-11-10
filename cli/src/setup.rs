@@ -444,12 +444,15 @@ fn setup_platform_with_scope(platform: &Platform, include_bundle_tools: bool) ->
         }
         Platform::Android => {
             ensure_cargo_ndk()?;
-            let configured = crate::config::load_config().ok();
-            let targets = android_rust_targets(
-                configured
-                    .as_ref()
-                    .and_then(|value| value.platforms.android.abis.as_deref()),
-            )?;
+            let configured = if std::path::Path::new("jffi.toml").exists() {
+                Some(crate::config::android_bundle_config(
+                    &crate::config::load_config()?,
+                )?)
+            } else {
+                None
+            };
+            let targets =
+                android_rust_targets(configured.as_ref().map(|value| value.abis.as_slice()))?;
             ensure_rust_targets(&targets)?;
         }
         Platform::Linux => {
@@ -622,9 +625,13 @@ fn android_rust_targets(abis: Option<&[String]>) -> Result<Vec<&'static str>> {
 }
 
 fn windows_rust_targets(targets: Option<&[String]>) -> Result<Vec<&'static str>> {
-    let supported = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"];
+    let supported = [
+        "x86_64-pc-windows-msvc",
+        "aarch64-pc-windows-msvc",
+        "i686-pc-windows-msvc",
+    ];
     let Some(targets) = targets else {
-        return Ok(supported.to_vec());
+        return Ok(supported[..2].to_vec());
     };
 
     let unknown: Vec<&str> = targets
@@ -708,8 +715,20 @@ mod tests {
     }
 
     #[test]
+    fn windows_setup_supports_explicit_x86_without_expanding_defaults() {
+        assert_eq!(
+            windows_rust_targets(Some(&["i686-pc-windows-msvc".into()])).unwrap(),
+            ["i686-pc-windows-msvc"]
+        );
+        assert_eq!(
+            windows_rust_targets(None).unwrap(),
+            ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"]
+        );
+    }
+
+    #[test]
     fn windows_setup_rejects_unknown_targets() {
-        let targets = vec!["i686-pc-windows-msvc".to_string()];
+        let targets = vec!["x86_64-pc-windows-gnu".to_string()];
         assert!(windows_rust_targets(Some(&targets)).is_err());
     }
 
