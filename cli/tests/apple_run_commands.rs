@@ -80,7 +80,7 @@ case "$tool" in
     done ;;
   xcrun)
     if [ "${2:-}" = list ]; then
-      printf '%s\n' '{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-27-0":[{"name":"iPad","udid":"selected-pad","isAvailable":true,"state":"Booted"}]}}'
+      printf '%s\n' '{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-27-0":[{"name":"iPad","deviceTypeIdentifier":"com.apple.CoreSimulator.SimDeviceType.iPad-Pro","udid":"selected-pad","isAvailable":true,"state":"Booted"}]}}'
     fi ;;
 esac
 "#;
@@ -112,7 +112,7 @@ esac
             .env("JFFI_TEST_DEVELOPER_DIR", root.join("missing-developer"))
             .args(["run", "--platform", platform, "--release", "--no-setup"]);
         if platform == "ios" {
-            run.args(["--device-id", "selected-pad"]);
+            run.args(["--device", "ipad"]);
         }
         succeeds(run.output().unwrap());
         if platform == "ios" {
