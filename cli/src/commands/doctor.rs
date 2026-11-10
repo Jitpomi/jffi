@@ -97,7 +97,11 @@ fn doctor_bundle(platform: Option<&str>, release: bool, profile: &str) -> Result
                     "cargo-ndk is required for Android Rust builds",
                 )?;
                 // Check JAVA_HOME or gradlew
-                check_tool("java", &["-version"], "Java is required for Android builds")?;
+                check_tool(
+                    &crate::platform::java_executable().to_string_lossy(),
+                    &["-version"],
+                    "Java is required for Android builds",
+                )?;
 
                 if std::env::var("ANDROID_HOME").is_err()
                     && std::env::var("ANDROID_SDK_ROOT").is_err()

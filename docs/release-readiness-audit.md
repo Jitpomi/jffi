@@ -32,7 +32,13 @@ release candidates, store declarations, or physical-device behavior.
   app DSL is evaluated. Loading JFFI's script before android {} no longer lets
   the template's default ABI list add excluded architectures back. The Android
   CI job now builds an ARM64-only release APK with JNA and checks its actual ZIP
-  payload; the strict artifact validator remains enabled.
+  payload; the strict artifact validator remains enabled. The finalization hook
+  normalizes defaultConfig, build types and product flavors. CI deliberately adds
+  an x86_64 release-build override to exercise that merge boundary.
+- Honor JAVA_HOME for Gradle wrapper bootstrapping in bundle/run and for Android
+  doctor Java checks. A selected JDK no longer loses to a different Java on PATH.
+  Subprocess regression coverage boots a missing wrapper using a JDK path with
+  spaces while PATH contains an intentionally failing Java.
 
 ## Reusing the artifact check
 

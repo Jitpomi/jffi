@@ -119,6 +119,8 @@ jobs:
           s += '\n[bundle.windows]\nformats = ["msix"]\ntargets = ["x86_64-pc-windows-msvc"]\nidentity_name = "Jitpomi.NativeSmoke"\npublisher_id = "CN=JitpomiCI"\n'
           if os.environ['NATIVE_PLATFORM'] == 'android':
               s = s.replace('[platforms.android]\n', '[platforms.android]\nabis = ["arm64-v8a"]\n')
+              app_gradle = p.parent / 'platforms/android/app/build.gradle.kts'
+              app_gradle.write_text(app_gradle.read_text() + '\nandroid { buildTypes { getByName("release") { ndk { abiFilters += listOf("x86_64") } } } }\n')
           p.write_text(s)
       - name: Verify mounted DMG layout on macOS 27
         if: matrix.os == 'xcode-27'
