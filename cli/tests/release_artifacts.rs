@@ -15,7 +15,10 @@ version = "1.0.0"
 enabled = ["android"]
 [platforms.android]
 package = "com.example.sample"
+min_sdk = 29
 abis = ["x86_64"]
+[bundle.android]
+formats = ["aab"]
 "#,
     )
     .unwrap();

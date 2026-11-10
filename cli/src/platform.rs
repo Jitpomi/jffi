@@ -2,6 +2,22 @@ use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// Match Gradle's wrapper scripts: an explicit JAVA_HOME takes precedence over PATH.
+pub(crate) fn java_executable() -> PathBuf {
+    java_executable_for(std::env::var_os("JAVA_HOME").as_deref())
+}
+
+fn java_executable_for(home: Option<&std::ffi::OsStr>) -> PathBuf {
+    match home.filter(|home| !home.is_empty()) {
+        Some(home) => {
+            Path::new(home)
+                .join("bin")
+                .join(if cfg!(windows) { "java.exe" } else { "java" })
+        }
+        None => PathBuf::from("java"),
+    }
+}
+
 /// Supported platforms
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Platform {
@@ -401,6 +417,21 @@ fn select_ios_simulator(
 #[cfg(test)]
 mod simulator_tests {
     use super::*;
+    #[test]
+    fn java_home_selection_preserves_paths_and_falls_back_only_when_unset() {
+        let home = Path::new("jdk with spaces");
+        assert_eq!(
+            java_executable_for(Some(home.as_os_str())),
+            home.join("bin")
+                .join(if cfg!(windows) { "java.exe" } else { "java" })
+        );
+        assert_eq!(java_executable_for(None), PathBuf::from("java"));
+        assert_eq!(
+            java_executable_for(Some(std::ffi::OsStr::new(""))),
+            PathBuf::from("java")
+        );
+    }
+
     #[test]
     fn selects_requested_family_or_exact_name() {
         let devices = serde_json::json!({"devices": {

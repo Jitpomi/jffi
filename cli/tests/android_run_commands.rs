@@ -163,5 +163,64 @@ echo APK > app/build/outputs/apk/release/app-release.apk
         !commands.contains("adb|-s emulator-5554 install"),
         "{commands}"
     );
+    // A fresh project can have the wrapper JAR but no wrapper scripts. JAVA_HOME
+    // must win over an incompatible Java on PATH when bootstrapping those scripts.
+    let wrapper_template = root.join("wrapper-template");
+    fs::rename(project.join("platforms/android/gradlew"), &wrapper_template).unwrap();
+    let java_home = root.join("selected jdk");
+    fs::create_dir_all(java_home.join("bin")).unwrap();
+    let home_java = java_home.join("bin/java");
+    fs::write(
+        &home_java,
+        r#"#!/bin/sh
+set -eu
+printf 'home-java|%s\n' "$*" >> "$JFFI_TEST_LOG"
+cp "$JFFI_TEST_WRAPPER_TEMPLATE" gradlew
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(&home_java, fs::Permissions::from_mode(0o755)).unwrap();
+    let path_java = root.join("tools/java");
+    fs::write(
+        &path_java,
+        "#!/bin/sh\nprintf 'wrong-java\\n' >> \"$JFFI_TEST_LOG\"\nexit 97\n",
+    )
+    .unwrap();
+    fs::set_permissions(&path_java, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(&log, "").unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_jffi"))
+        .current_dir(&project)
+        .env("PATH", &path)
+        .env("JAVA_HOME", &java_home)
+        .env("ANDROID_HOME", &sdk)
+        .env("ANDROID_NDK_HOME", root.join("ndk"))
+        .env("JFFI_TEST_LOG", &log)
+        .env("JFFI_TEST_WRAPPER_TEMPLATE", &wrapper_template)
+        .args([
+            "run",
+            "--platform",
+            "android",
+            "--release",
+            "--device",
+            "--device-id",
+            "selected-phone",
+            "--no-setup",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let commands = fs::read_to_string(&log).unwrap();
+    assert!(commands.contains("home-java|-classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain wrapper"), "{commands}");
+    assert!(!commands.contains("wrong-java"), "{commands}");
+    assert!(
+        commands
+            .lines()
+            .any(|line| line.starts_with("gradlew|") && line.contains("assembleRelease|sdk=")),
+        "{commands}"
+    );
     fs::remove_dir_all(root).unwrap();
 }

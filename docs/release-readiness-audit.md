@@ -17,6 +17,29 @@ release candidates, store declarations, or physical-device behavior.
 | Signing | APK/AAB, Apple archive/app/PKG and Windows signing verification already exist | Retained existing checks. New native compatibility gates run even for unsigned Android release bundles. |
 | Linux | Flatpak runtime/SDK reconciliation and package generation already exist | No extra device-family backend needed. Host architecture, sandbox acceptance and distribution availability must still be verified for each app. |
 
+## Adversarial review corrections
+
+- Preserve whether bundle ABI/minimum-SDK values were explicitly configured.
+  Omitted values inherit platform settings, including after config serialization.
+  Explicit empty/duplicate lists and conflicting values still fail.
+- Reject BundleConfig.pb larger than 1 MiB; never validate a silently truncated
+  prefix that could omit the native alignment settings.
+- Inspect native libraries only immediately under a module's lib directory.
+  Application assets, BUNDLE-METADATA and META-INF entries are excluded; native
+  libraries in real feature-module lib directories remain checked.
+- Accept all four Apple launch-screen keys, including UILaunchScreens.
+- Apply generated ABI filters through Android Components finalizeDsl, after the
+  app DSL is evaluated. Loading JFFI's script before android {} no longer lets
+  the template's default ABI list add excluded architectures back. The Android
+  CI job now builds an ARM64-only release APK with JNA and checks its actual ZIP
+  payload; the strict artifact validator remains enabled. The finalization hook
+  normalizes defaultConfig, build types and product flavors. CI deliberately adds
+  an x86_64 release-build override to exercise that merge boundary.
+- Honor JAVA_HOME for Gradle wrapper bootstrapping in bundle/run and for Android
+  doctor Java checks. A selected JDK no longer loses to a different Java on PATH.
+  Subprocess regression coverage boots a missing wrapper using a JDK path with
+  spaces while PATH contains an intentionally failing Java.
+
 ## Reusing the artifact check
 
 Run from the JFFI application project, using its ABI configuration and

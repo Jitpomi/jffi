@@ -378,7 +378,7 @@ fn run_android(
         println!("  {} Generating Gradle wrapper...", "→".bright_blue());
         let wrapper_jar = "gradle/wrapper/gradle-wrapper.jar";
         if android_dir.join(wrapper_jar).exists() {
-            let wrapper_status = Command::new("java")
+            let wrapper_status = Command::new(crate::platform::java_executable())
                 .args([
                     "-classpath",
                     wrapper_jar,

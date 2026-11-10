@@ -106,6 +106,8 @@ jobs:
           cargo build --locked
           target/debug/jffi new native-smoke --template hello --platforms "$NATIVE_PLATFORMS" --path "$RUNNER_TEMP/native-smoke" --no-build
       - name: Configure non-placeholder package identifiers
+        env:
+          NATIVE_PLATFORM: ${{ matrix.platform }}
         shell: python
         run: |
           import os
@@ -115,6 +117,10 @@ jobs:
           s = s.replace('version = "0.1.0"', 'version = "0.1.0"\nrelease_date = "2026-10-24"', 1)
           s += '\n[bundle]\nidentifier = "com.jitpomi.ci.nativesmoke"\n'
           s += '\n[bundle.windows]\nformats = ["msix"]\ntargets = ["x86_64-pc-windows-msvc"]\nidentity_name = "Jitpomi.NativeSmoke"\npublisher_id = "CN=JitpomiCI"\n'
+          if os.environ['NATIVE_PLATFORM'] == 'android':
+              s = s.replace('[platforms.android]\n', '[platforms.android]\nabis = ["arm64-v8a"]\n')
+              app_gradle = p.parent / 'platforms/android/app/build.gradle.kts'
+              app_gradle.write_text(app_gradle.read_text() + '\nandroid { buildTypes { getByName("release") { ndk { abiFilters += listOf("x86_64") } } } }\n')
           p.write_text(s)
       - name: Verify mounted DMG layout on macOS 27
         if: matrix.os == 'xcode-27'
@@ -159,6 +165,21 @@ jobs:
           cd "$RUNNER_TEMP/native-smoke/platforms/android"
           "$JAVA_HOME/bin/java" -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain assembleDebug
           test -s app/build/outputs/apk/debug/app-debug.apk
+      - name: Package ARM64-only Android release including JNA
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          export PATH="$GITHUB_WORKSPACE/target/debug:$PATH"
+          cd "$RUNNER_TEMP/native-smoke"
+          jffi bundle --platform android --format apk --no-sign
+          jffi --no-setup doctor artifact --platform android --artifact target/bundle/android/app-release-unsigned.apk
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('target/bundle/android/app-release-unsigned.apk') as apk:
+              native = [n for n in apk.namelist() if n.startswith('lib/') and n.endswith('.so')]
+          assert {n.split('/')[1] for n in native} == {'arm64-v8a'}, native
+          assert 'lib/arm64-v8a/libjnidispatch.so' in native, native
+          PY
       - name: Build unsigned native package
         if: matrix.platform != 'android'
         shell: bash

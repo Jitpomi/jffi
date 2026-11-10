@@ -11,11 +11,14 @@ pub(crate) fn android_native_package(path: &Path, abis: &[String], core: &str) -
         "lib/"
     };
     if prefix == "base/lib/" {
+        const MAX_CONFIG_BYTES: u64 = 1024 * 1024;
         let mut config = Vec::new();
         zip.by_name("BundleConfig.pb")
             .context("AAB is missing BundleConfig.pb")?
-            .take(1024 * 1024)
+            .take(MAX_CONFIG_BYTES + 1)
             .read_to_end(&mut config)?;
+        ensure!(config.len() as u64 <= MAX_CONFIG_BYTES,
+            "BundleConfig.pb exceeds the 1 MiB inspection limit; refusing to validate a truncated configuration");
         aab_alignment(&config)?;
     }
     let mut cores = BTreeSet::new();
@@ -24,7 +27,13 @@ pub(crate) fn android_native_package(path: &Path, abis: &[String], core: &str) -
         // Include libraries from feature modules in AABs, not only the base module.
         let name = entry.name()?.into_owned();
         let native = if prefix == "base/lib/" {
-            name.split_once("/lib/").map(|(_, native)| native)
+            name.split_once('/').and_then(|(module, contents)| {
+                if matches!(module, "BUNDLE-METADATA" | "META-INF") {
+                    None
+                } else {
+                    contents.strip_prefix("lib/")
+                }
+            })
         } else {
             name.strip_prefix(prefix)
         };
@@ -307,14 +316,10 @@ pub(crate) fn apple_store_archive(app: &Path, platform: &str) -> Result<()> {
                 .is_some_and(|v| v >= 27)
         {
             ensure!(
-                [
-                    "UILaunchScreen",
-                    "UILaunchScreens",
-                    "UILaunchStoryboardName",
-                    "UILaunchStoryboards"
-                ]
-                .iter()
-                .any(|key| info.get(key).is_some()),
+                info.get("UILaunchScreen").is_some()
+                    || info.get("UILaunchStoryboardName").is_some()
+                    || info.get("UILaunchStoryboards").is_some()
+                    || info.get("UILaunchScreens").is_some(),
                 "iOS 27 archives require a launch screen in Info.plist"
             );
         }
@@ -385,7 +390,7 @@ mod tests {
         let path =
             std::env::temp_dir().join(format!("jffi-native-{}.{}", uuid::Uuid::new_v4(), ext));
         let mut zip = zip::ZipWriter::new(File::create(&path).unwrap());
-        if ext == "aab" {
+        if ext == "aab" && !entries.iter().any(|(name, _)| *name == "BundleConfig.pb") {
             zip.start_file("BundleConfig.pb", zip::write::SimpleFileOptions::default())
                 .unwrap();
             zip.write_all(&[0x12, 6, 0x12, 4, 8, 1, 16, 2]).unwrap();
@@ -424,6 +429,73 @@ mod tests {
             std::fs::remove_file(path).unwrap();
         }
     }
+    #[test]
+    fn aab_assets_and_metadata_are_not_native_module_libraries() {
+        let path = package(
+            &[
+                ("base/lib/arm64-v8a/libsample.so", elf("arm64-v8a", 16384)),
+                (
+                    "base/assets/lib/arm64-v8a/fixture.so",
+                    b"opaque fixture".to_vec(),
+                ),
+                (
+                    "feature/assets/lib/x86_64/fixture.so",
+                    b"opaque fixture".to_vec(),
+                ),
+                (
+                    "BUNDLE-METADATA/lib/x86_64/fixture.so",
+                    b"opaque metadata".to_vec(),
+                ),
+                ("feature/lib/arm64-v8a/libextra.so", elf("arm64-v8a", 16384)),
+            ],
+            "aab",
+        );
+        assert!(android_native_package(&path, &["arm64-v8a".into()], "libsample.so").is_ok());
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn aab_config_limit_rejects_truncation_before_reading_alignment() {
+        fn varint(mut value: usize) -> Vec<u8> {
+            let mut result = Vec::new();
+            while value >= 128 {
+                result.push((value as u8 & 127) | 128);
+                value >>= 7;
+            }
+            result.push(value as u8);
+            result
+        }
+        fn field(tag: u8, body: &[u8]) -> Vec<u8> {
+            let mut result = vec![tag];
+            result.extend(varint(body.len()));
+            result.extend(body);
+            result
+        }
+        // A valid Compression.uncompressed_glob field fills exactly the limit.
+        let padding = field(26, &field(10, &vec![b'a'; 1024 * 1024 - 8]));
+        assert_eq!(padding.len(), 1024 * 1024);
+        for oversized in [false, true] {
+            let mut config = padding.clone();
+            if oversized {
+                config.extend([18, 6, 18, 4, 8, 1, 16, 1]);
+            }
+            let path = package(
+                &[
+                    ("BundleConfig.pb", config),
+                    ("base/lib/arm64-v8a/libsample.so", elf("arm64-v8a", 16384)),
+                ],
+                "aab",
+            );
+            let result = android_native_package(&path, &["arm64-v8a".into()], "libsample.so");
+            if oversized {
+                assert!(result.unwrap_err().to_string().contains("inspection limit"));
+            } else {
+                assert!(result.is_ok());
+            }
+            std::fs::remove_file(path).unwrap();
+        }
+    }
+
     #[test]
     fn aab_native_zip_alignment_is_separate_from_elf_alignment() {
         assert!(aab_alignment(&[0x12, 6, 0x12, 4, 8, 1, 16, 2]).is_ok());
