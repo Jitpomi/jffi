@@ -28,6 +28,11 @@ release candidates, store declarations, or physical-device behavior.
   Application assets, BUNDLE-METADATA and META-INF entries are excluded; native
   libraries in real feature-module lib directories remain checked.
 - Accept all four Apple launch-screen keys, including UILaunchScreens.
+- Apply generated ABI filters through Android Components finalizeDsl, after the
+  app DSL is evaluated. Loading JFFI's script before android {} no longer lets
+  the template's default ABI list add excluded architectures back. The Android
+  CI job now builds an ARM64-only release APK with JNA and checks its actual ZIP
+  payload; the strict artifact validator remains enabled.
 
 ## Reusing the artifact check
 
