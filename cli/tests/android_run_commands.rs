@@ -91,12 +91,15 @@ echo APK > app/build/outputs/apk/release/app-release.apk
         &std::env::var_os("PATH").unwrap_or_default(),
     )))
     .unwrap();
-    let sdk = root.join("custom-sdk");
+    let home = root.join("home");
+    let sdk = home.join("Library/Android/sdk");
     fs::create_dir_all(&sdk).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_jffi"))
         .current_dir(&project)
         .env("PATH", &path)
-        .env("ANDROID_HOME", &sdk)
+        .env("HOME", &home)
+        .env_remove("ANDROID_HOME")
+        .env_remove("ANDROID_SDK_ROOT")
         .env("ANDROID_NDK_HOME", root.join("ndk"))
         .env("JFFI_TEST_LOG", &log)
         .args([
@@ -222,5 +225,32 @@ cp "$JFFI_TEST_WRAPPER_TEMPLATE" gradlew
             .any(|line| line.starts_with("gradlew|") && line.contains("assembleRelease|sdk=")),
         "{commands}"
     );
+    fs::write(
+        project.join("platforms/android/gradlew"),
+        "#!/bin/sh\necho 'specific Gradle failure: SDK could not be opened' >&2\nexit 7\n",
+    )
+    .unwrap();
+    let failed = Command::new(env!("CARGO_BIN_EXE_jffi"))
+        .current_dir(&project)
+        .env("PATH", &path)
+        .env("HOME", &home)
+        .env_remove("ANDROID_HOME")
+        .env_remove("ANDROID_SDK_ROOT")
+        .env("ANDROID_NDK_HOME", root.join("ndk"))
+        .env("JFFI_TEST_LOG", &log)
+        .args([
+            "run",
+            "--platform",
+            "android",
+            "--release",
+            "--device-id",
+            "selected-phone",
+            "--no-setup",
+        ])
+        .output()
+        .unwrap();
+    assert!(!failed.status.success());
+    assert!(String::from_utf8_lossy(&failed.stderr)
+        .contains("specific Gradle failure: SDK could not be opened"));
     fs::remove_dir_all(root).unwrap();
 }

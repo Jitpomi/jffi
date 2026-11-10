@@ -130,7 +130,7 @@ fn missing_linux_system_packages(
     packages
 }
 
-fn resolved_uniffi_version() -> Result<String> {
+pub(crate) fn resolved_uniffi_version() -> Result<String> {
     if let Ok(lock) = std::fs::read_to_string("Cargo.lock") {
         let mut in_package = false;
         for line in lock.lines() {

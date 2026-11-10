@@ -378,7 +378,9 @@ fn run_android(
         println!("  {} Generating Gradle wrapper...", "→".bright_blue());
         let wrapper_jar = "gradle/wrapper/gradle-wrapper.jar";
         if android_dir.join(wrapper_jar).exists() {
-            let wrapper_status = Command::new(crate::platform::java_executable())
+            let mut wrapper_cmd = Command::new(crate::platform::java_executable());
+            crate::platform::configure_android_command(&mut wrapper_cmd);
+            let wrapper_status = wrapper_cmd
                 .args([
                     "-classpath",
                     wrapper_jar,
@@ -408,7 +410,6 @@ fn run_android(
         }
     }
 
-    use std::process::Stdio;
     let verbose = std::env::var("JFFI_VERBOSE").is_ok();
 
     let mut gradle_cmd = if cfg!(windows) {
@@ -421,6 +422,7 @@ fn run_android(
         cmd
     };
     gradle_cmd.current_dir(android_dir);
+    crate::platform::configure_android_command(&mut gradle_cmd);
     if release {
         // Local release runs use the development key; distribution uses `bundle` profiles.
         let init_dir = std::env::current_dir()?.join("target/jffi/generated/android");
@@ -435,11 +437,19 @@ fn run_android(
     } else {
         "assembleDebug"
     });
-    if !verbose {
-        gradle_cmd.stdout(Stdio::null()).stderr(Stdio::null());
-    }
-
-    let build_result = gradle_cmd.status().context("Failed to run Gradle build")?;
+    let build_result = if verbose {
+        gradle_cmd.status().context("Failed to run Gradle build")?
+    } else {
+        let output = gradle_cmd.output().context("Failed to run Gradle build")?;
+        if !output.status.success() {
+            eprint!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        output.status
+    };
 
     if !build_result.success() {
         anyhow::bail!("Gradle build failed. Check the error messages above.");
