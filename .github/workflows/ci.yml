@@ -130,6 +130,9 @@ jobs:
           s += '\n[bundle.windows]\nformats = ["msix"]\ntargets = ["x86_64-pc-windows-msvc"]\nidentity_name = "Jitpomi.NativeSmoke"\npublisher_id = "CN=JitpomiCI"\n'
           if os.environ['NATIVE_PLATFORM'] == 'android':
               s = s.replace('[platforms.android]\n', '[platforms.android]\nabis = ["arm64-v8a"]\n')
+              core_manifest = p.parent / 'core/Cargo.toml'
+              with core_manifest.open('a') as manifest:
+                  manifest.write("""\n[target.'cfg(target_os = "android")'.dependencies]\nndk-context = "0.1"\n""")
               app_gradle = p.parent / 'platforms/android/app/build.gradle.kts'
               app_gradle.write_text(app_gradle.read_text() + '\nandroid { buildTypes { getByName("release") { ndk { abiFilters += listOf("x86_64") } } } }\n')
           p.write_text(s)
@@ -156,6 +159,17 @@ jobs:
             jffi doctor bundle --platform windows
           fi
           jffi build --platform "$NATIVE_PLATFORM" --release
+      - name: Verify Android context JNI export
+        if: matrix.platform == 'android'
+        shell: python
+        run: |
+          import os
+          import subprocess
+          from pathlib import Path
+          library = Path(os.environ['RUNNER_TEMP']) / 'native-smoke/target/aarch64-linux-android/release/libnative_smoke_core.so'
+          symbols = subprocess.check_output(['readelf', '--dyn-syms', '--wide', str(library)], text=True)
+          expected = 'Java_com_jitpomi_ci_nativesmoke_JffiAndroidInit_initNdkContext'
+          assert any(line.split()[-1:] == [expected] and ' UND ' not in line for line in symbols.splitlines()), expected
       - name: Compile Apple UI
         if: matrix.platform == 'macos' || matrix.platform == 'ios'
         shell: bash
