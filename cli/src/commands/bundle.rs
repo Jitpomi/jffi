@@ -2295,11 +2295,14 @@ pub fn validate_bundle_config(
             }
         }
         if let Some(android) = &bundle.android {
-            if android.min_sdk != config.platforms.android.min_sdk {
+            if android
+                .min_sdk
+                .is_some_and(|min| min != config.platforms.android.min_sdk)
+            {
                 anyhow::bail!(
                     "Conflicting Android min SDK values: platforms.android.min_sdk={} but bundle.android.min_sdk={}",
                     config.platforms.android.min_sdk,
-                    android.min_sdk
+                    android.min_sdk.unwrap()
                 );
             }
             if android.build_type != "release" {

@@ -155,6 +155,10 @@ Android Rust builds and packaging use the same ABI selection. Configure
 Supported ABIs are `arm64-v8a`, `armeabi-v7a`, and `x86_64`. Unknown, duplicate,
 empty or conflicting lists fail before building. `compile_sdk`, `target_sdk`, and
 `min_sdk` must agree, and Gradle's `compileSdk` is synchronized too.
+Omitted bundle ABI and minimum-SDK settings inherit their platform values;
+explicit empty, duplicate or conflicting lists still fail. AAB configuration
+larger than 1 MiB is rejected instead of checking a truncated prefix. Native
+inspection excludes application assets and bundle/signature metadata.
 Windows already supports `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`, and
 `i686-pc-windows-msvc` through `bundle.windows.targets`; empty, duplicate and
 unknown selections are rejected. These are CPU architectures, not certification
