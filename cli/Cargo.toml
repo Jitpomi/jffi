@@ -1,6 +1,6 @@
 [package]
 name = "jffi"
-version = "0.4.26"
+version = "0.4.27"
 edition = "2021"
 authors = ["JFFI Contributors"]
 description = "Cross-platform framework for building native apps with Rust business logic and platform-native UIs"
@@ -35,7 +35,7 @@ prettyplease = "0.2.37"
 uniffi_meta = "=0.29.4"
 uniffi_meta_031 = { package = "uniffi_meta", version = "=0.31.1" }
 wasmparser = { version = "0.244", default-features = false, features = ["std", "features"] }
-proc-macro2 = "1.0.106"
+proc-macro2 = { version = "1.0.106", features = ["span-locations"] }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "ico"] }
 include_dir = "0.7"
 serde_json = "1.0.149"

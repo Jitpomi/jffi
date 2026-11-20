@@ -1,5 +1,11 @@
 # `jffi` Changelog
 
+## v0.4.27 — Reuse existing Android JNI initialization
+
+- Detect an existing Android JNI initializer in reachable Rust modules before generating a bridge. Normal Android build, run and dev commands no longer add a duplicate initializer to projects that provide one.
+- Remove a stale JFFI-generated duplicate registration while preserving the project initializer and surrounding source. The explicit `--no-android-bridge` override remains available.
+- Cover nested modules, explicit module paths, export attributes and preservation of custom bridge files with regression tests.
+
 ## v0.4.25 — macOS 27 disk image packaging
 
 - Use `diskutil image create from` for UDZO disk images on macOS 27 and later;

@@ -1,3 +1,5 @@
+#[path = "android_bridge.rs"]
+mod android_bridge;
 use crate::platform::Platform;
 use anyhow::{Context, Result};
 use colored::*;
@@ -638,10 +640,23 @@ fn build_android(release: bool) -> Result<()> {
     let no_bridge = std::env::var("JFFI_NO_ANDROID_BRIDGE").is_ok();
     let needs_ndk_context = check_ndk_context_needed();
 
+    let config = crate::config::load_config()?;
+    let existing = if needs_ndk_context && !no_bridge {
+        android_bridge::existing(Path::new("core"), &config.platforms.android.package)?
+    } else {
+        None
+    };
     if needs_ndk_context && no_bridge {
         println!(
             "  {} Skipping ndk-context JNI bridge (--no-android-bridge)",
             "ℹ".bright_blue()
+        );
+    } else if let Some(existing) = existing {
+        android_bridge::remove_managed_duplicate(Path::new("core"))?;
+        println!(
+            "  {} Using existing Android JNI bridge at {} (automatic --no-android-bridge)",
+            "ℹ".bright_blue(),
+            existing.display()
         );
     } else if needs_ndk_context {
         println!(
@@ -651,7 +666,6 @@ fn build_android(release: bool) -> Result<()> {
         generate_android_ndk_bridge()?;
     }
 
-    let config = crate::config::load_config()?;
     let cargo_manifest =
         std::fs::read_to_string("core/Cargo.toml").context("Failed to read core/Cargo.toml")?;
     let cargo_manifest: toml::Value =
