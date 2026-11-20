@@ -596,6 +596,7 @@ Both commands accept the same selection options:
 ```bash
 jffi run --platform ios --device ipad
 jffi debug --platform ios --device iphone
+jffi run --platform ios --device "iPhone Duo"
 jffi run --platform ios --device "iPad Pro 11-inch (M4)"
 jffi run --platform android --device emulator
 jffi debug --platform android --device Pixel_Tablet
@@ -610,7 +611,10 @@ if stopped. `--device emulator` uses an existing emulator, or starts the first
 available AVD. Multiple connected matches require an explicit selection.
 
 For iOS, family selection prefers a booted matching simulator; exact names and
-UDIDs are also accepted. Bare `--device` still means a physical device.
+UDIDs are also accepted. If the simulator name is missing or ambiguous, run
+`xcrun simctl list devices available` to check the installed simulators and use
+`jffi run --platform ios --device-id <SIMULATOR-UDID>` to pick a specific one.
+Bare `--device` still means a physical device.
 Do not combine a named `--device` selector with `--device-id`.
 macOS, Windows, Linux, and web run locally and do not accept device selectors.
 
